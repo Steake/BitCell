@@ -1,7 +1,6 @@
 //! P2P networking layer
 //!
-//! Handles peer discovery, message propagation, and block relay.
-//! v0.1 provides message structures; full libp2p integration in v0.2.
+//! Handles peer discovery, message propagation, and block relay using libp2p.
 
 pub mod messages;
 pub mod peer;
@@ -18,6 +17,9 @@ pub enum Error {
     
     #[error("Peer error: {0}")]
     Peer(String),
+    
+    #[error("Transport error: {0}")]
+    Transport(String),
 }
 
 #[cfg(test)]

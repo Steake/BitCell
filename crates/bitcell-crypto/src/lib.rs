@@ -10,13 +10,17 @@
 pub mod hash;
 pub mod signature;
 pub mod vrf;
+pub mod ecvrf;
 pub mod commitment;
 pub mod merkle;
 pub mod ring;
+pub mod clsag;
 
 pub use hash::{Hash256, Hashable};
 pub use signature::{PublicKey, SecretKey, Signature};
 pub use vrf::{VrfProof, VrfOutput};
+pub use ecvrf::{EcvrfSecretKey, EcvrfPublicKey, EcvrfProof, EcvrfOutput, combine_ecvrf_outputs};
+pub use clsag::{ClsagSecretKey, ClsagPublicKey, ClsagSignature, KeyImage};
 pub use commitment::PedersenCommitment;
 pub use merkle::MerkleTree;
 
@@ -49,6 +53,9 @@ pub enum Error {
     
     #[error("Ring signature error: {0}")]
     RingSignature(String),
+    
+    #[error("VRF verification error: {0}")]
+    VrfVerification(String),
 }
 
 #[cfg(test)]

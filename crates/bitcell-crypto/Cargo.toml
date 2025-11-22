@@ -1,0 +1,36 @@
+[package]
+name = "bitcell-crypto"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Arkworks
+ark-ff.workspace = true
+ark-ec.workspace = true
+ark-std.workspace = true
+ark-serialize.workspace = true
+ark-crypto-primitives.workspace = true
+ark-bn254.workspace = true
+
+# Cryptography
+sha2.workspace = true
+blake3.workspace = true
+curve25519-dalek.workspace = true
+ed25519-dalek.workspace = true
+k256.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+hex.workspace = true
+
+# Utilities
+serde.workspace = true
+thiserror.workspace = true
+once_cell.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+criterion.workspace = true

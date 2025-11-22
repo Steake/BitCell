@@ -7,4 +7,21 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[[bin]]
+name = "bitcell-node"
+path = "src/main.rs"
+
 [dependencies]
+bitcell-crypto = { path = "../bitcell-crypto" }
+bitcell-ca = { path = "../bitcell-ca" }
+bitcell-consensus = { path = "../bitcell-consensus" }
+bitcell-state = { path = "../bitcell-state" }
+bitcell-network = { path = "../bitcell-network" }
+bitcell-ebsl = { path = "../bitcell-ebsl" }
+serde.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+proptest.workspace = true

@@ -8,3 +8,11 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+bitcell-crypto = { path = "../bitcell-crypto" }
+bitcell-consensus = { path = "../bitcell-consensus" }
+serde.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+proptest.workspace = true

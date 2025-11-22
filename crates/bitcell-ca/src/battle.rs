@@ -90,12 +90,15 @@ impl Battle {
         let region_size = 128;
 
         // Region around spawn A
+        // Use checked arithmetic to prevent overflow on wrapping_sub
         let mut energy_a = 0u64;
+        let half_region = region_size / 2;
         for y in 0..region_size {
             for x in 0..region_size {
+                // Toroidal wrapping is handled by Position::wrap()
                 let pos = Position::new(
-                    (SPAWN_A.x + x).wrapping_sub(region_size / 2),
-                    (SPAWN_A.y + y).wrapping_sub(region_size / 2),
+                    SPAWN_A.x.wrapping_add(x).wrapping_sub(half_region),
+                    SPAWN_A.y.wrapping_add(y).wrapping_sub(half_region),
                 );
                 energy_a += grid.get(pos).energy() as u64;
             }
@@ -106,8 +109,8 @@ impl Battle {
         for y in 0..region_size {
             for x in 0..region_size {
                 let pos = Position::new(
-                    (SPAWN_B.x + x).wrapping_sub(region_size / 2),
-                    (SPAWN_B.y + y).wrapping_sub(region_size / 2),
+                    SPAWN_B.x.wrapping_add(x).wrapping_sub(half_region),
+                    SPAWN_B.y.wrapping_add(y).wrapping_sub(half_region),
                 );
                 energy_b += grid.get(pos).energy() as u64;
             }

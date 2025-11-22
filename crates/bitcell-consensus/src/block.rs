@@ -38,7 +38,8 @@ impl BlockHeader {
     /// Compute hash of header
     pub fn hash(&self) -> Hash256 {
         // Serialize and hash
-        let serialized = bincode::serialize(self).unwrap();
+        // Note: bincode serialization to Vec cannot fail for this structure
+        let serialized = bincode::serialize(self).expect("header serialization should never fail");
         Hash256::hash(&serialized)
     }
 }
@@ -107,7 +108,8 @@ pub struct Transaction {
 impl Transaction {
     /// Compute transaction hash
     pub fn hash(&self) -> Hash256 {
-        let serialized = bincode::serialize(self).unwrap();
+        // Note: bincode serialization to Vec cannot fail for this structure
+        let serialized = bincode::serialize(self).expect("transaction serialization should never fail");
         Hash256::hash(&serialized)
     }
 }

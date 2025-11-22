@@ -48,7 +48,8 @@ impl PedersenCommitment {
         let commitment_point = params.g * value_scalar + params.h * blinding;
         
         let mut commitment_bytes = Vec::new();
-        commitment_point.serialize_compressed(&mut commitment_bytes).unwrap();
+        // Safe: serialization to Vec cannot fail
+        let _ = commitment_point.serialize_compressed(&mut commitment_bytes);
         
         (
             Self {
@@ -67,7 +68,8 @@ impl PedersenCommitment {
         let expected_point = params.g * value_scalar + params.h * blinding;
         
         let mut expected_bytes = Vec::new();
-        expected_point.serialize_compressed(&mut expected_bytes).unwrap();
+        // Safe: serialization to Vec cannot fail
+        let _ = expected_point.serialize_compressed(&mut expected_bytes);
         
         if expected_bytes == self.commitment {
             Ok(())

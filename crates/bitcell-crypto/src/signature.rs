@@ -85,7 +85,10 @@ impl SecretKey {
     /// Get the public key
     pub fn public_key(&self) -> PublicKey {
         let verifying_key = self.0.verifying_key();
-        let bytes = verifying_key.to_encoded_point(true).as_bytes().try_into().unwrap();
+        // Safe: compressed encoding always produces 33 bytes for secp256k1
+        let bytes: [u8; 33] = verifying_key.to_encoded_point(true).as_bytes()
+            .try_into()
+            .expect("secp256k1 compressed public key is always 33 bytes");
         PublicKey(bytes)
     }
 

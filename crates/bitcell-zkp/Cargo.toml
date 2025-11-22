@@ -8,3 +8,19 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+bitcell-crypto = { path = "../bitcell-crypto" }
+bitcell-ca = { path = "../bitcell-ca" }
+ark-ff.workspace = true
+ark-ec.workspace = true
+ark-std.workspace = true
+ark-relations.workspace = true
+ark-r1cs-std.workspace = true
+ark-groth16.workspace = true
+ark-bn254.workspace = true
+ark-serialize.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+criterion.workspace = true

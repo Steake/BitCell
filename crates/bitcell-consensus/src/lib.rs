@@ -10,9 +10,12 @@
 pub mod block;
 pub mod tournament;
 pub mod fork_choice;
+pub mod orchestrator;
 
-pub use block::{Block, BlockHeader};
-pub use tournament::{Tournament, TournamentPhase};
+pub use block::{Block, BlockHeader, Transaction, BattleProof};
+pub use tournament::{Tournament, TournamentPhase, GliderCommitment, GliderReveal};
+pub use fork_choice::ChainState;
+pub use orchestrator::TournamentOrchestrator;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

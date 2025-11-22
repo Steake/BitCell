@@ -12,7 +12,7 @@ pub mod trust;
 pub mod decay;
 pub mod slashing;
 
-pub use evidence::{Evidence, EvidenceType};
+pub use evidence::{Evidence, EvidenceType, EvidenceCounters};
 pub use trust::{Opinion, TrustScore};
 pub use decay::DecayParams;
 pub use slashing::SlashingAction;

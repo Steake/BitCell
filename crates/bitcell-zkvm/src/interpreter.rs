@@ -307,8 +307,8 @@ impl Interpreter {
             OpCode::Eq => gas::EQ,
             OpCode::Lt => gas::LT,
             OpCode::Gt => gas::GT,
-            OpCode::Le => gas::LT,
-            OpCode::Ge => gas::GT,
+            OpCode::Le => gas::LT,  // Same cost as LT
+            OpCode::Ge => gas::GT,  // Same cost as GT
             OpCode::Load => gas::LOAD,
             OpCode::Store => gas::STORE,
             OpCode::Jmp => gas::JMP,

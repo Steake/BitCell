@@ -17,12 +17,16 @@ impl BaseFee {
     /// Update base fee based on gas usage
     pub fn update(&mut self, gas_used: u64, target_gas: u64) {
         if gas_used > target_gas {
-            // Increase base fee
-            let delta = self.current * (gas_used - target_gas) / target_gas / BASE_FEE_MAX_CHANGE_DENOMINATOR;
-            self.current += delta.max(1);
+            // Increase base fee - use checked arithmetic to prevent overflow
+            let delta_numerator = gas_used.saturating_sub(target_gas);
+            let delta = self.current.saturating_mul(delta_numerator) 
+                / target_gas.max(1) / BASE_FEE_MAX_CHANGE_DENOMINATOR;
+            self.current = self.current.saturating_add(delta.max(1));
         } else if gas_used < target_gas {
             // Decrease base fee
-            let delta = self.current * (target_gas - gas_used) / target_gas / BASE_FEE_MAX_CHANGE_DENOMINATOR;
+            let delta_numerator = target_gas.saturating_sub(gas_used);
+            let delta = self.current.saturating_mul(delta_numerator) 
+                / target_gas.max(1) / BASE_FEE_MAX_CHANGE_DENOMINATOR;
             self.current = self.current.saturating_sub(delta);
         }
     }

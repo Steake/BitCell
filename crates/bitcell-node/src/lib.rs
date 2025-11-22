@@ -5,10 +5,12 @@
 pub mod config;
 pub mod validator;
 pub mod miner;
+pub mod monitoring;
 
 pub use config::NodeConfig;
 pub use validator::ValidatorNode;
 pub use miner::MinerNode;
+pub use monitoring::{MetricsRegistry, logging};
 
 pub type Result<T> = std::result::Result<T, Error>;
 

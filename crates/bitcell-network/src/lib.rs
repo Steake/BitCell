@@ -5,6 +5,9 @@
 pub mod messages;
 pub mod peer;
 
+// Full libp2p transport integration
+pub mod transport;
+
 pub use messages::{Message, MessageType};
 pub use peer::{Peer, PeerManager};
 

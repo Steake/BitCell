@@ -342,9 +342,341 @@ pub async fn index() -> impl IntoResponse {
         canvas {
             image-rendering: pixelated;
         }
+
+        /* Setup Wizard Styles */
+        .wizard-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 2000;
+            overflow-y: auto;
+        }
+
+        .wizard-overlay.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .wizard-container {
+            max-width: 800px;
+            width: 100%;
+            background: rgba(0, 10, 8, 0.95);
+            border: 2px solid #00ffaa;
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: 0 0 40px rgba(0, 255, 170, 0.5);
+        }
+
+        .wizard-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .wizard-header h2 {
+            font-family: 'Orbitron', monospace;
+            font-size: 2rem;
+            color: #00ffaa;
+            text-shadow: 0 0 20px rgba(0, 255, 170, 0.5);
+            margin-bottom: 0.5rem;
+        }
+
+        .wizard-header p {
+            color: rgba(0, 255, 170, 0.7);
+            font-size: 0.9rem;
+        }
+
+        .wizard-step {
+            display: none;
+        }
+
+        .wizard-step.active {
+            display: block;
+        }
+
+        .wizard-progress {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            position: relative;
+        }
+
+        .wizard-progress::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: rgba(0, 255, 170, 0.2);
+            z-index: -1;
+        }
+
+        .progress-step {
+            flex: 1;
+            text-align: center;
+            position: relative;
+        }
+
+        .progress-dot {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid rgba(0, 255, 170, 0.3);
+            margin: 0 auto 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .progress-step.completed .progress-dot {
+            background: rgba(0, 255, 170, 0.2);
+            border-color: #00ffaa;
+            box-shadow: 0 0 15px rgba(0, 255, 170, 0.5);
+        }
+
+        .progress-step.active .progress-dot {
+            background: #00ffaa;
+            color: #000;
+            border-color: #00ffaa;
+            box-shadow: 0 0 20px rgba(0, 255, 170, 0.7);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .progress-label {
+            font-size: 0.75rem;
+            color: rgba(0, 255, 170, 0.5);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .progress-step.active .progress-label,
+        .progress-step.completed .progress-label {
+            color: #00ffaa;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #00ffaa;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(0, 255, 170, 0.3);
+            color: #00ffaa;
+            font-family: 'Share Tech Mono', monospace;
+            border-radius: 4px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            border-color: #00ffaa;
+            box-shadow: 0 0 10px rgba(0, 255, 170, 0.3);
+        }
+
+        .form-group small {
+            display: block;
+            margin-top: 0.25rem;
+            color: rgba(0, 255, 170, 0.5);
+            font-size: 0.8rem;
+        }
+
+        .node-list-wizard {
+            margin: 1rem 0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .node-item-wizard {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(0, 255, 170, 0.2);
+            border-radius: 4px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .node-item-wizard .node-id {
+            font-weight: bold;
+            color: #00ffaa;
+        }
+
+        .node-item-wizard .node-type {
+            font-size: 0.8rem;
+            color: rgba(0, 255, 170, 0.6);
+            text-transform: uppercase;
+        }
+
+        .wizard-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+            justify-content: space-between;
+        }
+
+        .wizard-actions button {
+            flex: 1;
+        }
+
+        .btn-secondary {
+            background: rgba(0, 255, 170, 0.05);
+            border: 1px solid rgba(0, 255, 170, 0.3);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(0, 255, 170, 0.1);
+        }
+
+        .success-message {
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .success-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            animation: bounce 1s ease infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .success-message h3 {
+            font-family: 'Orbitron', monospace;
+            color: #00ffaa;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
     </style>
 </head>
 <body>
+    <!-- Setup Wizard Overlay -->
+    <div id="wizard-overlay" class="wizard-overlay">
+        <div class="wizard-container">
+            <div class="wizard-header">
+                <h2>⚙️ BitCell Setup Wizard</h2>
+                <p>Configure your administrative console</p>
+            </div>
+
+            <!-- Progress Indicator -->
+            <div class="wizard-progress">
+                <div class="progress-step active" data-step="1">
+                    <div class="progress-dot">1</div>
+                    <div class="progress-label">Paths</div>
+                </div>
+                <div class="progress-step" data-step="2">
+                    <div class="progress-dot">2</div>
+                    <div class="progress-label">Nodes</div>
+                </div>
+                <div class="progress-step" data-step="3">
+                    <div class="progress-dot">3</div>
+                    <div class="progress-label">Complete</div>
+                </div>
+            </div>
+
+            <!-- Step 1: Paths Configuration -->
+            <div id="wizard-step-1" class="wizard-step active">
+                <h3 style="color: #00ffaa; margin-bottom: 1rem;">📁 Configure Paths</h3>
+                <div class="form-group">
+                    <label>Data Directory</label>
+                    <input type="text" id="setup-data-dir" value="/tmp/bitcell/data" placeholder="/path/to/bitcell/data">
+                    <small>Directory where node data will be stored</small>
+                </div>
+                <div class="form-group">
+                    <label>Config Path</label>
+                    <input type="text" id="setup-config-path" value=".bitcell/admin/config.json" placeholder=".bitcell/admin/config.json">
+                    <small>Path to configuration file</small>
+                </div>
+                <div class="wizard-actions">
+                    <button class="btn" onclick="nextWizardStep(1)">Next →</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Node Configuration -->
+            <div id="wizard-step-2" class="wizard-step">
+                <h3 style="color: #00ffaa; margin-bottom: 1rem;">🖥️ Add Node Endpoints</h3>
+                <p style="color: rgba(0, 255, 170, 0.7); margin-bottom: 1rem; font-size: 0.9rem;">
+                    Register the endpoints of your BitCell nodes. You can add multiple nodes.
+                </p>
+
+                <div class="form-group">
+                    <label>Node ID</label>
+                    <input type="text" id="node-id" placeholder="validator-1">
+                </div>
+                <div class="form-group">
+                    <label>Node Type</label>
+                    <select id="node-type">
+                        <option value="validator">Validator</option>
+                        <option value="miner">Miner</option>
+                        <option value="fullnode">Full Node</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Metrics Endpoint</label>
+                    <input type="text" id="node-metrics" placeholder="http://localhost:9000/metrics">
+                    <small>Prometheus metrics endpoint</small>
+                </div>
+                <div class="form-group">
+                    <label>RPC Endpoint</label>
+                    <input type="text" id="node-rpc" placeholder="http://localhost:9001">
+                    <small>JSON-RPC endpoint</small>
+                </div>
+                <button class="btn" onclick="addNodeToWizard()" style="width: 100%; margin-bottom: 1rem;">+ Add Node</button>
+
+                <div id="wizard-nodes-list" class="node-list-wizard">
+                    <!-- Nodes will be added here -->
+                </div>
+
+                <div class="wizard-actions">
+                    <button class="btn btn-secondary" onclick="prevWizardStep(2)">← Back</button>
+                    <button class="btn" onclick="nextWizardStep(2)">Complete Setup →</button>
+                </div>
+            </div>
+
+            <!-- Step 3: Completion -->
+            <div id="wizard-step-3" class="wizard-step">
+                <div class="success-message">
+                    <div class="success-icon">✅</div>
+                    <h3>Setup Complete!</h3>
+                    <p style="color: rgba(0, 255, 170, 0.7); margin-bottom: 2rem;">
+                        Your BitCell admin console is now configured and ready to use.
+                    </p>
+                    <button class="btn" onclick="closeWizard()">Go to Dashboard →</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="header">
         <h1>🔬 BitCell Admin Console</h1>
         <p>Blockchain Management & Monitoring Dashboard</p>
@@ -517,6 +849,163 @@ pub async fn index() -> impl IntoResponse {
     </div>
 
     <script>
+        // Setup Wizard State
+        let wizardNodes = [];
+        let currentStep = 1;
+
+        // Check if setup is complete on load
+        async function checkSetupStatus() {
+            try {
+                const response = await fetch('/api/setup/status');
+                const data = await response.json();
+
+                if (!data.initialized) {
+                    document.getElementById('wizard-overlay').classList.add('active');
+                } else {
+                    // Load existing nodes
+                    wizardNodes = data.nodes || [];
+                }
+            } catch (error) {
+                console.error('Failed to check setup status:', error);
+                // Show wizard if we can't determine status
+                document.getElementById('wizard-overlay').classList.add('active');
+            }
+        }
+
+        // Wizard navigation
+        function nextWizardStep(step) {
+            if (step === 1) {
+                // Save paths
+                const dataDir = document.getElementById('setup-data-dir').value;
+                const configPath = document.getElementById('setup-config-path').value;
+
+                Promise.all([
+                    fetch('/api/setup/data-dir', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path: dataDir })
+                    }),
+                    fetch('/api/setup/config-path', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path: configPath })
+                    })
+                ]).then(() => {
+                    goToStep(2);
+                }).catch(error => {
+                    console.error('Failed to save paths:', error);
+                    alert('Failed to save configuration paths');
+                });
+            } else if (step === 2) {
+                // Complete setup
+                fetch('/api/setup/complete', { method: 'POST' })
+                    .then(() => {
+                        goToStep(3);
+                    })
+                    .catch(error => {
+                        console.error('Failed to complete setup:', error);
+                        alert('Failed to complete setup');
+                    });
+            }
+        }
+
+        function prevWizardStep(step) {
+            goToStep(step - 1);
+        }
+
+        function goToStep(step) {
+            // Hide all steps
+            document.querySelectorAll('.wizard-step').forEach(el => {
+                el.classList.remove('active');
+            });
+
+            // Show target step
+            document.getElementById(`wizard-step-${step}`).classList.add('active');
+
+            // Update progress indicators
+            document.querySelectorAll('.progress-step').forEach(el => {
+                const stepNum = parseInt(el.dataset.step);
+                el.classList.remove('active', 'completed');
+
+                if (stepNum < step) {
+                    el.classList.add('completed');
+                } else if (stepNum === step) {
+                    el.classList.add('active');
+                }
+            });
+
+            currentStep = step;
+        }
+
+        // Add node to wizard
+        async function addNodeToWizard() {
+            const id = document.getElementById('node-id').value;
+            const type = document.getElementById('node-type').value;
+            const metrics = document.getElementById('node-metrics').value;
+            const rpc = document.getElementById('node-rpc').value;
+
+            if (!id || !metrics || !rpc) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/setup/node', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id,
+                        node_type: type,
+                        metrics_endpoint: metrics,
+                        rpc_endpoint: rpc
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to add node');
+                }
+
+                const node = await response.json();
+                wizardNodes.push(node);
+                updateWizardNodesList();
+
+                // Clear form
+                document.getElementById('node-id').value = '';
+                document.getElementById('node-metrics').value = '';
+                document.getElementById('node-rpc').value = '';
+            } catch (error) {
+                console.error('Failed to add node:', error);
+                alert('Failed to add node');
+            }
+        }
+
+        function updateWizardNodesList() {
+            const list = document.getElementById('wizard-nodes-list');
+
+            if (wizardNodes.length === 0) {
+                list.innerHTML = '<p style="color: rgba(0, 255, 170, 0.5); text-align: center; padding: 1rem;">No nodes added yet</p>';
+                return;
+            }
+
+            list.innerHTML = wizardNodes.map(node => `
+                <div class="node-item-wizard">
+                    <div>
+                        <div class="node-id">${node.id}</div>
+                        <div class="node-type">${node.node_type}</div>
+                    </div>
+                    <div style="font-size: 0.8rem; color: rgba(0, 255, 170, 0.5);">
+                        <div>${node.metrics_endpoint}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function closeWizard() {
+            document.getElementById('wizard-overlay').classList.remove('active');
+            // Reload page to show dashboard with data
+            window.location.reload();
+        }
+
         // Fetch and update metrics
         async function updateMetrics() {
             try {
@@ -733,6 +1222,7 @@ pub async fn index() -> impl IntoResponse {
         }
 
         // Initial load and auto-refresh
+        checkSetupStatus();
         updateMetrics();
         updateNodes();
         setInterval(updateMetrics, 5000);

@@ -18,7 +18,7 @@ pub struct MetricsResponse {
     pub system: SystemMetrics,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ChainMetrics {
     pub height: u64,
     pub latest_block_hash: String,
@@ -28,7 +28,7 @@ pub struct ChainMetrics {
     pub average_block_time: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct NetworkMetrics {
     pub connected_peers: usize,
     pub total_peers: usize,
@@ -54,41 +54,66 @@ pub struct SystemMetrics {
     pub disk_usage_mb: u64,
 }
 
-/// Get all metrics
+/// Get all metrics from running nodes
 pub async fn get_metrics(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<MetricsResponse>, (StatusCode, Json<String>)> {
-    // TODO: Integrate with actual Prometheus metrics
-    // For now, return mock data
+    let nodes = state.setup.get_nodes();
+
+    if nodes.is_empty() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json("No nodes configured. Please complete setup wizard and deploy nodes first.".to_string()),
+        ));
+    }
+
+    // Get endpoints for metrics fetching
+    let endpoints: Vec<(String, String)> = nodes
+        .iter()
+        .map(|n| (n.id.clone(), n.metrics_endpoint.clone()))
+        .collect();
+
+    // Fetch aggregated metrics
+    let aggregated = state.metrics_client.aggregate_metrics(&endpoints)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(e)))?;
+
+    // Calculate system metrics (placeholder - would normally come from node metrics or system stats)
+    let uptime_seconds = if let Some(first_node) = aggregated.node_metrics.first() {
+        let duration = chrono::Utc::now().signed_duration_since(first_node.last_updated);
+        duration.num_seconds().max(0) as u64
+    } else {
+        0
+    };
 
     let response = MetricsResponse {
         chain: ChainMetrics {
-            height: 12345,
-            latest_block_hash: "0x1234567890abcdef".to_string(),
+            height: aggregated.chain_height,
+            latest_block_hash: format!("0x{:016x}", aggregated.chain_height), // Simplified
             latest_block_time: chrono::Utc::now(),
-            total_transactions: 54321,
-            pending_transactions: 42,
-            average_block_time: 6.5,
+            total_transactions: aggregated.total_txs_processed,
+            pending_transactions: aggregated.pending_txs as u64,
+            average_block_time: 6.0, // TODO: Calculate from actual block times
         },
         network: NetworkMetrics {
-            connected_peers: 8,
-            total_peers: 12,
-            bytes_sent: 1_234_567,
-            bytes_received: 2_345_678,
-            messages_sent: 9876,
-            messages_received: 8765,
+            connected_peers: aggregated.total_peers,
+            total_peers: aggregated.total_nodes * 10, // Estimate
+            bytes_sent: aggregated.bytes_sent,
+            bytes_received: aggregated.bytes_received,
+            messages_sent: 0, // TODO: Add to node metrics
+            messages_received: 0, // TODO: Add to node metrics
         },
         ebsl: EbslMetrics {
-            active_miners: 25,
-            banned_miners: 3,
-            average_trust_score: 0.87,
-            total_slashing_events: 15,
+            active_miners: aggregated.active_miners,
+            banned_miners: aggregated.banned_miners,
+            average_trust_score: 0.85, // TODO: Calculate from actual data
+            total_slashing_events: 0, // TODO: Add to node metrics
         },
         system: SystemMetrics {
-            uptime_seconds: 86400,
-            cpu_usage: 45.2,
-            memory_usage_mb: 2048,
-            disk_usage_mb: 10240,
+            uptime_seconds,
+            cpu_usage: 0.0, // TODO: Add system metrics collection
+            memory_usage_mb: 0, // TODO: Add system metrics collection
+            disk_usage_mb: 0, // TODO: Add system metrics collection
         },
     };
 
@@ -97,32 +122,18 @@ pub async fn get_metrics(
 
 /// Get chain-specific metrics
 pub async fn chain_metrics(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<ChainMetrics>, (StatusCode, Json<String>)> {
-    let metrics = ChainMetrics {
-        height: 12345,
-        latest_block_hash: "0x1234567890abcdef".to_string(),
-        latest_block_time: chrono::Utc::now(),
-        total_transactions: 54321,
-        pending_transactions: 42,
-        average_block_time: 6.5,
-    };
-
-    Ok(Json(metrics))
+    // Reuse get_metrics logic and extract chain metrics
+    let full_metrics = get_metrics(State(state)).await?;
+    Ok(Json(full_metrics.chain.clone()))
 }
 
 /// Get network-specific metrics
 pub async fn network_metrics(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<NetworkMetrics>, (StatusCode, Json<String>)> {
-    let metrics = NetworkMetrics {
-        connected_peers: 8,
-        total_peers: 12,
-        bytes_sent: 1_234_567,
-        bytes_received: 2_345_678,
-        messages_sent: 9876,
-        messages_received: 8765,
-    };
-
-    Ok(Json(metrics))
+    // Reuse get_metrics logic and extract network metrics
+    let full_metrics = get_metrics(State(state)).await?;
+    Ok(Json(full_metrics.network.clone()))
 }

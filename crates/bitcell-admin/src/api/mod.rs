@@ -5,6 +5,7 @@ pub mod metrics;
 pub mod deployment;
 pub mod config;
 pub mod test;
+pub mod setup;
 
 use std::collections::HashMap;
 use std::sync::RwLock;

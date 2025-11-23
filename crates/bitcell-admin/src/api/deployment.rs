@@ -83,28 +83,60 @@ pub async fn deploy_node(
 
 /// Get deployment status
 pub async fn deployment_status(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<DeploymentStatusResponse>, (StatusCode, Json<String>)> {
-    // TODO: Get actual deployment status
+    // Get actual node status from process manager
+    let nodes = state.process.list_nodes();
+
+    // Group nodes by type and count
+    let mut validator_count = 0;
+    let mut miner_count = 0;
+    let mut fullnode_count = 0;
+
+    for node in &nodes {
+        match node.node_type {
+            super::NodeType::Validator => validator_count += 1,
+            super::NodeType::Miner => miner_count += 1,
+            super::NodeType::FullNode => fullnode_count += 1,
+        }
+    }
+
+    let mut deployments = Vec::new();
+
+    if validator_count > 0 {
+        deployments.push(DeploymentInfo {
+            id: "validators".to_string(),
+            node_type: NodeType::Validator,
+            node_count: validator_count,
+            status: "running".to_string(),
+            created_at: chrono::Utc::now(), // TODO: Track actual creation time
+        });
+    }
+
+    if miner_count > 0 {
+        deployments.push(DeploymentInfo {
+            id: "miners".to_string(),
+            node_type: NodeType::Miner,
+            node_count: miner_count,
+            status: "running".to_string(),
+            created_at: chrono::Utc::now(),
+        });
+    }
+
+    if fullnode_count > 0 {
+        deployments.push(DeploymentInfo {
+            id: "fullnodes".to_string(),
+            node_type: NodeType::FullNode,
+            node_count: fullnode_count,
+            status: "running".to_string(),
+            created_at: chrono::Utc::now(),
+        });
+    }
+
     let response = DeploymentStatusResponse {
-        active_deployments: 2,
-        total_nodes: 5,
-        deployments: vec![
-            DeploymentInfo {
-                id: "deploy-1".to_string(),
-                node_type: NodeType::Validator,
-                node_count: 3,
-                status: "running".to_string(),
-                created_at: chrono::Utc::now() - chrono::Duration::hours(2),
-            },
-            DeploymentInfo {
-                id: "deploy-2".to_string(),
-                node_type: NodeType::Miner,
-                node_count: 2,
-                status: "running".to_string(),
-                created_at: chrono::Utc::now() - chrono::Duration::minutes(30),
-            },
-        ],
+        active_deployments: deployments.len(),
+        total_nodes: nodes.len(),
+        deployments,
     };
 
     Ok(Json(response))

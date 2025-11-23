@@ -13,6 +13,8 @@ pub mod deployment;
 pub mod config;
 pub mod metrics;
 pub mod process;
+pub mod metrics_client;
+pub mod setup;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -36,6 +38,8 @@ pub struct AdminConsole {
     deployment: Arc<DeploymentManager>,
     config: Arc<ConfigManager>,
     process: Arc<ProcessManager>,
+    metrics_client: Arc<metrics_client::MetricsClient>,
+    setup: Arc<setup::SetupManager>,
 }
 
 impl AdminConsole {
@@ -43,18 +47,33 @@ impl AdminConsole {
     pub fn new(addr: SocketAddr) -> Self {
         let process = Arc::new(ProcessManager::new());
         let deployment = Arc::new(DeploymentManager::new(process.clone()));
+        let setup = Arc::new(setup::SetupManager::new());
+
+        // Try to load setup state from default location
+        let setup_path = std::path::PathBuf::from(".bitcell/admin/setup.json");
+        if let Err(e) = setup.load_from_file(&setup_path) {
+            tracing::warn!("Failed to load setup state: {}", e);
+        }
+
         Self {
             addr,
             api: Arc::new(AdminApi::new()),
             deployment,
             config: Arc::new(ConfigManager::new()),
             process,
+            metrics_client: Arc::new(metrics_client::MetricsClient::new()),
+            setup,
         }
     }
 
     /// Get the process manager
     pub fn process_manager(&self) -> Arc<ProcessManager> {
         self.process.clone()
+    }
+
+    /// Get the setup manager
+    pub fn setup_manager(&self) -> Arc<setup::SetupManager> {
+        self.setup.clone()
     }
 
     /// Build the application router
@@ -84,6 +103,12 @@ impl AdminConsole {
             .route("/api/test/battle/visualize", post(api::test::run_battle_visualization))
             .route("/api/test/transaction", post(api::test::send_test_transaction))
 
+            .route("/api/setup/status", get(api::setup::get_setup_status))
+            .route("/api/setup/node", post(api::setup::add_node))
+            .route("/api/setup/config-path", post(api::setup::set_config_path))
+            .route("/api/setup/data-dir", post(api::setup::set_data_dir))
+            .route("/api/setup/complete", post(api::setup::complete_setup))
+
             // Static files
             .nest_service("/static", ServeDir::new("static"))
 
@@ -96,6 +121,8 @@ impl AdminConsole {
                 deployment: self.deployment.clone(),
                 config: self.config.clone(),
                 process: self.process.clone(),
+                metrics_client: self.metrics_client.clone(),
+                setup: self.setup.clone(),
             }))
     }
 
@@ -119,6 +146,8 @@ pub struct AppState {
     pub deployment: Arc<DeploymentManager>,
     pub config: Arc<ConfigManager>,
     pub process: Arc<ProcessManager>,
+    pub metrics_client: Arc<metrics_client::MetricsClient>,
+    pub setup: Arc<setup::SetupManager>,
 }
 
 #[cfg(test)]

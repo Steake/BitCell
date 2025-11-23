@@ -47,10 +47,10 @@ impl StorageManager {
     }
 
     /// Store a block header
-    pub fn store_header(&self, height: u64, hash: &[u8], header: &[u8]) -> Result<(), rocksdb::Error> {
+    pub fn store_header(&self, height: u64, hash: &[u8], header: &[u8]) -> Result<(), String> {
         let cf = self.db.cf_handle(CF_HEADERS)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
-        
+            .ok_or_else(|| "Headers column family not found".to_string())?;
+
         let mut batch = WriteBatch::default();
         // Store by height
         batch.put_cf(cf, height.to_be_bytes(), header);
@@ -58,49 +58,49 @@ impl StorageManager {
         batch.put_cf(cf, hash, header);
         // Update chain index
         let index_cf = self.db.cf_handle(CF_CHAIN_INDEX)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
+            .ok_or_else(|| "Chain index column family not found".to_string())?;
         batch.put_cf(index_cf, b"latest_height", height.to_be_bytes());
         batch.put_cf(index_cf, b"latest_hash", hash);
-        
-        self.db.write(batch)
+
+        self.db.write(batch).map_err(|e| e.to_string())
     }
 
     /// Store a full block
-    pub fn store_block(&self, hash: &[u8], block: &[u8]) -> Result<(), rocksdb::Error> {
+    pub fn store_block(&self, hash: &[u8], block: &[u8]) -> Result<(), String> {
         let cf = self.db.cf_handle(CF_BLOCKS)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
-        self.db.put_cf(cf, hash, block)
+            .ok_or_else(|| "Blocks column family not found".to_string())?;
+        self.db.put_cf(cf, hash, block).map_err(|e| e.to_string())
     }
 
     /// Get block by hash
-    pub fn get_block(&self, hash: &[u8]) -> Result<Option<Vec<u8>>, rocksdb::Error> {
+    pub fn get_block(&self, hash: &[u8]) -> Result<Option<Vec<u8>>, String> {
         let cf = self.db.cf_handle(CF_BLOCKS)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
-        self.db.get_cf(cf, hash)
+            .ok_or_else(|| "Blocks column family not found".to_string())?;
+        self.db.get_cf(cf, hash).map_err(|e| e.to_string())
     }
 
     /// Get header by height
-    pub fn get_header_by_height(&self, height: u64) -> Result<Option<Vec<u8>>, rocksdb::Error> {
+    pub fn get_header_by_height(&self, height: u64) -> Result<Option<Vec<u8>>, String> {
         let cf = self.db.cf_handle(CF_HEADERS)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
-        self.db.get_cf(cf, height.to_be_bytes())
+            .ok_or_else(|| "Headers column family not found".to_string())?;
+        self.db.get_cf(cf, height.to_be_bytes()).map_err(|e| e.to_string())
     }
 
     /// Get header by hash
-    pub fn get_header_by_hash(&self, hash: &[u8]) -> Result<Option<Vec<u8>>, rocksdb::Error> {
+    pub fn get_header_by_hash(&self, hash: &[u8]) -> Result<Option<Vec<u8>>, String> {
         let cf = self.db.cf_handle(CF_HEADERS)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
-        self.db.get_cf(cf, hash)
+            .ok_or_else(|| "Headers column family not found".to_string())?;
+        self.db.get_cf(cf, hash).map_err(|e| e.to_string())
     }
 
     /// Get latest chain height
-    pub fn get_latest_height(&self) -> Result<Option<u64>, rocksdb::Error> {
+    pub fn get_latest_height(&self) -> Result<Option<u64>, String> {
         let cf = self.db.cf_handle(CF_CHAIN_INDEX)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
-        if let Some(bytes) = self.db.get_cf(cf, b"latest_height")? {
+            .ok_or_else(|| "Chain index column family not found".to_string())?;
+        if let Some(bytes) = self.db.get_cf(cf, b"latest_height").map_err(|e| e.to_string())? {
             let height = u64::from_be_bytes(
                 bytes.as_slice().try_into()
-                    .map_err(|_| rocksdb::Error::new("Invalid height data".to_string()))?
+                    .map_err(|_| "Invalid height data".to_string())?
             );
             Ok(Some(height))
         } else {
@@ -109,19 +109,19 @@ impl StorageManager {
     }
 
     /// Store account state
-    pub fn store_account(&self, address: &[u8], account: &Account) -> Result<(), rocksdb::Error> {
+    pub fn store_account(&self, address: &[u8], account: &Account) -> Result<(), String> {
         let cf = self.db.cf_handle(CF_ACCOUNTS)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
+            .ok_or_else(|| "Accounts column family not found".to_string())?;
         let data = bincode::serialize(account)
-            .map_err(|e| rocksdb::Error::new(format!("Serialization error: {}", e)))?;
-        self.db.put_cf(cf, address, data)
+            .map_err(|e| format!("Serialization error: {}", e))?;
+        self.db.put_cf(cf, address, data).map_err(|e| e.to_string())
     }
 
     /// Get account state
-    pub fn get_account(&self, address: &[u8]) -> Result<Option<Account>, rocksdb::Error> {
+    pub fn get_account(&self, address: &[u8]) -> Result<Option<Account>, String> {
         let cf = self.db.cf_handle(CF_ACCOUNTS)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
-        if let Some(data) = self.db.get_cf(cf, address)? {
+            .ok_or_else(|| "Accounts column family not found".to_string())?;
+        if let Some(data) = self.db.get_cf(cf, address).map_err(|e| e.to_string())? {
             Ok(bincode::deserialize(&data).ok())
         } else {
             Ok(None)
@@ -129,19 +129,19 @@ impl StorageManager {
     }
 
     /// Store bond state
-    pub fn store_bond(&self, miner_id: &[u8], bond: &BondState) -> Result<(), rocksdb::Error> {
+    pub fn store_bond(&self, miner_id: &[u8], bond: &BondState) -> Result<(), String> {
         let cf = self.db.cf_handle(CF_BONDS)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
+            .ok_or_else(|| "Bonds column family not found".to_string())?;
         let data = bincode::serialize(bond)
-            .map_err(|e| rocksdb::Error::new(format!("Serialization error: {}", e)))?;
-        self.db.put_cf(cf, miner_id, data)
+            .map_err(|e| format!("Serialization error: {}", e))?;
+        self.db.put_cf(cf, miner_id, data).map_err(|e| e.to_string())
     }
 
     /// Get bond state
-    pub fn get_bond(&self, miner_id: &[u8]) -> Result<Option<BondState>, rocksdb::Error> {
+    pub fn get_bond(&self, miner_id: &[u8]) -> Result<Option<BondState>, String> {
         let cf = self.db.cf_handle(CF_BONDS)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
-        if let Some(data) = self.db.get_cf(cf, miner_id)? {
+            .ok_or_else(|| "Bonds column family not found".to_string())?;
+        if let Some(data) = self.db.get_cf(cf, miner_id).map_err(|e| e.to_string())? {
             Ok(bincode::deserialize(&data).ok())
         } else {
             Ok(None)
@@ -149,30 +149,32 @@ impl StorageManager {
     }
 
     /// Store state root for a given height
-    pub fn store_state_root(&self, height: u64, root: &[u8]) -> Result<(), rocksdb::Error> {
+    pub fn store_state_root(&self, height: u64, root: &[u8]) -> Result<(), String> {
         let cf = self.db.cf_handle(CF_STATE_ROOTS)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
-        self.db.put_cf(cf, height.to_be_bytes(), root)
+            .ok_or_else(|| "State roots column family not found".to_string())?;
+        self.db.put_cf(cf, height.to_be_bytes(), root).map_err(|e| e.to_string())
     }
 
     /// Get state root for a given height
-    pub fn get_state_root(&self, height: u64) -> Result<Option<Vec<u8>>, rocksdb::Error> {
+    pub fn get_state_root(&self, height: u64) -> Result<Option<Vec<u8>>, String> {
         let cf = self.db.cf_handle(CF_STATE_ROOTS)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
-        self.db.get_cf(cf, height.to_be_bytes())
+            .ok_or_else(|| "State roots column family not found".to_string())?;
+        self.db.get_cf(cf, height.to_be_bytes()).map_err(|e| e.to_string())
     }
 
     /// Prune old blocks (keep last N blocks)
-    pub fn prune_old_blocks(&self, keep_last: u64) -> Result<(), rocksdb::Error> {
+    pub fn prune_old_blocks(&self, keep_last: u64) -> Result<(), String> {
         let latest = self.get_latest_height()?.unwrap_or(0);
         if latest <= keep_last {
             return Ok(());
         }
-        
+
         let prune_until = latest - keep_last;
-        let cf = self.db.cf_handle(CF_BLOCKS)
-            .ok_or_else(|| rocksdb::Error::new("Column family not found".to_string()))?;
-        
+
+        // Verify blocks column family exists
+        self.db.cf_handle(CF_BLOCKS)
+            .ok_or_else(|| "Blocks column family not found".to_string())?;
+
         // This is a simplified version - in production would iterate and delete
         for height in 0..prune_until {
             if let Some(header_data) = self.get_header_by_height(height)? {
@@ -181,7 +183,7 @@ impl StorageManager {
                 let _ = header_data;
             }
         }
-        
+
         Ok(())
     }
 

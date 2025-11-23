@@ -170,7 +170,9 @@ impl StorageManager {
         }
 
         let prune_until = latest - keep_last;
-        let _cf = self.db.cf_handle(CF_BLOCKS)
+
+        // Verify blocks column family exists
+        self.db.cf_handle(CF_BLOCKS)
             .ok_or_else(|| "Blocks column family not found".to_string())?;
 
         // This is a simplified version - in production would iterate and delete

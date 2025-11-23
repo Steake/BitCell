@@ -1,78 +1,57 @@
 //! Deployment manager for nodes
 
-use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::Arc;
 
 use crate::api::NodeType;
+use crate::process::{ProcessManager, NodeConfig};
 
 pub struct DeploymentManager {
-    deployments: RwLock<HashMap<String, Deployment>>,
-}
-
-struct Deployment {
-    id: String,
-    node_type: NodeType,
-    node_count: usize,
-    status: DeploymentStatus,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum DeploymentStatus {
-    Pending,
-    InProgress,
-    Completed,
-    Failed,
+    process: Arc<ProcessManager>,
 }
 
 impl DeploymentManager {
-    pub fn new() -> Self {
-        Self {
-            deployments: RwLock::new(HashMap::new()),
-        }
+    pub fn new(process: Arc<ProcessManager>) -> Self {
+        Self { process }
     }
 
     pub async fn deploy_nodes(&self, deployment_id: &str, node_type: NodeType, count: usize) {
-        // Create deployment record
-        {
-            let mut deployments = self.deployments.write().unwrap();
-            deployments.insert(
-                deployment_id.to_string(),
-                Deployment {
-                    id: deployment_id.to_string(),
-                    node_type,
-                    node_count: count,
-                    status: DeploymentStatus::InProgress,
-                },
-            );
-        }
-
-        // Simulate deployment
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-
-        // Update status
-        {
-            let mut deployments = self.deployments.write().unwrap();
-            if let Some(deployment) = deployments.get_mut(deployment_id) {
-                deployment.status = DeploymentStatus::Completed;
-            }
-        }
-
         tracing::info!(
-            "Deployment {} completed: {} {:?} nodes",
+            "Starting deployment {}: deploying {} {:?} nodes",
             deployment_id,
             count,
             node_type
         );
-    }
 
-    pub fn get_deployment(&self, id: &str) -> Option<String> {
-        let deployments = self.deployments.read().unwrap();
-        deployments.get(id).map(|d| d.id.clone())
-    }
-}
+        let base_port = match node_type {
+            NodeType::Validator => 9000,
+            NodeType::Miner => 9100,
+            NodeType::FullNode => 9200,
+        };
 
-impl Default for DeploymentManager {
-    fn default() -> Self {
-        Self::new()
+        let base_rpc_port = base_port + 1000;
+
+        for i in 0..count {
+            let node_id = format!("{:?}-{}-{}", node_type, deployment_id, i);
+            let config = NodeConfig {
+                node_type,
+                data_dir: format!("/tmp/bitcell/{}", node_id),
+                port: base_port + i as u16,
+                rpc_port: base_rpc_port + i as u16,
+                log_level: "info".to_string(),
+                network: "testnet".to_string(),
+            };
+
+            // Register the node (but don't start it automatically)
+            self.process.register_node(node_id.clone(), config);
+
+            tracing::info!("Registered node '{}' in deployment {}", node_id, deployment_id);
+        }
+
+        tracing::info!(
+            "Deployment {} completed: registered {} {:?} nodes",
+            deployment_id,
+            count,
+            node_type
+        );
     }
 }

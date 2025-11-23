@@ -12,6 +12,7 @@ pub mod web;
 pub mod deployment;
 pub mod config;
 pub mod metrics;
+pub mod process;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -26,6 +27,7 @@ use tower_http::cors::CorsLayer;
 pub use api::AdminApi;
 pub use deployment::DeploymentManager;
 pub use config::ConfigManager;
+pub use process::ProcessManager;
 
 /// Administrative console server
 pub struct AdminConsole {
@@ -33,17 +35,26 @@ pub struct AdminConsole {
     api: Arc<AdminApi>,
     deployment: Arc<DeploymentManager>,
     config: Arc<ConfigManager>,
+    process: Arc<ProcessManager>,
 }
 
 impl AdminConsole {
     /// Create a new admin console
     pub fn new(addr: SocketAddr) -> Self {
+        let process = Arc::new(ProcessManager::new());
+        let deployment = Arc::new(DeploymentManager::new(process.clone()));
         Self {
             addr,
             api: Arc::new(AdminApi::new()),
-            deployment: Arc::new(DeploymentManager::new()),
+            deployment,
             config: Arc::new(ConfigManager::new()),
+            process,
         }
+    }
+
+    /// Get the process manager
+    pub fn process_manager(&self) -> Arc<ProcessManager> {
+        self.process.clone()
     }
 
     /// Build the application router
@@ -70,6 +81,7 @@ impl AdminConsole {
             .route("/api/config", post(api::config::update_config))
 
             .route("/api/test/battle", post(api::test::run_battle_test))
+            .route("/api/test/battle/visualize", post(api::test::run_battle_visualization))
             .route("/api/test/transaction", post(api::test::send_test_transaction))
 
             // Static files
@@ -83,6 +95,7 @@ impl AdminConsole {
                 api: self.api.clone(),
                 deployment: self.deployment.clone(),
                 config: self.config.clone(),
+                process: self.process.clone(),
             }))
     }
 
@@ -105,6 +118,7 @@ pub struct AppState {
     pub api: Arc<AdminApi>,
     pub deployment: Arc<DeploymentManager>,
     pub config: Arc<ConfigManager>,
+    pub process: Arc<ProcessManager>,
 }
 
 #[cfg(test)]

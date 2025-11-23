@@ -86,7 +86,7 @@ impl Battle {
     }
 
     /// Measure energy in regions around spawn points
-    fn measure_regional_energy(&self, grid: &Grid) -> (u64, u64) {
+    pub fn measure_regional_energy(&self, grid: &Grid) -> (u64, u64) {
         let region_size = 128;
 
         // Region around spawn A
@@ -128,6 +128,22 @@ impl Battle {
     pub fn final_grid(&self) -> Grid {
         let initial = self.setup_grid();
         evolve_n_steps(&initial, self.steps)
+    }
+
+    /// Get grid states at specific steps for visualization
+    /// Returns a vector of grids at the requested step intervals
+    pub fn grid_states(&self, sample_steps: &[usize]) -> Vec<Grid> {
+        let mut grids = Vec::new();
+        let initial = self.setup_grid();
+
+        for &step in sample_steps {
+            if step <= self.steps {
+                let grid = evolve_n_steps(&initial, step);
+                grids.push(grid);
+            }
+        }
+
+        grids
     }
 }
 

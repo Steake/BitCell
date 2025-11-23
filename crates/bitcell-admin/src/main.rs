@@ -1,6 +1,6 @@
 //! BitCell Admin Console - Main Entry Point
 
-use bitcell_admin::{AdminConsole, AdminApi, api::{NodeInfo, NodeType, NodeStatus}};
+use bitcell_admin::{AdminConsole, process::{ProcessManager, NodeConfig}, api::NodeType};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -23,45 +23,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .parse()?;
 
     let console = AdminConsole::new(addr);
+    let process_mgr = console.process_manager();
 
     // Register some sample nodes for demonstration
-    register_sample_nodes(&console);
+    register_sample_nodes(&process_mgr);
+
+    tracing::info!("Admin console ready - registered {} nodes", process_mgr.list_nodes().len());
+    tracing::info!("Dashboard available at http://{}", addr);
 
     console.serve().await?;
 
     Ok(())
 }
 
-fn register_sample_nodes(_console: &AdminConsole) {
-    let api = AdminApi::new();
-
+fn register_sample_nodes(process: &ProcessManager) {
     // Register sample validator nodes
     for i in 1..=3 {
-        api.register_node(NodeInfo {
-            id: format!("validator-{}", i),
+        let config = NodeConfig {
             node_type: NodeType::Validator,
-            status: if i == 1 { NodeStatus::Running } else { NodeStatus::Stopped },
-            address: "127.0.0.1".to_string(),
+            data_dir: format!("/tmp/bitcell/validator-{}", i),
             port: 9000 + i as u16,
-            started_at: if i == 1 {
-                Some(chrono::Utc::now() - chrono::Duration::hours(2))
-            } else {
-                None
-            },
-        });
+            rpc_port: 10000 + i as u16,
+            log_level: "info".to_string(),
+            network: "testnet".to_string(),
+        };
+
+        process.register_node(format!("validator-{}", i), config);
+        tracing::info!("Registered validator-{}", i);
     }
 
     // Register sample miner nodes
     for i in 1..=2 {
-        api.register_node(NodeInfo {
-            id: format!("miner-{}", i),
+        let config = NodeConfig {
             node_type: NodeType::Miner,
-            status: NodeStatus::Running,
-            address: "127.0.0.1".to_string(),
+            data_dir: format!("/tmp/bitcell/miner-{}", i),
             port: 9100 + i as u16,
-            started_at: Some(chrono::Utc::now() - chrono::Duration::minutes(30)),
-        });
-    }
+            rpc_port: 10100 + i as u16,
+            log_level: "info".to_string(),
+            network: "testnet".to_string(),
+        };
 
-    tracing::info!("Registered {} sample nodes", api.list_nodes().len());
+        process.register_node(format!("miner-{}", i), config);
+        tracing::info!("Registered miner-{}", i);
+    }
 }

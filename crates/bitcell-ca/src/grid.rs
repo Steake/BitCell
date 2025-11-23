@@ -138,6 +138,29 @@ impl Grid {
             *cell = Cell::dead();
         }
     }
+
+    /// Get a downsampled view of the grid for visualization
+    /// Returns a smaller grid by taking max energy in each block
+    pub fn downsample(&self, target_size: usize) -> Vec<Vec<u8>> {
+        let block_size = GRID_SIZE / target_size;
+        let mut result = vec![vec![0u8; target_size]; target_size];
+
+        for y in 0..target_size {
+            for x in 0..target_size {
+                let mut max_energy = 0u8;
+                // Sample block
+                for by in 0..block_size {
+                    for bx in 0..block_size {
+                        let pos = Position::new(x * block_size + bx, y * block_size + by);
+                        max_energy = max_energy.max(self.get(pos).energy());
+                    }
+                }
+                result[y][x] = max_energy;
+            }
+        }
+
+        result
+    }
 }
 
 impl Default for Grid {

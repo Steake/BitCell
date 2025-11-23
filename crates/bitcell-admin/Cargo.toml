@@ -34,11 +34,19 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 
+# Sync primitives
+parking_lot = "0.12"
+
 # BitCell dependencies
 bitcell-node = { path = "../bitcell-node" }
 bitcell-consensus = { path = "../bitcell-consensus" }
 bitcell-state = { path = "../bitcell-state" }
 bitcell-network = { path = "../bitcell-network" }
 bitcell-crypto = { path = "../bitcell-crypto" }
+bitcell-ca = { path = "../bitcell-ca" }
+
+# Unix process management
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]

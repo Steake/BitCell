@@ -15,131 +15,332 @@ pub async fn index() -> impl IntoResponse {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BitCell Admin Console</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            background: #000000;
+            background-image:
+                linear-gradient(rgba(0, 255, 170, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 170, 0.03) 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: #00ffaa;
             line-height: 1.6;
+            position: relative;
         }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 255, 170, 0.05) 0px,
+                transparent 1px,
+                transparent 2px,
+                rgba(0, 255, 170, 0.05) 3px
+            );
+            pointer-events: none;
+            z-index: 1000;
+            animation: scanlines 8s linear infinite;
+        }
+
+        @keyframes scanlines {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(20px); }
+        }
+
         .header {
-            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.9) 0%, rgba(10, 25, 20, 0.95) 100%);
             padding: 1.5rem 2rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            border-bottom: 2px solid #3b82f6;
+            box-shadow:
+                0 0 20px rgba(0, 255, 170, 0.3),
+                0 4px 6px rgba(0,0,0,0.5),
+                inset 0 -1px 0 rgba(0, 255, 170, 0.5);
+            border-bottom: 2px solid #00ffaa;
+            position: relative;
+            overflow: hidden;
         }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 255, 170, 0.1), transparent);
+            animation: sweep 3s ease-in-out infinite;
+        }
+
+        @keyframes sweep {
+            0%, 100% { left: -100%; }
+            50% { left: 100%; }
+        }
+
         .header h1 {
-            font-size: 2rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            font-family: 'Orbitron', monospace;
+            font-size: 2.5rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            background: linear-gradient(135deg, #00ffaa 0%, #00ff00 50%, #00ffaa 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            text-shadow:
+                0 0 20px rgba(0, 255, 170, 0.5),
+                0 0 40px rgba(0, 255, 170, 0.3);
+            position: relative;
+            z-index: 1;
         }
-        .header p { color: #94a3b8; margin-top: 0.5rem; }
-        .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+
+        .header p {
+            color: #00ffaa;
+            margin-top: 0.5rem;
+            opacity: 0.7;
+            letter-spacing: 2px;
+            font-size: 0.9rem;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+            position: relative;
+            z-index: 1;
+        }
+
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 1.5rem;
             margin-top: 2rem;
         }
+
         .card {
-            background: #1e293b;
-            border-radius: 12px;
+            background: rgba(0, 10, 8, 0.85);
+            backdrop-filter: blur(10px);
+            border-radius: 4px;
             padding: 1.5rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-            border: 1px solid #334155;
-            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow:
+                0 0 20px rgba(0, 255, 170, 0.2),
+                inset 0 0 20px rgba(0, 255, 170, 0.05),
+                0 4px 6px rgba(0,0,0,0.5);
+            border: 1px solid rgba(0, 255, 170, 0.3);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
         }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #00ffaa, #00ff00, #00ffaa);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: -1;
+            border-radius: 4px;
+        }
+
         .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 12px rgba(59, 130, 246, 0.2);
-            border-color: #3b82f6;
+            transform: translateY(-4px);
+            box-shadow:
+                0 0 40px rgba(0, 255, 170, 0.4),
+                inset 0 0 30px rgba(0, 255, 170, 0.1),
+                0 8px 12px rgba(0,0,0,0.7);
+            border-color: #00ffaa;
         }
+
+        .card:hover::before {
+            opacity: 0.2;
+        }
+
         .card h2 {
-            font-size: 1.25rem;
+            font-family: 'Orbitron', monospace;
+            font-size: 1.1rem;
+            font-weight: 700;
             margin-bottom: 1rem;
-            color: #3b82f6;
+            color: #00ffaa;
+            text-transform: uppercase;
+            letter-spacing: 2px;
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            text-shadow: 0 0 10px rgba(0, 255, 170, 0.5);
         }
         .metric {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 0.75rem 0;
-            border-bottom: 1px solid #334155;
+            border-bottom: 1px solid rgba(0, 255, 170, 0.1);
         }
+
         .metric:last-child { border-bottom: none; }
-        .metric-label { color: #94a3b8; font-size: 0.9rem; }
+
+        .metric-label {
+            color: rgba(0, 255, 170, 0.6);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
         .metric-value {
+            font-family: 'Orbitron', monospace;
             font-size: 1.5rem;
             font-weight: 700;
-            color: #3b82f6;
+            color: #00ffaa;
+            text-shadow: 0 0 10px rgba(0, 255, 170, 0.5);
         }
+
         .status {
             display: inline-block;
             padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.875rem;
+            border-radius: 2px;
+            font-size: 0.75rem;
             font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
+
         .status-running {
-            background: rgba(34, 197, 94, 0.1);
-            color: #22c55e;
-            border: 1px solid #22c55e;
+            background: rgba(0, 255, 0, 0.1);
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+            animation: pulse-green 2s ease-in-out infinite;
         }
+
         .status-stopped {
-            background: rgba(239, 68, 68, 0.1);
-            color: #ef4444;
-            border: 1px solid #ef4444;
+            background: rgba(255, 0, 100, 0.1);
+            color: #ff0064;
+            border: 1px solid #ff0064;
         }
+
+        @keyframes pulse-green {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
         .btn {
-            background: #3b82f6;
-            color: white;
-            border: none;
+            font-family: 'Share Tech Mono', monospace;
+            background: rgba(0, 255, 170, 0.1);
+            color: #00ffaa;
+            border: 1px solid #00ffaa;
             padding: 0.5rem 1rem;
-            border-radius: 6px;
+            border-radius: 2px;
             cursor: pointer;
-            font-size: 0.875rem;
+            font-size: 0.8rem;
             font-weight: 600;
-            transition: background 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px rgba(0, 255, 170, 0.2);
         }
-        .btn:hover { background: #2563eb; }
+
+        .btn:hover {
+            background: rgba(0, 255, 170, 0.2);
+            box-shadow: 0 0 20px rgba(0, 255, 170, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
         .btn-danger {
-            background: #ef4444;
+            background: rgba(255, 0, 100, 0.1);
+            color: #ff0064;
+            border-color: #ff0064;
+            box-shadow: 0 0 10px rgba(255, 0, 100, 0.2);
         }
-        .btn-danger:hover { background: #dc2626; }
+
+        .btn-danger:hover {
+            background: rgba(255, 0, 100, 0.2);
+            box-shadow: 0 0 20px rgba(255, 0, 100, 0.4);
+        }
         .node-list {
             margin-top: 1rem;
         }
+
         .node-item {
-            background: #0f172a;
+            background: rgba(0, 0, 0, 0.5);
             padding: 1rem;
-            border-radius: 8px;
+            border-radius: 2px;
             margin-bottom: 0.75rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border: 1px solid rgba(0, 255, 170, 0.2);
+            transition: all 0.3s ease;
         }
+
+        .node-item:hover {
+            background: rgba(0, 255, 170, 0.05);
+            border-color: #00ffaa;
+            box-shadow: 0 0 15px rgba(0, 255, 170, 0.2);
+        }
+
         .node-info h3 {
+            font-family: 'Orbitron', monospace;
             font-size: 1rem;
             margin-bottom: 0.25rem;
+            color: #00ffaa;
+            text-shadow: 0 0 5px rgba(0, 255, 170, 0.3);
         }
+
         .node-info p {
-            font-size: 0.875rem;
-            color: #64748b;
+            font-size: 0.8rem;
+            color: rgba(0, 255, 170, 0.5);
         }
+
         .actions {
             display: flex;
             gap: 0.5rem;
         }
+
         .loading {
             text-align: center;
             padding: 2rem;
-            color: #64748b;
+            color: rgba(0, 255, 170, 0.5);
+            font-family: 'Share Tech Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            animation: pulse-green 2s ease-in-out infinite;
+        }
+
+        input[type="number"],
+        input[type="range"],
+        select {
+            font-family: 'Share Tech Mono', monospace;
+            background: rgba(0, 0, 0, 0.5);
+            color: #00ffaa;
+            border: 1px solid rgba(0, 255, 170, 0.3);
+            outline: none;
+        }
+
+        input[type="number"]:focus,
+        select:focus {
+            border-color: #00ffaa;
+            box-shadow: 0 0 10px rgba(0, 255, 170, 0.3);
+        }
+
+        input[type="range"] {
+            accent-color: #00ffaa;
+        }
+
+        canvas {
+            image-rendering: pixelated;
         }
     </style>
 </head>
@@ -243,6 +444,76 @@ pub async fn index() -> impl IntoResponse {
                 <div class="loading">Loading nodes...</div>
             </div>
         </div>
+
+        <!-- Battle Visualization Section -->
+        <div class="card" style="margin-top: 2rem;">
+            <h2>⚔️ Cellular Automata Battle Visualization</h2>
+            <div style="display: grid; grid-template-columns: 300px 1fr; gap: 2rem; margin-top: 1rem;">
+                <div>
+                    <h3 style="font-size: 1rem; margin-bottom: 1rem;">Battle Configuration</h3>
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; color: #94a3b8;">Glider A</label>
+                        <select id="glider-a" class="btn" style="width: 100%; padding: 0.75rem;">
+                            <option value="standard">Standard</option>
+                            <option value="lightweight">Lightweight</option>
+                            <option value="middleweight">Middleweight</option>
+                            <option value="heavyweight">Heavyweight</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; color: #94a3b8;">Glider B</label>
+                        <select id="glider-b" class="btn" style="width: 100%; padding: 0.75rem;">
+                            <option value="standard">Standard</option>
+                            <option value="lightweight">Lightweight</option>
+                            <option value="middleweight">Middleweight</option>
+                            <option value="heavyweight">Heavyweight</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; color: #94a3b8;">Steps</label>
+                        <input type="number" id="battle-steps" value="1000" min="100" max="5000" class="btn" style="width: 100%; padding: 0.75rem;">
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; color: #94a3b8;">Frames</label>
+                        <input type="number" id="battle-frames" value="20" min="5" max="100" class="btn" style="width: 100%; padding: 0.75rem;">
+                    </div>
+                    <button id="run-battle" class="btn" style="width: 100%; padding: 0.75rem;" onclick="runBattle()">Run Battle</button>
+                    <div id="battle-status" style="margin-top: 1rem; padding: 1rem; background: #0f172a; border-radius: 8px; display: none;">
+                        <div style="color: #94a3b8; font-size: 0.875rem;">Status: <span id="battle-status-text">Ready</span></div>
+                        <div style="margin-top: 0.5rem;">
+                            <div style="color: #3b82f6;">Winner: <span id="battle-winner">-</span></div>
+                            <div style="margin-top: 0.25rem; font-size: 0.875rem;">Energy A: <span id="battle-energy-a">-</span></div>
+                            <div style="font-size: 0.875rem;">Energy B: <span id="battle-energy-b">-</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3 style="font-size: 1rem;">Visualization</h3>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button id="play-pause" class="btn" onclick="togglePlayback()" disabled>▶️ Play</button>
+                            <input type="range" id="frame-slider" min="0" max="0" value="0" style="width: 200px;" disabled oninput="seekFrame(this.value)">
+                            <span id="frame-display" style="color: #94a3b8;">Frame: 0/0</span>
+                        </div>
+                    </div>
+                    <canvas id="battle-canvas" width="512" height="512" style="width: 100%; max-width: 512px; border: 2px solid #334155; border-radius: 8px; background: #000;"></canvas>
+                    <div id="battle-legend" style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div style="width: 20px; height: 20px; background: #3b82f6; border-radius: 4px;"></div>
+                            <span style="font-size: 0.875rem; color: #94a3b8;">Glider A Region</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div style="width: 20px; height: 20px; background: #ef4444; border-radius: 4px;"></div>
+                            <span style="font-size: 0.875rem; color: #94a3b8;">Glider B Region</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div style="width: 20px; height: 20px; background: #22c55e; border-radius: 4px;"></div>
+                            <span style="font-size: 0.875rem; color: #94a3b8;">High Energy</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -342,6 +613,123 @@ pub async fn index() -> impl IntoResponse {
             if (days > 0) return `${days}d ${hours}h`;
             if (hours > 0) return `${hours}h ${minutes}m`;
             return `${minutes}m`;
+        }
+
+        // Battle visualization state
+        let battleFrames = [];
+        let currentFrame = 0;
+        let isPlaying = false;
+        let playbackInterval = null;
+
+        async function runBattle() {
+            const gliderA = document.getElementById('glider-a').value;
+            const gliderB = document.getElementById('glider-b').value;
+            const steps = parseInt(document.getElementById('battle-steps').value);
+            const frames = parseInt(document.getElementById('battle-frames').value);
+
+            document.getElementById('run-battle').disabled = true;
+            document.getElementById('battle-status').style.display = 'block';
+            document.getElementById('battle-status-text').textContent = 'Running simulation...';
+
+            try {
+                const response = await fetch('/api/test/battle/visualize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        glider_a: gliderA,
+                        glider_b: gliderB,
+                        steps: steps,
+                        frame_count: frames,
+                        downsample_size: 128
+                    })
+                });
+
+                const data = await response.json();
+
+                battleFrames = data.frames;
+                currentFrame = 0;
+
+                document.getElementById('battle-status-text').textContent = 'Complete';
+                document.getElementById('battle-winner').textContent = data.winner;
+                document.getElementById('battle-energy-a').textContent = data.final_energy_a.toLocaleString();
+                document.getElementById('battle-energy-b').textContent = data.final_energy_b.toLocaleString();
+
+                document.getElementById('frame-slider').max = battleFrames.length - 1;
+                document.getElementById('frame-slider').disabled = false;
+                document.getElementById('play-pause').disabled = false;
+
+                renderFrame(0);
+            } catch (error) {
+                console.error('Battle failed:', error);
+                document.getElementById('battle-status-text').textContent = 'Error: ' + error.message;
+            } finally {
+                document.getElementById('run-battle').disabled = false;
+            }
+        }
+
+        function renderFrame(frameIndex) {
+            if (frameIndex < 0 || frameIndex >= battleFrames.length) return;
+
+            const frame = battleFrames[frameIndex];
+            const canvas = document.getElementById('battle-canvas');
+            const ctx = canvas.getContext('2d');
+            const grid = frame.grid;
+            const size = grid.length;
+            const cellSize = canvas.width / size;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Render grid
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const energy = grid[y][x];
+                    if (energy > 0) {
+                        // Color cells based on position and energy
+                        const normalizedX = x / size;
+                        const intensity = Math.min(255, energy * 2);
+
+                        // Left side = blue (Glider A), right side = red (Glider B)
+                        if (normalizedX < 0.5) {
+                            ctx.fillStyle = `rgb(${intensity * 0.2}, ${intensity * 0.5}, ${intensity})`;
+                        } else {
+                            ctx.fillStyle = `rgb(${intensity}, ${intensity * 0.2}, ${intensity * 0.2})`;
+                        }
+
+                        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                    }
+                }
+            }
+
+            // Update frame display
+            document.getElementById('frame-display').textContent = `Frame: ${frameIndex + 1}/${battleFrames.length} (Step ${frame.step})`;
+            document.getElementById('frame-slider').value = frameIndex;
+            currentFrame = frameIndex;
+        }
+
+        function togglePlayback() {
+            isPlaying = !isPlaying;
+            const btn = document.getElementById('play-pause');
+
+            if (isPlaying) {
+                btn.textContent = '⏸️ Pause';
+                playbackInterval = setInterval(() => {
+                    currentFrame = (currentFrame + 1) % battleFrames.length;
+                    renderFrame(currentFrame);
+                }, 100); // 10 FPS
+            } else {
+                btn.textContent = '▶️ Play';
+                if (playbackInterval) {
+                    clearInterval(playbackInterval);
+                    playbackInterval = null;
+                }
+            }
+        }
+
+        function seekFrame(value) {
+            if (isPlaying) {
+                togglePlayback();
+            }
+            renderFrame(parseInt(value));
         }
 
         // Initial load and auto-refresh

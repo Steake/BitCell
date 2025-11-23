@@ -11,6 +11,8 @@ repository.workspace = true
 bitcell-crypto = { path = "../bitcell-crypto" }
 serde.workspace = true
 thiserror.workspace = true
+rocksdb = "0.22"
+bincode.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

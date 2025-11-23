@@ -9,7 +9,7 @@ pub mod peer;
 pub mod transport;
 
 pub use messages::{Message, MessageType};
-pub use peer::{Peer, PeerManager};
+pub use peer::{PeerInfo, PeerManager, PeerReputation};
 
 pub type Result<T> = std::result::Result<T, Error>;
 

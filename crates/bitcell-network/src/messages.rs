@@ -1,15 +1,21 @@
 //! Network message types
 
-use bitcell_consensus::{Block, Transaction, GliderCommitment, GliderReveal};
+use bitcell_consensus;
 use bitcell_crypto::Hash256;
 use serde::{Deserialize, Serialize};
+
+// Re-export types for convenience
+pub type Block = bitcell_consensus::Block;
+pub type Transaction = bitcell_consensus::Transaction;
+pub type GliderCommit = bitcell_consensus::GliderCommitment;
+pub type GliderReveal = bitcell_consensus::GliderReveal;
 
 /// Network message types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessageType {
     Block(Block),
     Transaction(Transaction),
-    GliderCommit(GliderCommitment),
+    GliderCommit(GliderCommit),
     GliderReveal(GliderReveal),
     GetBlock(Hash256),
     GetPeers,

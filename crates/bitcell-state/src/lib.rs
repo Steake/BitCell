@@ -10,9 +10,6 @@ pub mod account;
 pub mod bonds;
 pub mod storage;
 
-pub use account::Account;
-pub use bonds::BondState;
-
 pub use account::{Account, AccountState};
 pub use bonds::{BondState, BondStatus};
 

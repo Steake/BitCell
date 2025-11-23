@@ -8,7 +8,6 @@ use curve25519_dalek::{
     constants::RISTRETTO_BASEPOINT_TABLE,
     ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar,
-    traits::Identity,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
@@ -62,7 +61,6 @@ impl EcvrfSecretKey {
 
         // Get public key
         let pk = self.public_key();
-        let y_point = &self.scalar * RISTRETTO_BASEPOINT_TABLE;
 
         // Hash to curve: H = hash_to_curve(alpha)
         let h_point = hash_to_curve(alpha);

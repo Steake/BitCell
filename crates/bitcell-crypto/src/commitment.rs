@@ -3,10 +3,10 @@
 //! Used in the privacy layer for commitments to state values.
 
 use crate::{Error, Result};
-use ark_ec::{CurveGroup, Group};
+use ark_ec::Group;
 use ark_ff::{PrimeField, UniformRand};
 use ark_bn254::{G1Projective as G1, Fr};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_serialize::CanonicalSerialize;
 use once_cell::sync::Lazy;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};

@@ -3,12 +3,11 @@
 //! Implements linkable ring signatures for tournament anonymity.
 //! Based on the CLSAG construction from Monero.
 
-use crate::{Error, Hash256, Result};
+use crate::{Error, Result};
 use curve25519_dalek::{
     constants::RISTRETTO_BASEPOINT_TABLE,
     ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar,
-    traits::Identity,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};

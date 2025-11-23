@@ -3,7 +3,7 @@
 //! Uses ECVRF (Elliptic Curve VRF) based on the IRTF draft spec.
 //! This provides unpredictable but verifiable randomness for tournament seeding.
 
-use crate::{Error, Hash256, PublicKey, Result, SecretKey};
+use crate::{Hash256, PublicKey, Result, SecretKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 

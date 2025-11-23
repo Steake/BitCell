@@ -92,7 +92,7 @@ impl RingSignature {
     }
 
     /// Verify a ring signature
-    pub fn verify(&self, ring: &[PublicKey], message: &[u8]) -> Result<()> {
+    pub fn verify(&self, ring: &[PublicKey], _message: &[u8]) -> Result<()> {
         // Verify ring hash matches
         let computed_ring_hash = compute_ring_hash(ring);
         if computed_ring_hash != self.ring_hash {

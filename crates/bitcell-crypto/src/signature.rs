@@ -8,7 +8,7 @@ use k256::ecdsa::{
     Signature as K256Signature, SigningKey, VerifyingKey,
 };
 use rand::rngs::OsRng;
-use serde::{Deserialize, Serialize};
+
 use std::fmt;
 
 /// ECDSA public key (33 bytes compressed)

@@ -20,6 +20,7 @@ ark-bn254.workspace = true
 ark-serialize.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+ark-crypto-primitives.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

@@ -10,6 +10,10 @@
 pub mod battle_circuit;
 pub mod state_circuit;
 
+// New: Full constraint implementations
+pub mod battle_constraints;
+pub mod state_constraints;
+
 pub use battle_circuit::BattleCircuit;
 pub use state_circuit::StateCircuit;
 

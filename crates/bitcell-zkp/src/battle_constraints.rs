@@ -216,12 +216,14 @@ fn conway_step<F: PrimeField>(
             let cell = &grid[i][j];
             // Check if cell is alive (value > 0) by checking all bits
             let cell_bits = cell.to_bits_le()?;
-            let is_alive = cell_bits.iter().fold(Boolean::FALSE, |acc, bit| acc.or(bit).unwrap());
+            let is_alive = cell_bits.iter().try_fold(Boolean::FALSE, |acc, bit| {
+                acc.or(bit).map_err(|_| SynthesisError::Unsatisfiable)
+            })?;
             
             // Survival: 2 or 3 neighbors
             let count_bits = neighbor_count.to_bits_le()?;
-            let two_bits = UInt8::constant(2).to_bits_le().unwrap();
-            let three_bits = UInt8::constant(3).to_bits_le().unwrap();
+            let two_bits = UInt8::constant(2).to_bits_le()?;
+            let three_bits = UInt8::constant(3).to_bits_le()?;
             
             let has_2_neighbors = check_bits_equal(&count_bits, &two_bits)?;
             let has_3_neighbors = check_bits_equal(&count_bits, &three_bits)?;
@@ -270,7 +272,9 @@ fn count_neighbors<F: PrimeField>(
         
         let neighbor = &grid[ni][nj];
         let neighbor_bits = neighbor.to_bits_le()?;
-        let is_alive = neighbor_bits.iter().fold(Boolean::FALSE, |acc, bit| acc.or(bit).unwrap());
+        let is_alive = neighbor_bits.iter().try_fold(Boolean::FALSE, |acc, bit| {
+            acc.or(bit).map_err(|_| SynthesisError::Unsatisfiable)
+        })?;
         
         let one = UInt8::constant(1);
         // Manual addition for UInt8 by converting to bits and adding

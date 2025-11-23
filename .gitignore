@@ -1,0 +1,33 @@
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+*.profraw
+*.profdata
+
+# Documentation
+docs/book/
+
+# Temporary files
+/tmp/
+*.tmp
+*.log
+
+# Keys and secrets
+*.key
+*.pem
+secrets/
+
+# Benchmarks
+criterion/

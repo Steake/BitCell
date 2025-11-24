@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::AppState;
-use crate::setup::NodeEndpoint;
+use crate::setup::{NodeEndpoint, SETUP_FILE_PATH};
 
 #[derive(Debug, Serialize)]
 pub struct SetupStatusResponse {
@@ -68,7 +68,7 @@ pub async fn add_node(
     state.setup.add_node(node.clone());
 
     // Save setup state
-    let setup_path = std::path::PathBuf::from(".bitcell/admin/setup.json");
+    let setup_path = std::path::PathBuf::from(SETUP_FILE_PATH);
     state.setup.save_to_file(&setup_path)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(e)))?;
 
@@ -87,7 +87,7 @@ pub async fn set_config_path(
     state.setup.set_config_path(path.clone());
 
     // Save setup state
-    let setup_path = std::path::PathBuf::from(".bitcell/admin/setup.json");
+    let setup_path = std::path::PathBuf::from(SETUP_FILE_PATH);
     state.setup.save_to_file(&setup_path)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(e)))?;
 
@@ -101,17 +101,30 @@ pub async fn set_data_dir(
 ) -> Result<Json<String>, (StatusCode, Json<String>)> {
     let path = std::path::PathBuf::from(&req.path);
 
-    // Create directory if it doesn't exist
+    // Create directory if it doesn't exist with restrictive permissions
     std::fs::create_dir_all(&path)
         .map_err(|e| (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(format!("Failed to create data directory: {}", e))
         ))?;
 
+    // Set restrictive permissions on Unix systems (0700 - owner only)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let permissions = std::fs::Permissions::from_mode(0o700);
+        std::fs::set_permissions(&path, permissions)
+            .map_err(|e| (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(format!("Failed to set directory permissions: {}", e))
+            ))?;
+        tracing::info!("Set data directory permissions to 0700 (owner only)");
+    }
+
     state.setup.set_data_dir(path);
 
     // Save setup state
-    let setup_path = std::path::PathBuf::from(".bitcell/admin/setup.json");
+    let setup_path = std::path::PathBuf::from(SETUP_FILE_PATH);
     state.setup.save_to_file(&setup_path)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(e)))?;
 
@@ -125,7 +138,7 @@ pub async fn complete_setup(
     state.setup.mark_initialized();
 
     // Save setup state
-    let setup_path = std::path::PathBuf::from(".bitcell/admin/setup.json");
+    let setup_path = std::path::PathBuf::from(SETUP_FILE_PATH);
     state.setup.save_to_file(&setup_path)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(e)))?;
 

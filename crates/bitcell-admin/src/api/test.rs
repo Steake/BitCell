@@ -114,18 +114,16 @@ pub async fn run_battle_test(
 
     let (outcome, energy_a, energy_b) = tokio::task::spawn_blocking(move || {
         // Simulate the battle
-        let outcome = battle.simulate()
-            .map_err(|e| format!("Battle simulation error: {:?}", e))?;
+        let outcome = battle.simulate();
 
         // Get final grid to measure energies
         let final_grid = battle.final_grid();
         let (energy_a, energy_b) = battle.measure_regional_energy(&final_grid);
 
-        Ok::<_, String>((outcome, energy_a, energy_b))
+        (outcome, energy_a, energy_b)
     })
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(format!("Task join error: {}", e))))?
-    .map_err(|e: String| (StatusCode::INTERNAL_SERVER_ERROR, Json(e)))?;
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(format!("Task join error: {}", e))))?;
 
     let duration = start.elapsed();
 
@@ -222,8 +220,7 @@ pub async fn run_battle_visualization(
     // Run simulation and capture frames
     let (outcome, frames) = tokio::task::spawn_blocking(move || {
         // Get outcome
-        let outcome = battle.simulate()
-            .map_err(|e| format!("Battle simulation error: {:?}", e))?;
+        let outcome = battle.simulate();
 
         // Get grid states at sample steps
         let grids = battle.grid_states(&sample_steps);
@@ -243,11 +240,10 @@ pub async fn run_battle_visualization(
             });
         }
 
-        Ok::<_, String>((outcome, frames))
+        (outcome, frames)
     })
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(format!("Task join error: {}", e))))?
-    .map_err(|e: String| (StatusCode::INTERNAL_SERVER_ERROR, Json(e)))?;
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(format!("Task join error: {}", e))))?;
 
     let winner = match outcome {
         BattleOutcome::AWins => "glider_a".to_string(),

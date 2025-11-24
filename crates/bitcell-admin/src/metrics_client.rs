@@ -31,9 +31,9 @@ impl MetricsClient {
     pub fn new() -> Self {
         Self {
             client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(5))
+                .timeout(Duration::from_secs(10))
                 .build()
-                .unwrap(),
+                .expect("Failed to build HTTP client for metrics"),
         }
     }
 
@@ -58,6 +58,9 @@ impl MetricsClient {
     }
 
     /// Parse Prometheus metrics format
+    /// NOTE: This is a basic parser that only handles simple "metric_name value" format.
+    /// It does NOT support metric labels (e.g., metric{label="value"}).
+    /// For production use, consider using a proper Prometheus parsing library.
     fn parse_prometheus_metrics(&self, node_id: &str, endpoint: &str, text: &str) -> Result<NodeMetrics, String> {
         let mut metrics = HashMap::new();
 

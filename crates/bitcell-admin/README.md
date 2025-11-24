@@ -162,14 +162,23 @@ bitcell-admin/
 
 ## Security Considerations
 
-⚠️ **IMPORTANT**: The admin console provides powerful administrative capabilities. In production:
+⚠️ **CRITICAL SECURITY WARNING** ⚠️
 
-1. **Enable authentication** before exposing to network
-2. **Use HTTPS/TLS** for encrypted communication
-3. **Restrict access** via firewall rules or VPN
-4. **Use strong passwords** and rotate regularly
-5. **Enable audit logging** for all administrative actions
-6. **Limit API rate limits** to prevent abuse
+**NO AUTHENTICATION IS CURRENTLY IMPLEMENTED**
+
+The admin console currently allows **unrestricted access** to all endpoints. This is a **critical security vulnerability**.
+
+**DO NOT expose this admin console to any network (including localhost) in production without implementing authentication first.**
+
+For production deployments, you MUST:
+
+1. **Implement authentication** before exposing to any network
+2. **Use HTTPS/TLS** for all communication (never HTTP in production)
+3. **Restrict network access** via firewall rules, VPN, or IP allowlisting
+4. **Use strong passwords** and rotate them regularly
+5. **Enable comprehensive audit logging** for all administrative actions
+6. **Implement API rate limiting** to prevent abuse
+7. **Run with least-privilege** user accounts (never as root)
 
 ## Development
 

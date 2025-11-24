@@ -50,10 +50,10 @@ fn test_full_tournament_flow() {
     let glider_b = Glider::new(reveals[1].pattern, Position::new(800, 800));
     
     let battle = Battle::new(glider_a, glider_b);
-    let outcome = battle.simulate().expect("Battle should complete");
+    let outcome = battle.simulate();
     
-    // Winner should be one of the two participants
-    assert!(outcome.winner == 0 || outcome.winner == 1);
+    // Outcome should be one of the three valid results
+    assert!(matches!(outcome, bitcell_ca::BattleOutcome::AWins | bitcell_ca::BattleOutcome::BWins | bitcell_ca::BattleOutcome::Tie));
 }
 
 #[test]

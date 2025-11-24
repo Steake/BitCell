@@ -3,9 +3,8 @@
 //! Simulates CA evolution with two gliders and determines the winner.
 
 use crate::glider::Glider;
-use crate::grid::{Grid, Position, GRID_SIZE};
+use crate::grid::{Grid, Position};
 use crate::rules::evolve_n_steps;
-use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 /// Number of steps to simulate a battle
@@ -67,7 +66,7 @@ impl Battle {
     }
 
     /// Simulate the battle and return the outcome
-    pub fn simulate(&self) -> Result<BattleOutcome> {
+    pub fn simulate(&self) -> BattleOutcome {
         let initial_grid = self.setup_grid();
         let final_grid = evolve_n_steps(&initial_grid, self.steps);
 
@@ -82,7 +81,7 @@ impl Battle {
             BattleOutcome::Tie
         };
 
-        Ok(outcome)
+        outcome
     }
 
     /// Measure energy in regions around spawn points
@@ -130,17 +129,34 @@ impl Battle {
         evolve_n_steps(&initial, self.steps)
     }
 
-    /// Get grid states at specific steps for visualization
-    /// Returns a vector of grids at the requested step intervals
+    /// Get grid states at specific steps for visualization.
+    /// 
+    /// Returns a vector of grids at the requested step intervals.
+    /// Steps that exceed `self.steps` are silently skipped.
+    /// For efficiency, steps should be provided in ascending order.
+    /// 
+    /// # Performance Note
+    /// This implementation evolves incrementally from one step to the next,
+    /// which is more efficient than evolving from scratch for each step.
     pub fn grid_states(&self, sample_steps: &[usize]) -> Vec<Grid> {
         let mut grids = Vec::new();
         let initial = self.setup_grid();
 
-        for &step in sample_steps {
-            if step <= self.steps {
-                let grid = evolve_n_steps(&initial, step);
-                grids.push(grid);
-            }
+        // Sort sample_steps to ensure incremental evolution
+        let mut sorted_steps: Vec<usize> = sample_steps.iter()
+            .filter(|&&step| step <= self.steps)
+            .copied()
+            .collect();
+        sorted_steps.sort_unstable();
+
+        let mut current_grid = initial;
+        let mut prev_step = 0;
+
+        for step in sorted_steps {
+            let steps_to_evolve = step - prev_step;
+            current_grid = evolve_n_steps(&current_grid, steps_to_evolve);
+            grids.push(current_grid.clone());
+            prev_step = step;
         }
 
         grids
@@ -180,7 +196,7 @@ mod tests {
 
         // Short battle for testing
         let battle = Battle::with_steps(glider_a, glider_b, 100);
-        let outcome = battle.simulate().unwrap();
+        let outcome = battle.simulate();
 
         // With higher initial energy, A should have advantage
         // (though CA evolution can be chaotic)
@@ -193,7 +209,7 @@ mod tests {
         let glider_b = Glider::new(GliderPattern::Standard, SPAWN_B);
 
         let battle = Battle::with_steps(glider_a, glider_b, 50);
-        let outcome = battle.simulate().unwrap();
+        let outcome = battle.simulate();
 
         // Identical gliders should trend toward tie (though not guaranteed due to asymmetry)
         // Just verify it completes
@@ -209,7 +225,7 @@ mod tests {
         let glider_b = Glider::new(GliderPattern::Standard, SPAWN_B);
 
         let battle = Battle::with_steps(glider_a, glider_b, 100);
-        let outcome = battle.simulate().unwrap();
+        let outcome = battle.simulate();
 
         // Heavier pattern has more cells and energy
         // Should generally win, but CA is chaotic

@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::RwLock;
 
+/// Default setup file path
+pub const SETUP_FILE_PATH: &str = ".bitcell/admin/setup.json";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetupState {
     pub initialized: bool,

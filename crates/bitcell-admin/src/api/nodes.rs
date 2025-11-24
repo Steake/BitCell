@@ -47,6 +47,16 @@ pub async fn get_node(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<NodeResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Validate node ID format (alphanumeric and hyphens only)
+    if !id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Invalid node ID format".to_string(),
+            }),
+        ));
+    }
+
     match state.process.get_node(&id) {
         Some(node) => Ok(Json(NodeResponse { node })),
         None => Err((
@@ -62,8 +72,28 @@ pub async fn get_node(
 pub async fn start_node(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-    Json(_req): Json<StartNodeRequest>,
+    Json(req): Json<StartNodeRequest>,
 ) -> Result<Json<NodeResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Validate node ID format (alphanumeric and hyphens only)
+    if !id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Invalid node ID format".to_string(),
+            }),
+        ));
+    }
+
+    // Config is not supported yet
+    if req.config.is_some() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Custom config is not supported yet".to_string(),
+            }),
+        ));
+    }
+
     match state.process.start_node(&id) {
         Ok(node) => {
             tracing::info!("Started node '{}' successfully", id);
@@ -83,6 +113,16 @@ pub async fn stop_node(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<NodeResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Validate node ID format (alphanumeric and hyphens only)
+    if !id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Invalid node ID format".to_string(),
+            }),
+        ));
+    }
+
     match state.process.stop_node(&id) {
         Ok(node) => {
             tracing::info!("Stopped node '{}' successfully", id);

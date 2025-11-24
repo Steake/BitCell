@@ -139,9 +139,29 @@ impl Grid {
         }
     }
 
-    /// Get a downsampled view of the grid for visualization
-    /// Returns a smaller grid by taking max energy in each block
+    /// Get a downsampled view of the grid for visualization.
+    /// 
+    /// Uses max pooling to downsample the grid: divides the grid into blocks
+    /// and returns the maximum energy value in each block. This is useful for
+    /// visualizing large grids at lower resolutions.
+    /// 
+    /// # Arguments
+    /// * `target_size` - The desired output grid size (must be > 0 and <= GRID_SIZE)
+    /// 
+    /// # Returns
+    /// A 2D vector of size `target_size × target_size` containing max energy values.
+    /// 
+    /// # Panics
+    /// Panics if `target_size` is 0 or greater than `GRID_SIZE`.
+    /// 
+    /// # Note
+    /// When `GRID_SIZE` is not evenly divisible by `target_size`, some cells near
+    /// the edges may not be sampled. This is acceptable for visualization purposes.
     pub fn downsample(&self, target_size: usize) -> Vec<Vec<u8>> {
+        if target_size == 0 || target_size > GRID_SIZE {
+            panic!("target_size must be between 1 and {}", GRID_SIZE);
+        }
+
         let block_size = GRID_SIZE / target_size;
         let mut result = vec![vec![0u8; target_size]; target_size];
 

@@ -156,7 +156,10 @@ impl Grid {
     /// 
     /// # Note
     /// When `GRID_SIZE` is not evenly divisible by `target_size`, some cells near
-    /// the edges may not be sampled. This is acceptable for visualization purposes.
+    /// the edges may not be sampled. For example, with `GRID_SIZE=1024` and
+    /// `target_size=100`, `block_size=10`, so only cells from indices 0-999 are
+    /// sampled, leaving rows/columns 1000-1023 unsampled. This is acceptable for
+    /// visualization purposes where approximate representation is sufficient.
     pub fn downsample(&self, target_size: usize) -> Vec<Vec<u8>> {
         if target_size == 0 || target_size > GRID_SIZE {
             panic!("target_size must be between 1 and {}", GRID_SIZE);

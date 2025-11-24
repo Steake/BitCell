@@ -131,35 +131,41 @@ impl Battle {
 
     /// Get grid states at specific steps for visualization.
     /// 
-    /// Returns a vector of grids at the requested step intervals.
+    /// Returns a vector of grids at the requested step intervals in the same order
+    /// as the input `sample_steps` array.
     /// Steps that exceed `self.steps` are silently skipped.
-    /// For efficiency, steps should be provided in ascending order.
     /// 
     /// # Performance Note
-    /// This implementation evolves incrementally from one step to the next,
-    /// which is more efficient than evolving from scratch for each step.
+    /// This implementation sorts steps internally for incremental evolution efficiency,
+    /// but returns grids in the original order requested.
     pub fn grid_states(&self, sample_steps: &[usize]) -> Vec<Grid> {
-        let mut grids = Vec::new();
         let initial = self.setup_grid();
 
-        // Sort sample_steps to ensure incremental evolution
-        let mut sorted_steps: Vec<usize> = sample_steps.iter()
-            .filter(|&&step| step <= self.steps)
-            .copied()
+        // Filter and create (index, step) pairs to preserve original order
+        let mut indexed_steps: Vec<(usize, usize)> = sample_steps.iter()
+            .enumerate()
+            .filter(|(_, &step)| step <= self.steps)
+            .map(|(idx, &step)| (idx, step))
             .collect();
-        sorted_steps.sort_unstable();
 
+        // Sort by step for efficient incremental evolution
+        indexed_steps.sort_unstable_by_key(|(_, step)| *step);
+
+        // Evolve grids in sorted order
+        let mut evolved_grids = Vec::with_capacity(indexed_steps.len());
         let mut current_grid = initial;
         let mut prev_step = 0;
 
-        for step in sorted_steps {
+        for (original_idx, step) in &indexed_steps {
             let steps_to_evolve = step - prev_step;
             current_grid = evolve_n_steps(&current_grid, steps_to_evolve);
-            grids.push(current_grid.clone());
-            prev_step = step;
+            evolved_grids.push((*original_idx, current_grid.clone()));
+            prev_step = *step;
         }
 
-        grids
+        // Sort back to original order and extract grids
+        evolved_grids.sort_unstable_by_key(|(idx, _)| *idx);
+        evolved_grids.into_iter().map(|(_, grid)| grid).collect()
     }
 }
 

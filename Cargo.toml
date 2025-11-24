@@ -10,6 +10,7 @@ members = [
     "crates/bitcell-economics",
     "crates/bitcell-network",
     "crates/bitcell-node",
+    "crates/bitcell-admin",
 ]
 resolver = "2"
 

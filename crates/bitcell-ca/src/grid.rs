@@ -138,6 +138,52 @@ impl Grid {
             *cell = Cell::dead();
         }
     }
+
+    /// Get a downsampled view of the grid for visualization.
+    /// 
+    /// Uses max pooling to downsample the grid: divides the grid into blocks
+    /// and returns the maximum energy value in each block. This is useful for
+    /// visualizing large grids at lower resolutions.
+    /// 
+    /// # Arguments
+    /// * `target_size` - The desired output grid size (must be > 0 and <= GRID_SIZE)
+    /// 
+    /// # Returns
+    /// A 2D vector of size `target_size × target_size` containing max energy values.
+    /// 
+    /// # Panics
+    /// Panics if `target_size` is 0 or greater than `GRID_SIZE`.
+    /// 
+    /// # Note
+    /// When `GRID_SIZE` is not evenly divisible by `target_size`, some cells near
+    /// the edges may not be sampled. For example, with `GRID_SIZE=1024` and
+    /// `target_size=100`, `block_size=10`, so only cells from indices 0-999 are
+    /// sampled, leaving rows/columns 1000-1023 unsampled. This is acceptable for
+    /// visualization purposes where approximate representation is sufficient.
+    pub fn downsample(&self, target_size: usize) -> Vec<Vec<u8>> {
+        if target_size == 0 || target_size > GRID_SIZE {
+            panic!("target_size must be between 1 and {}", GRID_SIZE);
+        }
+
+        let block_size = GRID_SIZE / target_size;
+        let mut result = vec![vec![0u8; target_size]; target_size];
+
+        for y in 0..target_size {
+            for x in 0..target_size {
+                let mut max_energy = 0u8;
+                // Sample block
+                for by in 0..block_size {
+                    for bx in 0..block_size {
+                        let pos = Position::new(x * block_size + bx, y * block_size + by);
+                        max_energy = max_energy.max(self.get(pos).energy());
+                    }
+                }
+                result[y][x] = max_energy;
+            }
+        }
+
+        result
+    }
 }
 
 impl Default for Grid {

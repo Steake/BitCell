@@ -1,0 +1,52 @@
+[package]
+name = "bitcell-admin"
+version = "0.1.0"
+edition = "2021"
+authors = ["BitCell Contributors"]
+description = "Administrative console and dashboard for BitCell blockchain"
+
+[dependencies]
+# Web framework
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["fs", "cors"] }
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Templating
+tera = "1.19"
+
+# HTTP client (for calling node APIs)
+reqwest = { version = "0.11", features = ["json"] }
+
+# Metrics
+prometheus-client = "0.22"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Sync primitives
+parking_lot = "0.12"
+
+# BitCell dependencies
+bitcell-node = { path = "../bitcell-node" }
+bitcell-consensus = { path = "../bitcell-consensus" }
+bitcell-state = { path = "../bitcell-state" }
+bitcell-network = { path = "../bitcell-network" }
+bitcell-crypto = { path = "../bitcell-crypto" }
+bitcell-ca = { path = "../bitcell-ca" }
+
+# Unix process management
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]

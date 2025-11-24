@@ -3,9 +3,8 @@
 //! Simulates CA evolution with two gliders and determines the winner.
 
 use crate::glider::Glider;
-use crate::grid::{Grid, Position, GRID_SIZE};
+use crate::grid::{Grid, Position};
 use crate::rules::evolve_n_steps;
-use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 /// Number of steps to simulate a battle
@@ -67,7 +66,7 @@ impl Battle {
     }
 
     /// Simulate the battle and return the outcome
-    pub fn simulate(&self) -> Result<BattleOutcome> {
+    pub fn simulate(&self) -> BattleOutcome {
         let initial_grid = self.setup_grid();
         let final_grid = evolve_n_steps(&initial_grid, self.steps);
 
@@ -82,11 +81,11 @@ impl Battle {
             BattleOutcome::Tie
         };
 
-        Ok(outcome)
+        outcome
     }
 
     /// Measure energy in regions around spawn points
-    fn measure_regional_energy(&self, grid: &Grid) -> (u64, u64) {
+    pub fn measure_regional_energy(&self, grid: &Grid) -> (u64, u64) {
         let region_size = 128;
 
         // Region around spawn A
@@ -129,6 +128,53 @@ impl Battle {
         let initial = self.setup_grid();
         evolve_n_steps(&initial, self.steps)
     }
+
+    /// Get grid states at specific steps for visualization.
+    /// 
+    /// Returns a vector of grids at the requested step intervals in the same order
+    /// as the input `sample_steps` array.
+    /// Steps that exceed `self.steps` are silently skipped.
+    /// 
+    /// # Performance Note
+    /// This implementation sorts steps internally for incremental evolution efficiency,
+    /// but returns grids in the original order requested.
+    /// 
+    /// # Memory Overhead
+    /// Each grid clone can be expensive for large grids (e.g., 1024×1024 grids).
+    /// Requesting many sample steps will require storing multiple grid copies in memory.
+    /// For example, 100 sample steps could require several hundred MB of memory.
+    pub fn grid_states(&self, sample_steps: &[usize]) -> Vec<Grid> {
+        let initial = self.setup_grid();
+
+        // Filter and create (index, step) pairs to preserve original order
+        let mut indexed_steps: Vec<(usize, usize)> = sample_steps.iter()
+            .enumerate()
+            .filter(|(_, &step)| step <= self.steps)
+            .map(|(idx, &step)| (idx, step))
+            .collect();
+
+        // Sort by step for efficient incremental evolution
+        indexed_steps.sort_unstable_by_key(|(_, step)| *step);
+
+        // Evolve grids in sorted order
+        let mut evolved_grids = Vec::with_capacity(indexed_steps.len());
+        let mut current_grid = initial;
+        let mut prev_step = 0;
+
+        for (original_idx, step) in &indexed_steps {
+            let steps_to_evolve = step - prev_step;
+            // If steps_to_evolve is 0 (e.g., for step 0), the grid remains unchanged
+            if steps_to_evolve > 0 {
+                current_grid = evolve_n_steps(&current_grid, steps_to_evolve);
+            }
+            evolved_grids.push((*original_idx, current_grid.clone()));
+            prev_step = *step;
+        }
+
+        // Sort back to original order and extract grids
+        evolved_grids.sort_unstable_by_key(|(idx, _)| *idx);
+        evolved_grids.into_iter().map(|(_, grid)| grid).collect()
+    }
 }
 
 #[cfg(test)]
@@ -164,7 +210,7 @@ mod tests {
 
         // Short battle for testing
         let battle = Battle::with_steps(glider_a, glider_b, 100);
-        let outcome = battle.simulate().unwrap();
+        let outcome = battle.simulate();
 
         // With higher initial energy, A should have advantage
         // (though CA evolution can be chaotic)
@@ -177,7 +223,7 @@ mod tests {
         let glider_b = Glider::new(GliderPattern::Standard, SPAWN_B);
 
         let battle = Battle::with_steps(glider_a, glider_b, 50);
-        let outcome = battle.simulate().unwrap();
+        let outcome = battle.simulate();
 
         // Identical gliders should trend toward tie (though not guaranteed due to asymmetry)
         // Just verify it completes
@@ -193,7 +239,7 @@ mod tests {
         let glider_b = Glider::new(GliderPattern::Standard, SPAWN_B);
 
         let battle = Battle::with_steps(glider_a, glider_b, 100);
-        let outcome = battle.simulate().unwrap();
+        let outcome = battle.simulate();
 
         // Heavier pattern has more cells and energy
         // Should generally win, but CA is chaotic

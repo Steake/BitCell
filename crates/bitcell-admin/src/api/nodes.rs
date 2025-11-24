@@ -34,7 +34,7 @@ pub struct StartNodeRequest {
 
 /// Validate node ID format (alphanumeric, hyphens, and underscores only)
 fn validate_node_id(id: &str) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
-    if !id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+    if id.is_empty() || !id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -83,6 +83,7 @@ pub async fn start_node(
 
     // Config is not supported yet
     if req.config.is_some() {
+        tracing::warn!("Node '{}': Rejected start request with unsupported config", id);
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {

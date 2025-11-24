@@ -1047,8 +1047,8 @@ pub async fn index() -> impl IntoResponse {
             const nodeType = document.getElementById('deploy-node-type').value;
             const count = parseInt(document.getElementById('deploy-count').value);
 
-            if (count < 1 || count > 10) {
-                alert('Please enter a number between 1 and 10');
+            if (isNaN(count) || count < 1 || count > 10) {
+                alert('Please enter a valid number between 1 and 10');
                 return;
             }
 
@@ -1063,8 +1063,18 @@ pub async fn index() -> impl IntoResponse {
                 });
 
                 if (!response.ok) {
-                    const error = await response.text();
-                    throw new Error(error);
+                    let errorMessage = 'Deployment failed';
+                    try {
+                        const error = await response.json();
+                        errorMessage = error.error || error.message || errorMessage;
+                    } catch (e) {
+                        const text = await response.text();
+                        // Avoid showing large HTML blobs; use a generic message if text looks like HTML
+                        if (text && !/^<!doctype|^<html/i.test(text.trim())) {
+                            errorMessage = text;
+                        }
+                    }
+                    throw new Error(errorMessage);
                 }
 
                 const data = await response.json();
@@ -1152,8 +1162,14 @@ pub async fn index() -> impl IntoResponse {
                 });
                 
                 if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || 'Failed to start node');
+                    let errorMessage = 'Failed to start node';
+                    try {
+                        const error = await response.json();
+                        errorMessage = error.error || errorMessage;
+                    } catch (e) {
+                        // If JSON parsing fails, use default message
+                    }
+                    throw new Error(errorMessage);
                 }
                 
                 updateNodes();
@@ -1168,8 +1184,14 @@ pub async fn index() -> impl IntoResponse {
                 const response = await fetch(`/api/nodes/${id}/stop`, { method: 'POST' });
                 
                 if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || 'Failed to stop node');
+                    let errorMessage = 'Failed to stop node';
+                    try {
+                        const error = await response.json();
+                        errorMessage = error.error || errorMessage;
+                    } catch (e) {
+                        // If JSON parsing fails, use default message
+                    }
+                    throw new Error(errorMessage);
                 }
                 
                 updateNodes();

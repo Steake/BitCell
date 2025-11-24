@@ -138,6 +138,11 @@ impl Battle {
     /// # Performance Note
     /// This implementation sorts steps internally for incremental evolution efficiency,
     /// but returns grids in the original order requested.
+    /// 
+    /// # Memory Overhead
+    /// Each grid clone can be expensive for large grids (e.g., 1024×1024 grids).
+    /// Requesting many sample steps will require storing multiple grid copies in memory.
+    /// For example, 100 sample steps could require several hundred MB of memory.
     pub fn grid_states(&self, sample_steps: &[usize]) -> Vec<Grid> {
         let initial = self.setup_grid();
 
@@ -158,7 +163,10 @@ impl Battle {
 
         for (original_idx, step) in &indexed_steps {
             let steps_to_evolve = step - prev_step;
-            current_grid = evolve_n_steps(&current_grid, steps_to_evolve);
+            // If steps_to_evolve is 0 (e.g., for step 0), the grid remains unchanged
+            if steps_to_evolve > 0 {
+                current_grid = evolve_n_steps(&current_grid, steps_to_evolve);
+            }
             evolved_grids.push((*original_idx, current_grid.clone()));
             prev_step = *step;
         }

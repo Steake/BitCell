@@ -1,10 +1,9 @@
 /// RocksDB persistent storage layer
 /// Provides durable storage for blocks, state, and chain data
 
-use rocksdb::{DB, Options, WriteBatch, IteratorMode};
+use rocksdb::{DB, Options, WriteBatch};
 use std::path::Path;
 use std::sync::Arc;
-use serde::{Serialize, Deserialize};
 
 use crate::{Account, BondState};
 

@@ -1,6 +1,6 @@
 //! Block structures
 
-use bitcell_crypto::{Hash256, PublicKey, Signature, VrfProof};
+use bitcell_crypto::{Hash256, PublicKey, Signature};
 use serde::{Deserialize, Serialize};
 
 /// Block header

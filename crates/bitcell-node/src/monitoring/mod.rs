@@ -33,6 +33,7 @@ pub struct MetricsRegistry {
     // EBSL metrics
     active_miners: Arc<AtomicUsize>,
     banned_miners: Arc<AtomicUsize>,
+    #[allow(dead_code)]
     avg_trust_score: Arc<AtomicU64>, // Stored as fixed-point * 1000
 }
 

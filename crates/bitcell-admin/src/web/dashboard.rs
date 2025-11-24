@@ -622,44 +622,32 @@ pub async fn index() -> impl IntoResponse {
                 </div>
             </div>
 
-            <!-- Step 2: Node Configuration -->
+            <!-- Step 2: Deployment Configuration -->
             <div id="wizard-step-2" class="wizard-step">
-                <h3 style="color: #00ffaa; margin-bottom: 1rem;">🖥️ Add Node Endpoints</h3>
+                <h3 style="color: #00ffaa; margin-bottom: 1rem;">🚀 Deploy Network</h3>
                 <p style="color: rgba(0, 255, 170, 0.7); margin-bottom: 1rem; font-size: 0.9rem;">
-                    Register the endpoints of your BitCell nodes. You can add multiple nodes.
+                    Automatically deploy local nodes to start your private network.
                 </p>
 
                 <div class="form-group">
-                    <label>Node ID</label>
-                    <input type="text" id="node-id" placeholder="validator-1">
+                    <label>Validators</label>
+                    <input type="number" id="deploy-validators" value="2" min="1" max="10">
+                    <small>Number of validator nodes to deploy</small>
                 </div>
                 <div class="form-group">
-                    <label>Node Type</label>
-                    <select id="node-type">
-                        <option value="validator">Validator</option>
-                        <option value="miner">Miner</option>
-                        <option value="fullnode">Full Node</option>
-                    </select>
+                    <label>Miners</label>
+                    <input type="number" id="deploy-miners" value="1" min="0" max="10">
+                    <small>Number of miner nodes to deploy</small>
                 </div>
                 <div class="form-group">
-                    <label>Metrics Endpoint</label>
-                    <input type="text" id="node-metrics" placeholder="http://localhost:9000/metrics">
-                    <small>Prometheus metrics endpoint</small>
+                    <label>Full Nodes</label>
+                    <input type="number" id="deploy-fullnodes" value="0" min="0" max="5">
+                    <small>Number of non-validating full nodes</small>
                 </div>
-                <div class="form-group">
-                    <label>RPC Endpoint</label>
-                    <input type="text" id="node-rpc" placeholder="http://localhost:9001">
-                    <small>JSON-RPC endpoint</small>
-                </div>
-                <button class="btn" onclick="addNodeToWizard()" style="width: 100%; margin-bottom: 1rem;">+ Add Node</button>
-
-                <div id="wizard-nodes-list" class="node-list-wizard">
-                    <!-- Nodes will be added here -->
-                </div>
-
+                
                 <div class="wizard-actions">
                     <button class="btn btn-secondary" onclick="prevWizardStep(2)">← Back</button>
-                    <button class="btn" onclick="nextWizardStep(2)">Complete Setup →</button>
+                    <button class="btn" onclick="nextWizardStep(2)">Deploy & Finish →</button>
                 </div>
             </div>
 
@@ -790,9 +778,9 @@ pub async fn index() -> impl IntoResponse {
                 <div class="form-group">
                     <label>Node Type</label>
                     <select id="deploy-node-type" class="btn" style="width: 100%; padding: 0.75rem;">
-                        <option value="Validator">Validator</option>
-                        <option value="Miner">Miner</option>
-                        <option value="FullNode">Full Node</option>
+                        <option value="validator">Validator</option>
+                        <option value="miner">Miner</option>
+                        <option value="fullnode">Full Node</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -926,14 +914,78 @@ pub async fn index() -> impl IntoResponse {
                     alert('Failed to save configuration paths');
                 });
             } else if (step === 2) {
-                // Complete setup
-                fetch('/api/setup/complete', { method: 'POST' })
+                // Deploy nodes
+                const validators = parseInt(document.getElementById('deploy-validators').value) || 0;
+                const miners = parseInt(document.getElementById('deploy-miners').value) || 0;
+                const fullnodes = parseInt(document.getElementById('deploy-fullnodes').value) || 0;
+
+                const deployments = [];
+
+                if (validators > 0) {
+                    deployments.push(
+                        fetch('/api/deployment/deploy', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ node_type: 'validator', count: validators })
+                        }).then(res => {
+                            if (!res.ok) throw new Error('Failed to deploy validators');
+                            return res;
+                        })
+                    );
+                }
+
+                if (miners > 0) {
+                    deployments.push(
+                        fetch('/api/deployment/deploy', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ node_type: 'miner', count: miners })
+                        }).then(res => {
+                            if (!res.ok) throw new Error('Failed to deploy miners');
+                            return res;
+                        })
+                    );
+                }
+
+                if (fullnodes > 0) {
+                    deployments.push(
+                        fetch('/api/deployment/deploy', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ node_type: 'fullnode', count: fullnodes })
+                        }).then(res => {
+                            if (!res.ok) throw new Error('Failed to deploy full nodes');
+                            return res;
+                        })
+                    );
+                }
+
+                // Execute deployments
+                const btn = document.querySelector('#wizard-step-2 .btn:last-child');
+                const originalText = btn.textContent;
+                btn.textContent = 'Deploying...';
+                btn.disabled = true;
+
+                Promise.all(deployments)
                     .then(() => {
-                        goToStep(3);
+                        // Complete setup
+                        return fetch('/api/setup/complete', { method: 'POST' });
+                    })
+                    .then(() => {
+                        btn.textContent = 'Success!';
+                        // Wait for nodes to actually start
+                        setTimeout(() => {
+                            goToStep(3);
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 5000);
+                        }, 1000);
                     })
                     .catch(error => {
-                        console.error('Failed to complete setup:', error);
-                        alert('Failed to complete setup');
+                        console.error('Failed to deploy nodes:', error);
+                        alert('Failed to deploy nodes. Check console for details.');
+                        btn.textContent = originalText;
+                        btn.disabled = false;
                     });
             }
         }
@@ -1064,11 +1116,11 @@ pub async fn index() -> impl IntoResponse {
 
                 if (!response.ok) {
                     let errorMessage = 'Deployment failed';
+                    const text = await response.text();
                     try {
-                        const error = await response.json();
+                        const error = JSON.parse(text);
                         errorMessage = error.error || error.message || errorMessage;
                     } catch (e) {
-                        const text = await response.text();
                         // Avoid showing large HTML blobs; use a generic message if text looks like HTML
                         if (text && !/^<!doctype|^<html/i.test(text.trim())) {
                             errorMessage = text;

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::AppState;
-use super::{NodeInfo, NodeStatus};
+use super::NodeInfo;
 
 #[derive(Debug, Serialize)]
 pub struct NodesResponse {

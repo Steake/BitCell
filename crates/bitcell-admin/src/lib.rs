@@ -47,8 +47,8 @@ impl AdminConsole {
     /// Create a new admin console
     pub fn new(addr: SocketAddr) -> Self {
         let process = Arc::new(ProcessManager::new());
-        let deployment = Arc::new(DeploymentManager::new(process.clone()));
         let setup = Arc::new(setup::SetupManager::new());
+        let deployment = Arc::new(DeploymentManager::new(process.clone(), setup.clone()));
 
         // Try to load setup state from default location
         let setup_path = std::path::PathBuf::from(SETUP_FILE_PATH);

@@ -31,3 +31,6 @@ secrets/
 
 # Benchmarks
 criterion/
+.bitcell/
+help_output.txt
+target/

@@ -71,25 +71,32 @@ impl ProcessManager {
         // Build command to start node
         // NOTE: Uses 'cargo run' which is suitable for development only.
         // For production deployments, use a compiled binary path instead.
-        let mut cmd = Command::new("cargo");
-        cmd.arg("run")
-            .arg("-p")
-            .arg("bitcell-node")
-            .arg("--")
-            .arg(match node.config.node_type {
-                NodeType::Validator => "validator",
-                NodeType::Miner => "miner",
-                NodeType::FullNode => "full-node",
-            })
-            .arg("--port")
-            .arg(node.config.port.to_string())
-            .arg("--rpc-port")
-            .arg(node.config.rpc_port.to_string())
-            .arg("--data-dir")
-            .arg(&node.config.data_dir)
+        // Build command to start node using pre-built release binary
+        let binary_path = std::env::current_dir()
+            .unwrap()
+            .join("target/release/bitcell-node");
+        
+        let mut cmd = Command::new(binary_path);
+        
+        // Add node type and arguments
+        match node.config.node_type {
+            NodeType::Validator => {
+                cmd.arg("validator");
+            },
+            NodeType::Miner => {
+                cmd.arg("miner");
+            },
+            NodeType::FullNode => {
+                cmd.arg("full-node");
+            },
+        }
+        
+        cmd.arg("--port").arg(node.config.port.to_string())
+            .arg("--rpc-port").arg(node.config.rpc_port.to_string())
+            .arg("--data-dir").arg(&node.config.data_dir)
             .env("RUST_LOG", &node.config.log_level)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
 
         tracing::info!("Starting node '{}' with command: {:?}", id, cmd);
 

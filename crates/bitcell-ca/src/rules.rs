@@ -44,47 +44,63 @@ pub fn evolve_cell(cell: Cell, neighbors: &[Cell; 8]) -> Cell {
 /// Evolve the entire grid one step
 pub fn evolve_grid(grid: &Grid) -> Grid {
     let mut new_grid = Grid::new();
+    evolve_grid_into(grid, &mut new_grid);
+    new_grid
+}
 
-    // Use parallel processing for large grid
+/// Evolve grid from src into dst (avoiding allocation)
+pub fn evolve_grid_into(src: &Grid, dst: &mut Grid) {
     let size = crate::grid::GRID_SIZE;
-    let cells: Vec<_> = (0..size)
-        .into_par_iter()
-        .flat_map(|y| {
-            (0..size)
-                .map(|x| {
-                    let pos = Position::new(x, y);
-                    let cell = grid.get(pos);
-                    let neighbor_positions = pos.neighbors();
-                    let neighbors = [
-                        grid.get(neighbor_positions[0]),
-                        grid.get(neighbor_positions[1]),
-                        grid.get(neighbor_positions[2]),
-                        grid.get(neighbor_positions[3]),
-                        grid.get(neighbor_positions[4]),
-                        grid.get(neighbor_positions[5]),
-                        grid.get(neighbor_positions[6]),
-                        grid.get(neighbor_positions[7]),
-                    ];
-
-                    (pos, evolve_cell(cell, &neighbors))
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect();
-
-    for (pos, cell) in cells {
-        new_grid.set(pos, cell);
+    
+    // Ensure dst is correct size (should be if created with Grid::new())
+    if dst.cells.len() != src.cells.len() {
+        *dst = Grid::new();
     }
 
-    new_grid
+    // Use parallel processing to update dst rows directly
+    dst.cells.par_chunks_mut(size)
+        .enumerate()
+        .for_each(|(y, row_slice)| {
+            for x in 0..size {
+                let pos = Position::new(x, y);
+                let cell = src.get(pos);
+                
+                // Get neighbors directly to avoid 8 calls to get() overhead if possible
+                // But get() handles wrapping, so stick with it for correctness first
+                let neighbor_positions = pos.neighbors();
+                let neighbors = [
+                    src.get(neighbor_positions[0]),
+                    src.get(neighbor_positions[1]),
+                    src.get(neighbor_positions[2]),
+                    src.get(neighbor_positions[3]),
+                    src.get(neighbor_positions[4]),
+                    src.get(neighbor_positions[5]),
+                    src.get(neighbor_positions[6]),
+                    src.get(neighbor_positions[7]),
+                ];
+
+                row_slice[x] = evolve_cell(cell, &neighbors);
+            }
+        });
 }
 
 /// Evolve grid for N steps
 pub fn evolve_n_steps(grid: &Grid, steps: usize) -> Grid {
     let mut current = grid.clone();
+    let mut next = Grid::new();
+    
     for _ in 0..steps {
-        current = evolve_grid(&current);
+        evolve_grid_into(&current, &mut next);
+        std::mem::swap(&mut current, &mut next);
     }
+    
+    // If steps is odd, the result is in 'current' (which was 'next' before swap)
+    // Wait, let's trace:
+    // Start: current=0, next=garbage
+    // Loop 1: evolve 0->next, swap(current, next). current=1, next=0.
+    // Loop 2: evolve 1->next, swap(current, next). current=2, next=1.
+    // Result is always in 'current'.
+    
     current
 }
 

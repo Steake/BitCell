@@ -75,7 +75,7 @@ impl Cell {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Grid {
     /// Flat array of cells (row-major order)
-    cells: Vec<Cell>,
+    pub cells: Vec<Cell>,
 }
 
 impl Grid {

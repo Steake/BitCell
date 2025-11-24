@@ -31,7 +31,7 @@ impl MetricsClient {
     pub fn new() -> Self {
         Self {
             client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(10))
+                .timeout(Duration::from_secs(2))
                 .build()
                 .expect("Failed to build HTTP client for metrics"),
         }
@@ -39,7 +39,11 @@ impl MetricsClient {
 
     /// Fetch metrics from a node's Prometheus endpoint
     pub async fn fetch_node_metrics(&self, node_id: &str, endpoint: &str) -> Result<NodeMetrics, String> {
-        let url = format!("{}/metrics", endpoint);
+        let url = if endpoint.ends_with("/metrics") {
+            endpoint.to_string()
+        } else {
+            format!("{}/metrics", endpoint)
+        };
 
         let response = self.client
             .get(&url)

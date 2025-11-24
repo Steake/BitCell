@@ -69,6 +69,8 @@ impl ProcessManager {
         }
 
         // Build command to start node
+        // NOTE: Uses 'cargo run' which is suitable for development only.
+        // For production deployments, use a compiled binary path instead.
         let mut cmd = Command::new("cargo");
         cmd.arg("run")
             .arg("-p")
@@ -93,7 +95,10 @@ impl ProcessManager {
 
         // Spawn the process
         let child = cmd.spawn()
-            .map_err(|e| format!("Failed to spawn process: {}", e))?;
+            .map_err(|e| {
+                tracing::error!("Failed to spawn process for node '{}': {:?}", id, e);
+                "Failed to start node process".to_string()
+            })?;
 
         node.process = Some(child);
         node.info.status = NodeStatus::Running;
@@ -116,10 +121,20 @@ impl ProcessManager {
             // Try graceful shutdown first
             #[cfg(unix)]
             {
-                use std::os::unix::process::CommandExt;
                 let pid = process.id();
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGTERM);
+                // SAFETY: We call libc::kill to send SIGTERM to the child process.
+                // The PID is obtained from process.id(), which should be valid for a running child.
+                // However, the process may have already exited, or permissions may be insufficient.
+                // We check the return value for errors.
+                let res = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+                if res != 0 {
+                    let errno = std::io::Error::last_os_error();
+                    tracing::warn!(
+                        "Failed to send SIGTERM to process {} for node '{}': {}",
+                        pid,
+                        id,
+                        errno
+                    );
                 }
 
                 // Wait up to 5 seconds for graceful shutdown

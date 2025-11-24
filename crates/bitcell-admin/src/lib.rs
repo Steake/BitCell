@@ -30,6 +30,7 @@ pub use api::AdminApi;
 pub use deployment::DeploymentManager;
 pub use config::ConfigManager;
 pub use process::ProcessManager;
+pub use setup::SETUP_FILE_PATH;
 
 /// Administrative console server
 pub struct AdminConsole {
@@ -50,7 +51,7 @@ impl AdminConsole {
         let setup = Arc::new(setup::SetupManager::new());
 
         // Try to load setup state from default location
-        let setup_path = std::path::PathBuf::from(".bitcell/admin/setup.json");
+        let setup_path = std::path::PathBuf::from(SETUP_FILE_PATH);
         if let Err(e) = setup.load_from_file(&setup_path) {
             tracing::warn!("Failed to load setup state: {}", e);
         }
@@ -112,7 +113,9 @@ impl AdminConsole {
             // Static files
             .nest_service("/static", ServeDir::new("static"))
 
-            // CORS
+            // CORS - WARNING: Permissive CORS allows requests from any origin.
+            // This is only suitable for local development. For production,
+            // configure specific allowed origins to prevent CSRF attacks.
             .layer(CorsLayer::permissive())
 
             // State

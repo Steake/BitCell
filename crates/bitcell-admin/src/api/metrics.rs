@@ -78,13 +78,9 @@ pub async fn get_metrics(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(e)))?;
 
-    // Calculate system metrics (placeholder - would normally come from node metrics or system stats)
-    let uptime_seconds = if let Some(first_node) = aggregated.node_metrics.first() {
-        let duration = chrono::Utc::now().signed_duration_since(first_node.last_updated);
-        duration.num_seconds().max(0) as u64
-    } else {
-        0
-    };
+    // Calculate system metrics
+    // TODO: Track actual node start times to compute real uptime
+    let uptime_seconds = 0u64; // Placeholder - requires node start time tracking
 
     let response = MetricsResponse {
         chain: ChainMetrics {
@@ -100,20 +96,20 @@ pub async fn get_metrics(
             total_peers: aggregated.total_nodes * 10, // Estimate
             bytes_sent: aggregated.bytes_sent,
             bytes_received: aggregated.bytes_received,
-            messages_sent: 0, // TODO: Add to node metrics
-            messages_received: 0, // TODO: Add to node metrics
+            messages_sent: 0, // TODO: Requires adding message_sent to node metrics
+            messages_received: 0, // TODO: Requires adding message_received to node metrics
         },
         ebsl: EbslMetrics {
             active_miners: aggregated.active_miners,
             banned_miners: aggregated.banned_miners,
-            average_trust_score: 0.85, // TODO: Calculate from actual data
-            total_slashing_events: 0, // TODO: Add to node metrics
+            average_trust_score: 0.85, // TODO: Requires adding trust scores to node metrics
+            total_slashing_events: 0, // TODO: Requires adding slashing events to node metrics
         },
         system: SystemMetrics {
             uptime_seconds,
-            cpu_usage: 0.0, // TODO: Add system metrics collection
-            memory_usage_mb: 0, // TODO: Add system metrics collection
-            disk_usage_mb: 0, // TODO: Add system metrics collection
+            cpu_usage: 0.0, // TODO: Requires system metrics collection (e.g., sysinfo crate)
+            memory_usage_mb: 0, // TODO: Requires system metrics collection
+            disk_usage_mb: 0, // TODO: Requires system metrics collection
         },
     };
 

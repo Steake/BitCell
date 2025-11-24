@@ -771,9 +771,38 @@ pub async fn index() -> impl IntoResponse {
 
         <!-- Nodes Section -->
         <div class="card" style="margin-top: 2rem;">
-            <h2>🖥️ Registered Nodes</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="margin: 0;">🖥️ Registered Nodes</h2>
+                <button class="btn" onclick="showDeployDialog()">+ Deploy Nodes</button>
+            </div>
             <div id="nodes-list" class="node-list">
                 <div class="loading">Loading nodes...</div>
+            </div>
+        </div>
+
+        <!-- Deploy Dialog -->
+        <div id="deploy-overlay" class="wizard-overlay">
+            <div class="wizard-container" style="max-width: 500px;">
+                <div class="wizard-header">
+                    <h2>Deploy New Nodes</h2>
+                    <p>Deploy new BitCell nodes to your network</p>
+                </div>
+                <div class="form-group">
+                    <label>Node Type</label>
+                    <select id="deploy-node-type" class="btn" style="width: 100%; padding: 0.75rem;">
+                        <option value="Validator">Validator</option>
+                        <option value="Miner">Miner</option>
+                        <option value="FullNode">Full Node</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Number of Nodes</label>
+                    <input type="number" id="deploy-count" value="1" min="1" max="10" style="width: 100%; padding: 0.75rem;">
+                </div>
+                <div class="wizard-actions">
+                    <button class="btn btn-secondary" onclick="closeDeployDialog()">Cancel</button>
+                    <button class="btn" onclick="deployNodes()">Deploy</button>
+                </div>
             </div>
         </div>
 
@@ -1006,6 +1035,60 @@ pub async fn index() -> impl IntoResponse {
             window.location.reload();
         }
 
+        function showDeployDialog() {
+            document.getElementById('deploy-overlay').classList.add('active');
+        }
+
+        function closeDeployDialog() {
+            document.getElementById('deploy-overlay').classList.remove('active');
+        }
+
+        async function deployNodes() {
+            const nodeType = document.getElementById('deploy-node-type').value;
+            const count = parseInt(document.getElementById('deploy-count').value);
+
+            if (isNaN(count) || count < 1 || count > 10) {
+                alert('Please enter a valid number between 1 and 10');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/deployment/deploy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        node_type: nodeType,
+                        count: count
+                    })
+                });
+
+                if (!response.ok) {
+                    let errorMessage = 'Deployment failed';
+                    try {
+                        const error = await response.json();
+                        errorMessage = error.error || error.message || errorMessage;
+                    } catch (e) {
+                        const text = await response.text();
+                        // Avoid showing large HTML blobs; use a generic message if text looks like HTML
+                        if (text && !/^<!doctype|^<html/i.test(text.trim())) {
+                            errorMessage = text;
+                        }
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                const data = await response.json();
+                alert(`Successfully deployed ${data.nodes_deployed} ${nodeType} node(s)`);
+                closeDeployDialog();
+                
+                // Refresh nodes list after a short delay
+                setTimeout(updateNodes, 1000);
+            } catch (error) {
+                console.error('Deployment failed:', error);
+                alert('Deployment failed: ' + error.message);
+            }
+        }
+
         // Fetch and update metrics
         async function updateMetrics() {
             try {
@@ -1072,19 +1155,49 @@ pub async fn index() -> impl IntoResponse {
 
         async function startNode(id) {
             try {
-                await fetch(`/api/nodes/${id}/start`, { method: 'POST' });
+                const response = await fetch(`/api/nodes/${id}/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ config: null })
+                });
+                
+                if (!response.ok) {
+                    let errorMessage = 'Failed to start node';
+                    try {
+                        const error = await response.json();
+                        errorMessage = error.error || errorMessage;
+                    } catch (e) {
+                        // If JSON parsing fails, use default message
+                    }
+                    throw new Error(errorMessage);
+                }
+                
                 updateNodes();
             } catch (error) {
                 console.error('Failed to start node:', error);
+                alert('Failed to start node: ' + error.message);
             }
         }
 
         async function stopNode(id) {
             try {
-                await fetch(`/api/nodes/${id}/stop`, { method: 'POST' });
+                const response = await fetch(`/api/nodes/${id}/stop`, { method: 'POST' });
+                
+                if (!response.ok) {
+                    let errorMessage = 'Failed to stop node';
+                    try {
+                        const error = await response.json();
+                        errorMessage = error.error || errorMessage;
+                    } catch (e) {
+                        // If JSON parsing fails, use default message
+                    }
+                    throw new Error(errorMessage);
+                }
+                
                 updateNodes();
             } catch (error) {
                 console.error('Failed to stop node:', error);
+                alert('Failed to stop node: ' + error.message);
             }
         }
 

@@ -11,6 +11,9 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use serde::{Serialize, Deserialize};
 
+/// Maximum message size limit (10MB) to prevent memory exhaustion attacks
+const MAX_MESSAGE_SIZE: usize = 10_000_000;
+
 /// Network message types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NetworkMessage {
@@ -377,7 +380,7 @@ impl NetworkManager {
             .map_err(|e| format!("Read error: {}", e))?;
         let len = u32::from_be_bytes(len_bytes) as usize;
         
-        if len > 10_000_000 { // 10MB safety limit
+        if len > MAX_MESSAGE_SIZE {
             return Err("Message too large".into());
         }
         
@@ -398,7 +401,7 @@ impl NetworkManager {
             .map_err(|e| format!("Read error: {}", e))?;
         let len = u32::from_be_bytes(len_bytes) as usize;
         
-        if len > 10_000_000 { // 10MB safety limit
+        if len > MAX_MESSAGE_SIZE {
             return Err("Message too large".into());
         }
         

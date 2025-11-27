@@ -162,6 +162,19 @@ impl StorageManager {
     }
 
     /// Prune old blocks (keep last N blocks)
+    ///
+    /// # TODO: Production Implementation
+    /// This is a simplified implementation for development. A production version should:
+    /// - Use iterators for efficient range deletion
+    /// - Delete associated transactions and state roots
+    /// - Handle edge cases (e.g., concurrent reads during pruning)
+    /// - Optionally archive pruned blocks to cold storage
+    ///
+    /// # Arguments
+    /// * `keep_last` - Number of recent blocks to retain
+    ///
+    /// # Returns
+    /// * `Ok(())` on success, or error message on failure
     pub fn prune_old_blocks(&self, keep_last: u64) -> Result<(), String> {
         let latest = self.get_latest_height()?.unwrap_or(0);
         if latest <= keep_last {
@@ -170,17 +183,20 @@ impl StorageManager {
 
         let prune_until = latest - keep_last;
 
-        // Verify blocks column family exists
-        self.db.cf_handle(CF_BLOCKS)
+        // Get column family handles
+        let cf_blocks = self.db.cf_handle(CF_BLOCKS)
             .ok_or_else(|| "Blocks column family not found".to_string())?;
+        let cf_headers = self.db.cf_handle(CF_HEADERS)
+            .ok_or_else(|| "Headers column family not found".to_string())?;
 
-        // This is a simplified version - in production would iterate and delete
+        // Iterate and delete blocks and headers for heights less than prune_until
         for height in 0..prune_until {
-            if let Some(header_data) = self.get_header_by_height(height)? {
-                // Extract hash and delete block
-                // (Simplified - would need proper header deserialization)
-                let _ = header_data;
-            }
+            // Delete block by height
+            self.db.delete_cf(cf_blocks, height.to_be_bytes())
+                .map_err(|e| format!("Failed to delete block at height {}: {}", height, e))?;
+            // Delete header by height
+            self.db.delete_cf(cf_headers, height.to_be_bytes())
+                .map_err(|e| format!("Failed to delete header at height {}: {}", height, e))?;
         }
 
         Ok(())

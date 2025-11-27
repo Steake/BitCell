@@ -8,6 +8,18 @@ use ark_r1cs_std::bits::ToBitsGadget;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 
 /// Size of the CA grid (must be power of 2 for efficient constraints)
+///
+/// # Test vs Production Configuration
+/// - **Test values**: `GRID_SIZE = 64`, `BATTLE_STEPS = 10`
+///   - Used for unit tests and development to enable fast proof generation
+///   - Suitable for CI/CD pipelines and local testing
+/// - **Production values**: `GRID_SIZE = 1024`, `BATTLE_STEPS = 1000`
+///   - Used for mainnet deployment with full-size tournament battles
+///   - Requires trusted setup ceremony and optimized proving infrastructure
+///
+/// To switch between configurations, adjust these constants before compilation.
+/// For production deployment, ensure sufficient hardware for proof generation
+/// (recommended: 64GB+ RAM, GPU acceleration for proving).
 pub const GRID_SIZE: usize = 64; // Reduced from 1024 for practical circuit size
 pub const BATTLE_STEPS: usize = 10; // Reduced from 1000 for practical proving time
 

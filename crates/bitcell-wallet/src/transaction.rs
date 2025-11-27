@@ -270,7 +270,7 @@ impl FeeEstimator {
 
     /// Set priority multiplier (1.0 = normal, 2.0 = fast, 0.5 = slow)
     pub fn with_priority(mut self, multiplier: f64) -> Self {
-        self.priority_multiplier = multiplier.max(0.1).min(10.0);
+        self.priority_multiplier = multiplier.clamp(0.1, 10.0);
         self
     }
 

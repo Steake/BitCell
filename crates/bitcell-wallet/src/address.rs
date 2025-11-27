@@ -50,7 +50,7 @@ impl Address {
         // For simplicity, we use SHA256 twice (similar to Bitcoin but simplified)
         let pubkey_bytes = public_key.as_bytes();
         let hash1 = Sha256::digest(pubkey_bytes);
-        let hash2 = Sha256::digest(&hash1);
+        let hash2 = Sha256::digest(hash1);
         // Take first 20 bytes as address
         let address_bytes = hash2[..20].to_vec();
         
@@ -63,7 +63,7 @@ impl Address {
         // Bitcoin address = RIPEMD160(SHA256(compressed_pubkey))
         // Simplified: using double SHA256 and taking 20 bytes
         let hash1 = Sha256::digest(pubkey_bytes);
-        let hash2 = Sha256::digest(&hash1);
+        let hash2 = Sha256::digest(hash1);
         let address_bytes = hash2[..20].to_vec();
         
         let chain = if testnet { Chain::BitcoinTestnet } else { Chain::Bitcoin };
@@ -115,7 +115,7 @@ impl Address {
                 let mut data = vec![version];
                 data.extend_from_slice(&self.bytes);
                 // Checksum
-                let checksum = Sha256::digest(&Sha256::digest(&data));
+                let checksum = Sha256::digest(Sha256::digest(&data));
                 data.extend_from_slice(&checksum[..4]);
                 bs58::encode(&data).into_string()
             }
@@ -152,7 +152,7 @@ impl Address {
                 // Verify checksum
                 let payload = &bytes[..bytes.len() - 4];
                 let checksum = &bytes[bytes.len() - 4..];
-                let computed_checksum = Sha256::digest(&Sha256::digest(payload));
+                let computed_checksum = Sha256::digest(Sha256::digest(payload));
                 if &computed_checksum[..4] != checksum {
                     return Err(Error::InvalidAddress("Invalid checksum".into()));
                 }

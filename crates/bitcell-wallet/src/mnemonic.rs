@@ -8,13 +8,14 @@ use bip39::{Language, Mnemonic as Bip39Mnemonic, MnemonicType, Seed};
 use zeroize::Zeroize;
 
 /// Mnemonic word count options
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WordCount {
     /// 12 words (128 bits entropy)
     Words12,
     /// 18 words (192 bits entropy)
     Words18,
     /// 24 words (256 bits entropy)
+    #[default]
     Words24,
 }
 
@@ -25,12 +26,6 @@ impl WordCount {
             WordCount::Words18 => MnemonicType::Words18,
             WordCount::Words24 => MnemonicType::Words24,
         }
-    }
-}
-
-impl Default for WordCount {
-    fn default() -> Self {
-        WordCount::Words24
     }
 }
 

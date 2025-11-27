@@ -5,9 +5,10 @@
 use serde::{Deserialize, Serialize};
 
 /// Supported blockchain networks
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum Chain {
     /// BitCell native blockchain
+    #[default]
     BitCell,
     /// Bitcoin mainnet
     Bitcoin,
@@ -91,12 +92,6 @@ impl Chain {
             Chain::Ethereum | Chain::EthereumSepolia => b"0x",
             Chain::Custom(_) => b"CX",
         }
-    }
-}
-
-impl Default for Chain {
-    fn default() -> Self {
-        Chain::BitCell
     }
 }
 

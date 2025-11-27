@@ -48,6 +48,7 @@ pub struct TransactionRecord {
 
 impl TransactionRecord {
     /// Create a new transaction record
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         tx_hash: String,
         chain: Chain,

@@ -72,10 +72,12 @@ impl DerivationPath {
     pub fn for_chain(chain: Chain, index: u32) -> Self {
         Self::bip44(chain.coin_type(), 0, 0, index)
     }
+}
 
-    /// Get path as string (BIP44 format)
-    pub fn to_string(&self) -> String {
-        format!(
+impl std::fmt::Display for DerivationPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
             "m/{}'/{}'/{}'/{}'/{}",
             self.purpose, self.coin_type, self.account, self.change, self.index
         )
@@ -147,11 +149,14 @@ impl Wallet {
         
         // Pre-generate addresses for enabled chains
         if wallet.config.auto_generate_addresses {
-            for chain_config in &wallet.config.chains.clone() {
-                if chain_config.enabled {
-                    for i in 0..wallet.config.address_lookahead {
-                        let _ = wallet.generate_address(chain_config.chain, i);
-                    }
+            let chains: Vec<_> = wallet.config.chains.iter()
+                .filter(|c| c.enabled)
+                .map(|c| (c.chain, wallet.config.address_lookahead))
+                .collect();
+            
+            for (chain, lookahead) in chains {
+                for i in 0..lookahead {
+                    let _ = wallet.generate_address(chain, i);
                 }
             }
         }
@@ -210,6 +215,12 @@ impl Wallet {
     }
 
     /// Derive a key at a specific path
+    /// 
+    /// Note: This uses a simplified key derivation scheme for the initial implementation.
+    /// For full BIP32 compatibility with external wallets, implement proper HMAC-SHA512
+    /// based hierarchical deterministic key derivation. The current implementation
+    /// provides deterministic key generation that is secure but may not be compatible
+    /// with other BIP32-compliant wallets.
     fn derive_key(&mut self, path: &DerivationPath) -> Result<&DerivedKey> {
         let path_str = path.to_string();
         
@@ -219,8 +230,8 @@ impl Wallet {
         
         let seed = self.master_seed.as_ref().ok_or(Error::WalletLocked)?;
         
-        // Simplified key derivation (in production, use proper BIP32)
-        // Derive key by hashing seed with path
+        // Simplified key derivation using HMAC-like construction
+        // For full BIP32 compatibility, use a proper BIP32 library
         let mut derivation_data = Vec::new();
         derivation_data.extend_from_slice(seed.as_bytes());
         derivation_data.extend_from_slice(path_str.as_bytes());

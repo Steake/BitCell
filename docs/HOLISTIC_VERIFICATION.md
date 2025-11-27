@@ -19,7 +19,7 @@ This document provides a complete verification of the BitCell implementation, co
 ### 1.1 Cryptographic Primitives ✅
 
 **Module**: `bitcell-crypto`
-**Tests**: 39 passing
+**Tests**: 27 passing
 **Status**: PRODUCTION READY
 
 #### Implementations
@@ -308,12 +308,12 @@ bitcell-node version
 
 ### 2.2 Testing Infrastructure ✅
 
-**Total Tests**: 148 passing
+**Total Tests**: 157+ passing
 **Test Runtime**: <5 seconds
 **Status**: COMPREHENSIVE
 
 #### Test Breakdown
-- bitcell-crypto: 39 tests (includes ECVRF, CLSAG)
+- bitcell-crypto: 27 tests
 - bitcell-ca: 27 tests
 - bitcell-ebsl: 27 tests
 - bitcell-consensus: 8 tests

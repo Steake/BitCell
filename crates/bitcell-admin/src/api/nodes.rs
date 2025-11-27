@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::AppState;
-use super::{NodeInfo, NodeStatus};
+use super::NodeInfo;
 
 #[derive(Debug, Serialize)]
 pub struct NodesResponse {
@@ -124,5 +124,67 @@ pub async fn stop_node(
                 error: format!("Failed to stop node '{}': {}", id, e),
             }),
         )),
+    }
+}
+
+/// Delete a node
+pub async fn delete_node(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
+    validate_node_id(&id)?;
+
+    match state.process.delete_node(&id) {
+        Ok(_) => {
+            tracing::info!("Deleted node '{}' successfully", id);
+            Ok(Json(serde_json::json!({ "message": format!("Node '{}' deleted", id) })))
+        }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: format!("Failed to delete node '{}': {}", id, e),
+            }),
+        )),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LogParams {
+    #[serde(default = "default_lines")]
+    pub lines: usize,
+}
+
+fn default_lines() -> usize {
+    100
+}
+
+/// Get logs for a specific node
+pub async fn get_node_logs(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    axum::extract::Query(params): axum::extract::Query<LogParams>,
+) -> Result<String, (StatusCode, String)> {
+    validate_node_id(&id).map_err(|e| (e.0, e.1.error.clone()))?;
+
+    // Get log file path
+    let log_path = state.process.get_log_path(&id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Node '{}' not found", id)))?;
+
+    // Read log file
+    match std::fs::read_to_string(&log_path) {
+        Ok(content) => {
+            // Get last N lines
+            let lines: Vec<&str> = content.lines().collect();
+            let start = lines.len().saturating_sub(params.lines.min(1000));
+            let result = lines[start..].join("\n");
+            Ok(result)
+        }
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                Ok("Log file not found. Node may not have started yet.".to_string())
+            } else {
+                Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read log file: {}", e)))
+            }
+        }
     }
 }

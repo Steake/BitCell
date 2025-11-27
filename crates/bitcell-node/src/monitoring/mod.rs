@@ -33,7 +33,11 @@ pub struct MetricsRegistry {
     // EBSL metrics
     active_miners: Arc<AtomicUsize>,
     banned_miners: Arc<AtomicUsize>,
+    #[allow(dead_code)]
     avg_trust_score: Arc<AtomicU64>, // Stored as fixed-point * 1000
+    
+    // DHT metrics
+    dht_peer_count: Arc<AtomicUsize>,
 }
 
 impl MetricsRegistry {
@@ -53,6 +57,7 @@ impl MetricsRegistry {
             active_miners: Arc::new(AtomicUsize::new(0)),
             banned_miners: Arc::new(AtomicUsize::new(0)),
             avg_trust_score: Arc::new(AtomicU64::new(0)),
+            dht_peer_count: Arc::new(AtomicUsize::new(0)),
         }
     }
     
@@ -157,6 +162,15 @@ impl MetricsRegistry {
         self.banned_miners.load(Ordering::Relaxed)
     }
     
+    // DHT metrics
+    pub fn set_dht_peer_count(&self, count: usize) {
+        self.dht_peer_count.store(count, Ordering::Relaxed);
+    }
+    
+    pub fn get_dht_peer_count(&self) -> usize {
+        self.dht_peer_count.load(Ordering::Relaxed)
+    }
+    
     /// Export metrics in Prometheus format
     pub fn export_prometheus(&self) -> String {
         format!(
@@ -171,6 +185,10 @@ impl MetricsRegistry {
              # HELP bitcell_peer_count Number of connected peers\n\
              # TYPE bitcell_peer_count gauge\n\
              bitcell_peer_count {}\n\
+             \n\
+             # HELP bitcell_dht_peer_count Number of DHT peers\n\
+             # TYPE bitcell_dht_peer_count gauge\n\
+             bitcell_dht_peer_count {}\n\
              \n\
              # HELP bitcell_bytes_sent_total Total bytes sent\n\
              # TYPE bitcell_bytes_sent_total counter\n\
@@ -206,6 +224,7 @@ impl MetricsRegistry {
             self.get_chain_height(),
             self.get_sync_progress(),
             self.get_peer_count(),
+            self.get_dht_peer_count(),
             self.get_bytes_sent(),
             self.get_bytes_received(),
             self.get_pending_txs(),

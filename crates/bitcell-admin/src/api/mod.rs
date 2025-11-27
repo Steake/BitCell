@@ -20,6 +20,10 @@ pub struct NodeInfo {
     pub address: String,
     pub port: u16,
     pub started_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub enable_dht: bool,
+    pub dht_peer_count: usize,
+    pub bootstrap_nodes: Vec<String>,
+    pub key_seed: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

@@ -22,6 +22,11 @@ serde.workspace = true
 thiserror.workspace = true
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
+rand = "0.8"
+bincode = "1.3"
+parking_lot = "0.12"
+libp2p = { version = "0.53", features = ["kad", "tcp", "noise", "yamux", "identify", "dns", "macros"] }
+futures = "0.3"
 
 [dev-dependencies]
 proptest.workspace = true

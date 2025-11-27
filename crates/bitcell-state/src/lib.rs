@@ -73,16 +73,69 @@ impl StateManager {
         self.recompute_root();
     }
 
-    /// Recompute state root (simplified)
+    /// Recompute state root using Merkle tree
     fn recompute_root(&mut self) {
-        // In production: Merkle tree update
-        // For v0.1: Simple hash of all data
-        let mut data = Vec::new();
-        for (k, v) in &self.accounts {
-            data.extend_from_slice(k);
-            data.extend_from_slice(&v.balance.to_le_bytes());
+        // Build Merkle tree from account data
+        let mut leaves = Vec::new();
+        
+        for (pubkey, account) in &self.accounts {
+            // Create leaf: hash(pubkey || balance || nonce)
+            let mut data = Vec::new();
+            data.extend_from_slice(pubkey);
+            data.extend_from_slice(&account.balance.to_le_bytes());
+            data.extend_from_slice(&account.nonce.to_le_bytes());
+            leaves.push(Hash256::hash(&data));
         }
-        self.state_root = Hash256::hash(&data);
+        
+        // If no accounts, use zero hash
+        if leaves.is_empty() {
+            self.state_root = Hash256::zero();
+            return;
+        }
+        
+        // Build Merkle tree and get root
+        let tree = bitcell_crypto::MerkleTree::new(leaves);
+        self.state_root = tree.root();
+    }
+    
+    /// Apply a transaction (returns updated state root)
+    pub fn apply_transaction(
+        &mut self,
+        from: [u8; 33],
+        to: [u8; 33],
+        amount: u64,
+        nonce: u64,
+    ) -> Result<Hash256> {
+        // Get sender account
+        let from_account = self.accounts.get(&from)
+            .ok_or(Error::AccountNotFound)?;
+        
+        // Verify nonce
+        if from_account.nonce != nonce {
+            return Err(Error::InvalidBond); // Reusing error type
+        }
+        
+        // Verify balance
+        if from_account.balance < amount {
+            return Err(Error::InsufficientBalance);
+        }
+        
+        // Update sender
+        let mut updated_from = from_account.clone();
+        updated_from.balance -= amount;
+        updated_from.nonce += 1;
+        self.accounts.insert(from, updated_from);
+        
+        // Update receiver (create if doesn't exist)
+        let mut to_account = self.accounts.get(&to)
+            .cloned()
+            .unwrap_or(Account { balance: 0, nonce: 0 });
+        to_account.balance += amount;
+        self.accounts.insert(to, to_account);
+        
+        // Recompute and return new state root
+        self.recompute_root();
+        Ok(self.state_root)
     }
 }
 

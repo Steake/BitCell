@@ -1,0 +1,19 @@
+[package]
+name = "bitcell-consensus"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+bitcell-crypto = { path = "../bitcell-crypto" }
+bitcell-ca = { path = "../bitcell-ca" }
+bitcell-ebsl = { path = "../bitcell-ebsl" }
+serde.workspace = true
+thiserror.workspace = true
+bincode.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

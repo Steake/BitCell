@@ -1,0 +1,19 @@
+[package]
+name = "bitcell-state"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+bitcell-crypto = { path = "../bitcell-crypto" }
+serde.workspace = true
+thiserror.workspace = true
+rocksdb = "0.22"
+bincode.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile = "3.23.0"

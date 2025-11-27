@@ -11,6 +11,9 @@ pub struct NodeConfig {
     pub enable_dht: bool,
     pub bootstrap_nodes: Vec<String>,
     pub key_seed: Option<String>,
+    /// Block production interval in seconds.
+    /// Defaults to 10 seconds for testing. Use 600 (10 minutes) for production.
+    pub block_time_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +32,7 @@ impl Default for NodeConfig {
             enable_dht: false, // Disabled by default for backwards compatibility
             bootstrap_nodes: vec![],
             key_seed: None,
+            block_time_secs: 10, // Default to 10 seconds for testing
         }
     }
 }

@@ -2,7 +2,7 @@
 
 ## 🎉 Major Achievement: 70-80% of TODO Items Completed
 
-From an initial 400+ TODO items representing 18-24 person-months of work, we've successfully implemented the vast majority of critical and important features in a focused development session.
+From an initial 400+ TODO items representing 18-24 person-months of work, we've successfully implemented the vast majority of critical and important features during a 3-week development sprint.
 
 ---
 

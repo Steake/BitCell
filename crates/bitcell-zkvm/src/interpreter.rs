@@ -116,92 +116,92 @@ impl Interpreter {
             
             match inst.opcode {
                 OpCode::Add => {
-                    let a = self.get_register(inst.rs1);
-                    let b = self.get_register(inst.rs2());
-                    self.set_register(inst.rd, a.wrapping_add(b));
+                    let lhs = self.get_register(inst.rs1);
+                    let rhs = self.get_register(inst.rs2());
+                    self.set_register(inst.rd, lhs.wrapping_add(rhs));
                     self.pc += 1;
                 }
                 OpCode::Sub => {
-                    let a = self.get_register(inst.rs1);
-                    let b = self.get_register(inst.rs2());
-                    self.set_register(inst.rd, a.wrapping_sub(b));
+                    let lhs = self.get_register(inst.rs1);
+                    let rhs = self.get_register(inst.rs2());
+                    self.set_register(inst.rd, lhs.wrapping_sub(rhs));
                     self.pc += 1;
                 }
                 OpCode::Mul => {
-                    let a = self.get_register(inst.rs1);
-                    let b = self.get_register(inst.rs2());
-                    self.set_register(inst.rd, a.wrapping_mul(b));
+                    let lhs = self.get_register(inst.rs1);
+                    let rhs = self.get_register(inst.rs2());
+                    self.set_register(inst.rd, lhs.wrapping_mul(rhs));
                     self.pc += 1;
                 }
                 OpCode::Div => {
-                    let a = self.get_register(inst.rs1);
-                    let b = self.get_register(inst.rs2());
-                    if b == 0 {
+                    let lhs = self.get_register(inst.rs1);
+                    let rhs = self.get_register(inst.rs2());
+                    if rhs == 0 {
                         return Err(InterpreterError::DivisionByZero);
                     }
-                    self.set_register(inst.rd, a / b);
+                    self.set_register(inst.rd, lhs / rhs);
                     self.pc += 1;
                 }
                 OpCode::Mod => {
-                    let a = self.get_register(inst.rs1);
-                    let b = self.get_register(inst.rs2());
-                    if b == 0 {
+                    let lhs = self.get_register(inst.rs1);
+                    let rhs = self.get_register(inst.rs2());
+                    if rhs == 0 {
                         return Err(InterpreterError::DivisionByZero);
                     }
-                    self.set_register(inst.rd, a % b);
+                    self.set_register(inst.rd, lhs % rhs);
                     self.pc += 1;
                 }
                 OpCode::And => {
-                    let a = self.get_register(inst.rs1);
-                    let b = self.get_register(inst.rs2());
-                    self.set_register(inst.rd, a & b);
+                    let lhs = self.get_register(inst.rs1);
+                    let rhs = self.get_register(inst.rs2());
+                    self.set_register(inst.rd, lhs & rhs);
                     self.pc += 1;
                 }
                 OpCode::Or => {
-                    let a = self.get_register(inst.rs1);
-                    let b = self.get_register(inst.rs2());
-                    self.set_register(inst.rd, a | b);
+                    let lhs = self.get_register(inst.rs1);
+                    let rhs = self.get_register(inst.rs2());
+                    self.set_register(inst.rd, lhs | rhs);
                     self.pc += 1;
                 }
                 OpCode::Xor => {
-                    let a = self.get_register(inst.rs1);
-                    let b = self.get_register(inst.rs2());
-                    self.set_register(inst.rd, a ^ b);
+                    let lhs = self.get_register(inst.rs1);
+                    let rhs = self.get_register(inst.rs2());
+                    self.set_register(inst.rd, lhs ^ rhs);
                     self.pc += 1;
                 }
                 OpCode::Not => {
-                    let a = self.get_register(inst.rs1);
-                    self.set_register(inst.rd, !a);
+                    let lhs = self.get_register(inst.rs1);
+                    self.set_register(inst.rd, !lhs);
                     self.pc += 1;
                 }
                 OpCode::Eq => {
-                    let a = self.get_register(inst.rs1);
-                    let b = self.get_register(inst.rs2());
-                    self.set_register(inst.rd, if a == b { 1 } else { 0 });
+                    let lhs = self.get_register(inst.rs1);
+                    let rhs = self.get_register(inst.rs2());
+                    self.set_register(inst.rd, if lhs == rhs { 1 } else { 0 });
                     self.pc += 1;
                 }
                 OpCode::Lt => {
-                    let a = self.get_register(inst.rs1);
-                    let b = self.get_register(inst.rs2());
-                    self.set_register(inst.rd, if a < b { 1 } else { 0 });
+                    let lhs = self.get_register(inst.rs1);
+                    let rhs = self.get_register(inst.rs2());
+                    self.set_register(inst.rd, if lhs < rhs { 1 } else { 0 });
                     self.pc += 1;
                 }
                 OpCode::Gt => {
-                    let a = self.get_register(inst.rs1);
-                    let b = self.get_register(inst.rs2());
-                    self.set_register(inst.rd, if a > b { 1 } else { 0 });
+                    let lhs = self.get_register(inst.rs1);
+                    let rhs = self.get_register(inst.rs2());
+                    self.set_register(inst.rd, if lhs > rhs { 1 } else { 0 });
                     self.pc += 1;
                 }
                 OpCode::Le => {
-                    let a = self.get_register(inst.rs1);
-                    let b = self.get_register(inst.rs2());
-                    self.set_register(inst.rd, if a <= b { 1 } else { 0 });
+                    let lhs = self.get_register(inst.rs1);
+                    let rhs = self.get_register(inst.rs2());
+                    self.set_register(inst.rd, if lhs <= rhs { 1 } else { 0 });
                     self.pc += 1;
                 }
                 OpCode::Ge => {
-                    let a = self.get_register(inst.rs1);
-                    let b = self.get_register(inst.rs2());
-                    self.set_register(inst.rd, if a >= b { 1 } else { 0 });
+                    let lhs = self.get_register(inst.rs1);
+                    let rhs = self.get_register(inst.rs2());
+                    self.set_register(inst.rd, if lhs >= rhs { 1 } else { 0 });
                     self.pc += 1;
                 }
                 OpCode::Load => {

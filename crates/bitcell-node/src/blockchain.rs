@@ -284,7 +284,7 @@ mod tests {
     
     #[test]
     fn test_genesis_block_creation() {
-        let sk = SecretKey::generate();
+        let sk = Arc::new(SecretKey::generate());
         let metrics = MetricsRegistry::new();
         let blockchain = Blockchain::new(sk, metrics);
         
@@ -294,7 +294,7 @@ mod tests {
     
     #[test]
     fn test_block_production() {
-        let sk = SecretKey::generate();
+        let sk = Arc::new(SecretKey::generate());
         let metrics = MetricsRegistry::new();
         let blockchain = Blockchain::new(sk.clone(), metrics);
         

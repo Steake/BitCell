@@ -10,6 +10,7 @@ pub mod blockchain;
 pub mod tx_pool;
 pub mod tournament;
 pub mod network;
+pub mod dht;
 
 pub use config::NodeConfig;
 pub use validator::ValidatorNode;

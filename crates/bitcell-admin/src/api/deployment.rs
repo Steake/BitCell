@@ -24,6 +24,9 @@ pub struct DeploymentConfig {
     pub data_dir: Option<String>,
     pub log_level: Option<String>,
     pub port_start: Option<u16>,
+    pub enable_dht: Option<bool>,
+    pub bootstrap_nodes: Option<Vec<String>>,
+    pub key_seed: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -32,6 +35,7 @@ pub struct DeploymentResponse {
     pub status: String,
     pub nodes_deployed: usize,
     pub message: String,
+    pub nodes: Vec<crate::api::NodeInfo>,
 }
 
 #[derive(Debug, Serialize)]
@@ -58,26 +62,23 @@ pub async fn deploy_node(
     // Generate deployment ID
     let deployment_id = format!("deploy-{}", chrono::Utc::now().timestamp());
 
-    // Trigger deployment (async)
-    tokio::spawn({
-        let deployment = state.deployment.clone();
-        let deployment_id = deployment_id.clone();
-        let node_type = req.node_type;
-        let count = req.count;
+    let deployment = state.deployment.clone();
+    let node_type = req.node_type;
+    let count = req.count;
+    let config = req.config;
 
-        async move {
-            deployment.deploy_nodes(&deployment_id, node_type, count).await;
-        }
-    });
+    // Perform deployment synchronously to return node info
+    let nodes = deployment.deploy_nodes(&deployment_id, node_type, count, config).await;
 
     Ok(Json(DeploymentResponse {
         deployment_id,
-        status: "deploying".to_string(),
+        status: "completed".to_string(),
         nodes_deployed: req.count,
         message: format!(
-            "Deploying {} {:?} node(s)",
+            "Deployed {} {:?} node(s)",
             req.count, req.node_type
         ),
+        nodes,
     }))
 }
 

@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{get, post, delete},
 };
 use tower_http::services::ServeDir;
 use tower_http::cors::CorsLayer;
@@ -87,8 +87,10 @@ impl AdminConsole {
             // API endpoints
             .route("/api/nodes", get(api::nodes::list_nodes))
             .route("/api/nodes/:id", get(api::nodes::get_node))
+            .route("/api/nodes/:id", delete(api::nodes::delete_node))
             .route("/api/nodes/:id/start", post(api::nodes::start_node))
             .route("/api/nodes/:id/stop", post(api::nodes::stop_node))
+            .route("/api/nodes/:id/logs", get(api::nodes::get_node_logs))
 
             .route("/api/metrics", get(api::metrics::get_metrics))
             .route("/api/metrics/chain", get(api::metrics::chain_metrics))

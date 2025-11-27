@@ -23,6 +23,12 @@ enum Commands {
         rpc_port: u16,
         #[arg(long)]
         data_dir: Option<PathBuf>,
+        #[arg(long)]
+        enable_dht: bool,
+        #[arg(long)]
+        bootstrap: Option<String>,
+        #[arg(long)]
+        key_seed: Option<String>,
     },
     /// Run as miner
     Miner {
@@ -32,6 +38,12 @@ enum Commands {
         rpc_port: u16,
         #[arg(long)]
         data_dir: Option<PathBuf>,
+        #[arg(long)]
+        enable_dht: bool,
+        #[arg(long)]
+        bootstrap: Option<String>,
+        #[arg(long)]
+        key_seed: Option<String>,
     },
     /// Run as full node
     FullNode {
@@ -41,6 +53,12 @@ enum Commands {
         rpc_port: u16,
         #[arg(long)]
         data_dir: Option<PathBuf>,
+        #[arg(long)]
+        enable_dht: bool,
+        #[arg(long)]
+        bootstrap: Option<String>,
+        #[arg(long)]
+        key_seed: Option<String>,
     },
     /// Show version
     Version,
@@ -51,12 +69,17 @@ async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Validator { port, rpc_port: _, data_dir: _ } => {
+        Commands::Validator { port, rpc_port: _, data_dir: _, enable_dht, bootstrap, key_seed } => {
             println!("🌌 BitCell Validator Node");
             println!("=========================");
             
             let mut config = NodeConfig::default();
             config.network_port = port;
+            config.enable_dht = enable_dht;
+            config.key_seed = key_seed;
+            if let Some(bootstrap_node) = bootstrap {
+                config.bootstrap_nodes.push(bootstrap_node);
+            }
             // TODO: Use rpc_port and data_dir
             
             let mut node = ValidatorNode::new(config);
@@ -78,14 +101,25 @@ async fn main() {
             tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
             println!("\nShutting down...");
         }
-        Commands::Miner { port, rpc_port: _, data_dir: _ } => {
+        Commands::Miner { port, rpc_port: _, data_dir: _, enable_dht, bootstrap, key_seed } => {
             println!("🎮 BitCell Miner Node");
             println!("=====================");
             
             let mut config = NodeConfig::default();
             config.network_port = port;
+            config.enable_dht = enable_dht;
+            config.key_seed = key_seed.clone();
+            if let Some(bootstrap_node) = bootstrap {
+                config.bootstrap_nodes.push(bootstrap_node);
+            }
             
-            let sk = SecretKey::generate();
+            let sk = if let Some(seed) = key_seed {
+                println!("Generating key from seed: {}", seed);
+                let hash = bitcell_crypto::Hash256::hash(seed.as_bytes());
+                bitcell_crypto::SecretKey::from_bytes(hash.as_bytes()).expect("Invalid key seed")
+            } else {
+                SecretKey::generate()
+            };
             println!("Public key: {:?}", sk.public_key());
             
             let mut node = MinerNode::new(config, sk);
@@ -104,12 +138,17 @@ async fn main() {
             tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
             println!("\nShutting down...");
         }
-        Commands::FullNode { port, rpc_port: _, data_dir: _ } => {
+        Commands::FullNode { port, rpc_port: _, data_dir: _, enable_dht, bootstrap, key_seed } => {
             println!("🌍 BitCell Full Node");
             println!("====================");
             
             let mut config = NodeConfig::default();
             config.network_port = port;
+            config.enable_dht = enable_dht;
+            config.key_seed = key_seed;
+            if let Some(bootstrap_node) = bootstrap {
+                config.bootstrap_nodes.push(bootstrap_node);
+            }
             
             // Reuse ValidatorNode for now as FullNode logic is similar (just no voting)
             let mut node = ValidatorNode::new(config);

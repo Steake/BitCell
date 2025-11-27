@@ -30,7 +30,13 @@ pub struct ValidatorNode {
 
 impl ValidatorNode {
     pub fn new(config: NodeConfig) -> Self {
-        let secret_key = Arc::new(SecretKey::generate());
+        let secret_key = if let Some(seed) = &config.key_seed {
+            println!("Generating validator key from seed: {}", seed);
+            let hash = bitcell_crypto::Hash256::hash(seed.as_bytes());
+            Arc::new(SecretKey::from_bytes(hash.as_bytes()).expect("Invalid key seed"))
+        } else {
+            Arc::new(SecretKey::generate())
+        };
         let metrics = MetricsRegistry::new();
         let blockchain = Blockchain::new(secret_key.clone(), metrics.clone());
         let tournament_manager = Arc::new(crate::tournament::TournamentManager::new(metrics.clone()));
@@ -60,30 +66,99 @@ impl ValidatorNode {
         println!("Starting validator node on port {}", self.config.network_port);
         
         // Start network layer
-        self.network.start(self.config.network_port).await?;
+        self.network.start(self.config.network_port, self.config.bootstrap_nodes.clone()).await?;
         
-        // Try to connect to other nodes (simple peer discovery for local testing)
-        // In production, this would use mDNS or a bootstrap server
-        let network = self.network.clone();
-        let my_port = self.config.network_port;
+        // Enable DHT if configured
+        if self.config.enable_dht {
+            println!("Enabling DHT with bootstrap nodes: {:?}", self.config.bootstrap_nodes);
+            self.network.enable_dht(&self.secret_key, self.config.bootstrap_nodes.clone())?;
+        }
+        
+        // Legacy peer discovery removed in favor of DHT/Bootstrap
+        // The network stack now handles connections via NetworkManager::start()
+        
+        
+        let metrics_clone = self.metrics.clone();
+        
+        // Start metrics server FIRST to ensure it's not blocked by tournament loop
         tokio::spawn(async move {
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            let addr = format!("0.0.0.0:{}", port);
+            let listener = tokio::net::TcpListener::bind(&addr).await;
             
-            // Try to connect to nearby ports (other nodes)
-            for base_port in [19000, 19100, 19200] {
-                for offset in 0..10 {
-                    let port = base_port + offset * 2;
-                    if port != my_port {
-                        let addr = format!("127.0.0.1:{}", port);
-                        let _ = network.connect_to_peer(&addr).await;
+            match listener {
+                Ok(listener) => {
+                    loop {
+                        if let Ok((mut socket, _)) = listener.accept().await {
+                            let metrics = metrics_clone.clone();
+                            tokio::spawn(async move {
+                                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                                
+                                let mut buf = [0; 1024];
+                                // Add timeout to read
+                                let read_result = tokio::time::timeout(
+                                    tokio::time::Duration::from_secs(5),
+                                    socket.read(&mut buf)
+                                ).await;
+
+                                match read_result {
+                                    Ok(Ok(0)) => return, // Connection closed
+                                    Ok(Ok(n)) => {
+                                        let request = String::from_utf8_lossy(&buf[..n]);
+                                        println!("Validator received metrics request: {:?}", request.lines().next());
+                                        
+                                        if request.contains("GET /metrics") {
+                                            println!("Exporting metrics...");
+                                            let body = metrics.export_prometheus();
+                                            println!("Metrics exported, size: {}", body.len());
+                                            
+                                            let response = format!(
+                                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
+                                                body.len(),
+                                                body
+                                            );
+                                            
+                                            println!("Writing response...");
+                                            // Add timeout to write
+                                            if let Err(e) = tokio::time::timeout(
+                                                tokio::time::Duration::from_secs(5),
+                                                socket.write_all(response.as_bytes())
+                                            ).await {
+                                                eprintln!("Failed to write metrics response (timeout or error): {:?}", e);
+                                            } else {
+                                                println!("Response written.");
+                                            }
+                                            
+                                            // Flush with timeout
+                                            let _ = tokio::time::timeout(
+                                                tokio::time::Duration::from_secs(2),
+                                                socket.flush()
+                                            ).await;
+                                            
+                                            // Explicitly shutdown
+                                            let _ = socket.shutdown().await;
+                                            println!("Socket closed.");
+                                        } else {
+                                            let response = "HTTP/1.1 404 Not Found\r\n\r\n";
+                                            let _ = socket.write_all(response.as_bytes()).await;
+                                            let _ = socket.shutdown().await;
+                                        }
+                                    }
+                                    Ok(Err(e)) => {
+                                        eprintln!("Failed to read from metrics socket: {}", e);
+                                    }
+                                    Err(_) => {
+                                        eprintln!("Timed out reading from metrics socket");
+                                    }
+                                }
+                            });
+                        }
                     }
+                }
+                Err(e) => {
+                    eprintln!("Failed to bind metrics port {}: {}", port, e);
                 }
             }
         });
-        
-        // Initialize real metrics with actual initial state
-        self.metrics.set_chain_height(self.blockchain.height());
-        self.metrics.set_peer_count(self.network.peer_count());
         
         // Start block production loop with tournaments
         let blockchain = Arc::new(self.blockchain.clone());
@@ -121,7 +196,7 @@ impl ValidatorNode {
                         let pending_txs = tx_pool.get_transactions(MAX_TXS_PER_BLOCK);
                         
                         // Get battle proofs from tournament
-                        let battle_proofs = tournament_manager.get_battle_proofs();
+                        let battle_proofs = tournament_manager.get_battle_proofs().await;
                         
                         // Produce block with tournament winner as proposer
                         match blockchain.produce_block(pending_txs.clone(), battle_proofs, winner) {
@@ -157,12 +232,13 @@ impl ValidatorNode {
                                     metrics.inc_total_txs_processed();
                                 }
                                 
+                                // Increment height BEFORE broadcast to ensure loop continues
+                                next_height += 1;
+                                
                                 // Broadcast block to network
                                 if let Err(e) = network.broadcast_block(&block).await {
                                     eprintln!("Failed to broadcast block: {}", e);
                                 }
-                                
-                                next_height += 1;
                             }
                             Err(e) => {
                                 eprintln!("Failed to produce block: {}", e);
@@ -181,54 +257,7 @@ impl ValidatorNode {
             }
         });
         
-        let metrics = self.metrics.clone();
-        
-        // Spawn metrics server
-        tokio::spawn(async move {
-            let addr = format!("0.0.0.0:{}", port);
-            let listener = tokio::net::TcpListener::bind(&addr).await;
-            
-            match listener {
-                Ok(listener) => {
-                    loop {
-                        if let Ok((mut socket, _)) = listener.accept().await {
-                            let metrics = metrics.clone();
-                            tokio::spawn(async move {
-                                use tokio::io::{AsyncReadExt, AsyncWriteExt};
-                                
-                                let mut buf = [0; 1024];
-                                match socket.read(&mut buf).await {
-                                    Ok(0) => return, // Connection closed
-                                    Ok(n) => {
-                                        let request = String::from_utf8_lossy(&buf[..n]);
-                                        println!("Validator received metrics request: {:?}", request.lines().next());
-                                        if request.contains("GET /metrics") {
-                                            let body = metrics.export_prometheus();
-                                            let response = format!(
-                                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-                                                body.len(),
-                                                body
-                                            );
-                                            let _ = socket.write_all(response.as_bytes()).await;
-                                        } else {
-                                            let response = "HTTP/1.1 404 Not Found\r\n\r\n";
-                                            let _ = socket.write_all(response.as_bytes()).await;
-                                        }
-                                    }
-                                    Err(e) => {
-                                        eprintln!("Failed to read from metrics socket: {}", e);
-                                    }
-                                }
-                            });
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Failed to bind metrics port {}: {}", port, e);
-                }
-            }
-        });
-        
+
         Ok(())
     }
 

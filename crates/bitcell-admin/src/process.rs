@@ -16,6 +16,9 @@ pub struct NodeConfig {
     pub rpc_port: u16,
     pub log_level: String,
     pub network: String,
+    pub enable_dht: bool,
+    pub bootstrap_nodes: Vec<String>,
+    pub key_seed: Option<String>,
 }
 
 struct ManagedNode {
@@ -44,6 +47,10 @@ impl ProcessManager {
             address: "127.0.0.1".to_string(),
             port: config.port,
             started_at: None,
+            enable_dht: config.enable_dht,
+            dht_peer_count: 0,
+            bootstrap_nodes: config.bootstrap_nodes.clone(),
+            key_seed: config.key_seed.clone(),
         };
 
         let managed = ManagedNode {
@@ -94,9 +101,44 @@ impl ProcessManager {
         cmd.arg("--port").arg(node.config.port.to_string())
             .arg("--rpc-port").arg(node.config.rpc_port.to_string())
             .arg("--data-dir").arg(&node.config.data_dir)
-            .env("RUST_LOG", &node.config.log_level)
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit());
+            .env("RUST_LOG", &node.config.log_level);
+        
+        // Add DHT flags if enabled
+        if node.config.enable_dht {
+            cmd.arg("--enable-dht");
+        }
+        
+        // Add bootstrap nodes
+        for bootstrap in &node.config.bootstrap_nodes {
+            cmd.arg("--bootstrap").arg(bootstrap);
+        }
+        
+        // Add key seed if provided
+        if let Some(ref key_seed) = node.config.key_seed {
+            cmd.arg("--key-seed").arg(key_seed);
+        }
+        
+        // Create log directory if it doesn't exist
+        std::fs::create_dir_all(".bitcell/logs")
+            .map_err(|e| format!("Failed to create log directory: {}", e))?;
+        
+        // Create log file path
+        let node_type = match node.config.node_type {
+            NodeType::Validator => "validator",
+            NodeType::Miner => "miner",
+            NodeType::FullNode => "fullnode",
+        };
+        let log_path = format!(".bitcell/logs/{}_{}.log", node_type, node.config.port);
+        
+        // Open log file for writing
+        let log_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .map_err(|e| format!("Failed to open log file: {}", e))?;
+        
+        cmd.stdout(Stdio::from(log_file.try_clone().unwrap()))
+            .stderr(Stdio::from(log_file));
 
         tracing::info!("Starting node '{}' with command: {:?}", id, cmd);
 
@@ -219,6 +261,37 @@ impl ProcessManager {
             false
         }
     }
+
+    /// Get the log file path for a node
+    pub fn get_log_path(&self, id: &str) -> Option<String> {
+        let nodes = self.nodes.read();
+        nodes.get(id).map(|node| {
+            // Log files are stored in .bitcell/logs/{node_type}_{port}.log
+            let node_type = match node.config.node_type {
+                NodeType::Validator => "validator",
+                NodeType::Miner => "miner",
+                NodeType::FullNode => "fullnode",
+            };
+            format!(".bitcell/logs/{}_{}.log", node_type, node.config.port)
+        })
+    }
+
+    /// Delete a node (must be stopped first)
+    pub fn delete_node(&self, id: &str) -> Result<(), String> {
+        let mut nodes = self.nodes.write();
+        
+        if let Some(node) = nodes.get(id) {
+            if node.process.is_some() {
+            return Err("Cannot delete a running node. Stop it first.".to_string());
+        }
+    } else {
+        return Err(format!("Node '{}' not found", id));
+    }
+    
+    nodes.remove(id);
+    tracing::info!("Node '{}' deleted from registry", id);
+    Ok(())
+}
 
     /// Cleanup all node processes on shutdown
     pub fn shutdown(&self) {

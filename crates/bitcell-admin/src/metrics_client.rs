@@ -11,6 +11,7 @@ pub struct NodeMetrics {
     pub chain_height: u64,
     pub sync_progress: u64,
     pub peer_count: usize,
+    pub dht_peer_count: usize,
     pub bytes_sent: u64,
     pub bytes_received: u64,
     pub pending_txs: usize,
@@ -31,7 +32,7 @@ impl MetricsClient {
     pub fn new() -> Self {
         Self {
             client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(2))
+                .timeout(Duration::from_secs(5))
                 .build()
                 .expect("Failed to build HTTP client for metrics"),
         }
@@ -88,6 +89,7 @@ impl MetricsClient {
             chain_height: metrics.get("bitcell_chain_height").copied().unwrap_or(0.0) as u64,
             sync_progress: metrics.get("bitcell_sync_progress").copied().unwrap_or(0.0) as u64,
             peer_count: metrics.get("bitcell_peer_count").copied().unwrap_or(0.0) as usize,
+            dht_peer_count: metrics.get("bitcell_dht_peer_count").copied().unwrap_or(0.0) as usize,
             bytes_sent: metrics.get("bitcell_bytes_sent_total").copied().unwrap_or(0.0) as u64,
             bytes_received: metrics.get("bitcell_bytes_received_total").copied().unwrap_or(0.0) as u64,
             pending_txs: metrics.get("bitcell_pending_txs").copied().unwrap_or(0.0) as usize,
@@ -114,7 +116,11 @@ impl MetricsClient {
                 Ok(metrics) => node_metrics.push(metrics),
                 Err(e) => {
                     errors.push(format!("{}: {}", node_id, e));
-                    tracing::warn!("Failed to fetch metrics from {}: {}", node_id, e);
+                    if e.contains("Connection refused") || e.contains("operation timed out") {
+                        tracing::debug!("Failed to fetch metrics from {}: {}", node_id, e);
+                    } else {
+                        tracing::warn!("Failed to fetch metrics from {}: {}", node_id, e);
+                    }
                 }
             }
         }

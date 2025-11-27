@@ -60,6 +60,9 @@ pub struct NetworkManager {
     
     /// Transaction broadcast channel
     tx_tx: Arc<RwLock<Option<mpsc::Sender<Transaction>>>>,
+    
+    /// DHT manager
+    dht: Arc<RwLock<Option<crate::dht::DhtManager>>>,
 }
 
 impl NetworkManager {
@@ -73,15 +76,24 @@ impl NetworkManager {
             metrics,
             block_tx: Arc::new(RwLock::new(None)),
             tx_tx: Arc::new(RwLock::new(None)),
+            dht: Arc::new(RwLock::new(None)),
         }
     }
     
-    /// Start networking (bind to port and begin listening)
-    pub async fn start(&self, port: u16) -> Result<()> {
+    /// Enable DHT
+    pub fn enable_dht(&self, secret_key: &bitcell_crypto::SecretKey, bootstrap: Vec<String>) -> Result<()> {
+        let dht_manager = crate::dht::DhtManager::new(secret_key, bootstrap)?;
+        let mut dht = self.dht.write();
+        *dht = Some(dht_manager);
+        println!("DHT enabled");
+        Ok(())
+    }
+    
+    /// Start the network listener
+    pub async fn start(&self, port: u16, bootstrap_nodes: Vec<String>) -> Result<()> {
         let addr = format!("0.0.0.0:{}", port);
-        println!("Network manager starting on port {}", port);
         
-        // Store our local address
+        // Update local address
         {
             let mut local_addr = self.local_addr.write();
             *local_addr = Some(format!("127.0.0.1:{}", port));
@@ -97,6 +109,90 @@ impl NetworkManager {
         let network = self.clone();
         tokio::spawn(async move {
             network.accept_connections(listener).await;
+        });
+        
+        // Start DHT discovery if enabled
+        let dht_clone = self.dht.clone();
+        let network_clone = self.clone();
+        let bootstrap_nodes_clone = bootstrap_nodes.clone();
+        
+        tokio::spawn(async move {
+            // Wait a bit for listener to start
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            
+            let mut dht_manager = {
+                let mut guard = dht_clone.write();
+                guard.take()
+            };
+            
+            if let Some(mut dht) = dht_manager {
+                println!("Starting DHT discovery...");
+                
+                // 1. Connect to explicit bootstrap nodes from config
+                // This is necessary because DhtManager might reject addresses without Peer IDs
+                if !bootstrap_nodes_clone.is_empty() {
+                    println!("Connecting to {} bootstrap nodes...", bootstrap_nodes_clone.len());
+                    for addr_str in bootstrap_nodes_clone {
+                        // Extract IP and port from multiaddr string /ip4/x.x.x.x/tcp/yyyy
+                        // Also handle /p2p/Qm... suffix if present
+                        if let Some(start) = addr_str.find("/ip4/") {
+                            if let Some(tcp_start) = addr_str.find("/tcp/") {
+                                let ip = &addr_str[start+5..tcp_start];
+                                let rest = &addr_str[tcp_start+5..];
+                                
+                                // Check if there's a /p2p/ or /ipfs/ suffix
+                                let port = if let Some(p2p_start) = rest.find("/p2p/") {
+                                    &rest[..p2p_start]
+                                } else if let Some(ipfs_start) = rest.find("/ipfs/") {
+                                    &rest[..ipfs_start]
+                                } else {
+                                    rest
+                                };
+                                
+                                let connect_addr = format!("{}:{}", ip, port);
+                                println!("Connecting to bootstrap node: {}", connect_addr);
+                                let _ = network_clone.connect_to_peer(&connect_addr).await;
+                            }
+                        }
+                    }
+                }
+
+                if let Ok(peers) = dht.start_discovery().await {
+                    println!("DHT discovery found {} peers", peers.len());
+                    for peer in peers {
+                        for addr in peer.addresses {
+                            // Convert multiaddr to string address if possible
+                            // For now, we assume TCP/IP addresses
+                            // This is a simplification - in a real implementation we'd handle Multiaddr properly
+                            let addr_str = addr.to_string();
+                            // Extract IP and port from multiaddr string /ip4/x.x.x.x/tcp/yyyy
+                            if let Some(start) = addr_str.find("/ip4/") {
+                                if let Some(tcp_start) = addr_str.find("/tcp/") {
+                                    let ip = &addr_str[start+5..tcp_start];
+                                    let rest = &addr_str[tcp_start+5..];
+                                    
+                                    // Check if there's a /p2p/ or /ipfs/ suffix
+                                    let port = if let Some(p2p_start) = rest.find("/p2p/") {
+                                        &rest[..p2p_start]
+                                    } else if let Some(ipfs_start) = rest.find("/ipfs/") {
+                                        &rest[..ipfs_start]
+                                    } else {
+                                        rest
+                                    };
+                                    
+                                    let connect_addr = format!("{}:{}", ip, port);
+                                    println!("DHT discovered peer: {}", connect_addr);
+                                    let _ = network_clone.connect_to_peer(&connect_addr).await;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Put it back
+                let mut guard = dht_clone.write();
+                *guard = Some(dht);
+            }
         });
         
         // Spawn peer discovery task
@@ -132,11 +228,16 @@ impl NetworkManager {
     
     /// Handle a peer connection
     async fn handle_connection(&self, mut socket: TcpStream) -> Result<()> {
+        println!("Accepted connection");
+        
         // Send handshake
         self.send_message(&mut socket, &NetworkMessage::Handshake { peer_id: self.local_peer }).await?;
+        println!("Sent handshake to incoming peer");
         
         // Read handshake response
         let msg = self.receive_message(&mut socket).await?;
+        println!("Received handshake response");
+        
         let peer_id = match msg {
             NetworkMessage::Handshake { peer_id } => peer_id,
             _ => return Err("Expected handshake".into()),
@@ -313,8 +414,6 @@ impl NetworkManager {
     
     /// Connect to a peer
     pub async fn connect_to_peer(&self, address: &str) -> Result<()> {
-        println!("Connecting to peer at {}", address);
-        
         // Don't connect to ourselves
         if let Some(ref local) = *self.local_addr.read() {
             if address == local {
@@ -332,15 +431,22 @@ impl NetworkManager {
             }
         }
         
+        // Only print if we're actually attempting a new connection
+        println!("Connecting to peer at {}", address);
+        
         match TcpStream::connect(address).await {
             Ok(mut socket) => {
+                println!("Connected to {}, sending handshake", address);
                 // Send handshake
                 self.send_message(&mut socket, &NetworkMessage::Handshake {
                     peer_id: self.local_peer,
                 }).await?;
+                println!("Sent handshake to {}", address);
                 
                 // Receive handshake
                 let msg = self.receive_message(&mut socket).await?;
+                println!("Received handshake response from {}", address);
+                
                 let peer_id = match msg {
                     NetworkMessage::Handshake { peer_id } => peer_id,
                     _ => return Err("Expected handshake".into()),
@@ -360,6 +466,7 @@ impl NetworkManager {
                         writer: Arc::new(RwLock::new(Some(writer))),
                     });
                     self.metrics.set_peer_count(peers.len());
+                    self.metrics.set_dht_peer_count(peers.len()); // Show TCP peers as DHT peers
                 }
                 
                 // Handle messages from this peer
@@ -389,12 +496,27 @@ impl NetworkManager {
         loop {
             interval.tick().await;
             
-            // Try to connect to known addresses that we're not connected to
-            let addresses: Vec<String> = {
+            // Get list of known addresses and filter out ones we're already connected to
+            let addresses_to_try: Vec<String> = {
                 let known = self.known_addresses.read();
-                known.iter().cloned().collect()            };
+                let peers = self.peers.read();
+                
+                // Collect all currently connected addresses
+                let connected_addrs: std::collections::HashSet<String> = peers
+                    .values()
+                    .map(|p| p.address.clone())
+                    .collect();
+                
+                // Only try addresses we're not connected to
+                known
+                    .iter()
+                    .filter(|addr| !connected_addrs.contains(*addr))
+                    .cloned()
+                    .collect()
+            };
             
-            for addr in addresses {
+            // Try to connect to new addresses only
+            for addr in addresses_to_try {
                 let _ = self.connect_to_peer(&addr).await;
             }
             

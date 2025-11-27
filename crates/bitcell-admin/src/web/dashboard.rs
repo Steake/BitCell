@@ -787,10 +787,42 @@ pub async fn index() -> impl IntoResponse {
                     <label>Number of Nodes</label>
                     <input type="number" id="deploy-count" value="1" min="1" max="10" style="width: 100%; padding: 0.75rem;">
                 </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" id="deploy-enable-dht" style="width: auto;" checked>
+                        <span>Enable DHT Peer Discovery</span>
+                    </label>
+                </div>
+                <div class="form-group" id="deploy-dht-options">
+                    <label>Bootstrap Nodes (comma-separated multiaddrs)</label>
+                    <input type="text" id="deploy-bootstrap" placeholder="/ip4/127.0.0.1/tcp/19000" style="width: 100%; padding: 0.75rem;">
+                    <label style="margin-top: 0.5rem; display: block;">Key Seed (optional, for deterministic keys)</label>
+                    <input type="text" id="deploy-key-seed" placeholder="e.g., bootstrap, miner1" style="width: 100%; padding: 0.75rem;">
+                </div>
                 <div class="wizard-actions">
                     <button class="btn btn-secondary" onclick="closeDeployDialog()">Cancel</button>
                     <button class="btn" onclick="deployNodes()">Deploy</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Log Viewer Modal -->
+        <div id="log-modal" class="wizard-overlay" style="display: none;">
+            <div class="wizard-container" style="max-width: 900px; max-height: 80vh;">
+                <div class="wizard-header">
+                    <h2>📋 Node Logs: <span id="log-node-id"></span></h2>
+                    <button onclick="closeLogModal()" class="btn btn-secondary" style="position: absolute; right: 1.5rem; top: 1.5rem;">×</button>
+                </div>
+                <div class="log-controls" style="display: flex; gap: 10px; margin-bottom: 15px; padding: 10px; background: rgba(0, 255, 136, 0.05); border-radius: 8px;">
+                    <select id="log-lines" onchange="refreshLogs()" class="btn" style="padding: 0.5rem;">
+                        <option value="50">Last 50 lines</option>
+                        <option value="100" selected>Last 100 lines</option>
+                        <option value="500">Last 500 lines</option>
+                        <option value="1000">Last 1000 lines</option>
+                    </select>
+                    <button onclick="refreshLogs()" class="btn">🔄 Refresh</button>
+                </div>
+                <pre id="log-content" class="log-output" style="background: #000; color: #0f8; padding: 15px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.4; max-height: 500px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;"></pre>
             </div>
         </div>
 
@@ -890,7 +922,7 @@ pub async fn index() -> impl IntoResponse {
         }
 
         // Wizard navigation
-        function nextWizardStep(step) {
+        async function nextWizardStep(step) {
             if (step === 1) {
                 // Save paths
                 const dataDir = document.getElementById('setup-data-dir').value;
@@ -920,45 +952,7 @@ pub async fn index() -> impl IntoResponse {
                 const fullnodes = parseInt(document.getElementById('deploy-fullnodes').value) || 0;
 
                 const deployments = [];
-
-                if (validators > 0) {
-                    deployments.push(
-                        fetch('/api/deployment/deploy', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ node_type: 'validator', count: validators })
-                        }).then(res => {
-                            if (!res.ok) throw new Error('Failed to deploy validators');
-                            return res;
-                        })
-                    );
-                }
-
-                if (miners > 0) {
-                    deployments.push(
-                        fetch('/api/deployment/deploy', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ node_type: 'miner', count: miners })
-                        }).then(res => {
-                            if (!res.ok) throw new Error('Failed to deploy miners');
-                            return res;
-                        })
-                    );
-                }
-
-                if (fullnodes > 0) {
-                    deployments.push(
-                        fetch('/api/deployment/deploy', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ node_type: 'fullnode', count: fullnodes })
-                        }).then(res => {
-                            if (!res.ok) throw new Error('Failed to deploy full nodes');
-                            return res;
-                        })
-                    );
-                }
+                let firstValidatorPort = null;
 
                 // Execute deployments
                 const btn = document.querySelector('#wizard-step-2 .btn:last-child');
@@ -966,27 +960,111 @@ pub async fn index() -> impl IntoResponse {
                 btn.textContent = 'Deploying...';
                 btn.disabled = true;
 
-                Promise.all(deployments)
-                    .then(() => {
-                        // Complete setup
-                        return fetch('/api/setup/complete', { method: 'POST' });
-                    })
-                    .then(() => {
-                        btn.textContent = 'Success!';
-                        // Wait for nodes to actually start
+                try {
+                    // 1. Deploy first validator (Bootstrap Node)
+                    if (validators > 0) {
+                        const res = await fetch('/api/deployment/deploy', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                node_type: 'validator', 
+                                count: 1,
+                                enable_dht: true,
+                                bootstrap_nodes: [] 
+                            })
+                        });
+                        
+                        if (!res.ok) throw new Error('Failed to deploy bootstrap validator');
+                        const data = await res.json();
+                        
+                        if (data.nodes && data.nodes.length > 0) {
+                            firstValidatorPort = data.nodes[0].port;
+                            // Wait a moment for it to start
+                            await new Promise(r => setTimeout(r, 2000));
+                        }
+                    }
+
+                    const bootstrapNodes = firstValidatorPort ? [`/ip4/127.0.0.1/tcp/${firstValidatorPort}`] : [];
+
+                    // 2. Deploy remaining validators
+                    if (validators > 1) {
+                        deployments.push(
+                            fetch('/api/deployment/deploy', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ 
+                                    node_type: 'validator', 
+                                    count: validators - 1,
+                                    enable_dht: true,
+                                    bootstrap_nodes: bootstrapNodes
+                                })
+                            }).then(res => {
+                                if (!res.ok) throw new Error('Failed to deploy validators');
+                                return res;
+                            })
+                        );
+                    }
+
+                    // 3. Deploy miners
+                    if (miners > 0) {
+                        deployments.push(
+                            fetch('/api/deployment/deploy', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ 
+                                    node_type: 'miner', 
+                                    count: miners,
+                                    enable_dht: true,
+                                    bootstrap_nodes: bootstrapNodes
+                                })
+                            }).then(res => {
+                                if (!res.ok) throw new Error('Failed to deploy miners');
+                                return res;
+                            })
+                        );
+                    }
+
+                    // 4. Deploy full nodes
+                    if (fullnodes > 0) {
+                        deployments.push(
+                            fetch('/api/deployment/deploy', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ 
+                                    node_type: 'fullnode', 
+                                    count: fullnodes,
+                                    enable_dht: true,
+                                    bootstrap_nodes: bootstrapNodes
+                                })
+                            }).then(res => {
+                                if (!res.ok) throw new Error('Failed to deploy full nodes');
+                                return res;
+                            })
+                        );
+                    }
+                    
+                    // Wait for all remaining deployments
+                    await Promise.all(deployments);
+
+                    // Complete setup
+                    await fetch('/api/setup/complete', { method: 'POST' });
+
+                    btn.textContent = 'Success!';
+                    // Wait for nodes to actually start
+                    setTimeout(() => {
+                        goToStep(3);
                         setTimeout(() => {
-                            goToStep(3);
-                            setTimeout(() => {
-                                window.location.reload();
-                            }, 5000);
-                        }, 1000);
-                    })
-                    .catch(error => {
-                        console.error('Failed to deploy nodes:', error);
-                        alert('Failed to deploy nodes. Check console for details.');
-                        btn.textContent = originalText;
-                        btn.disabled = false;
-                    });
+                            window.location.reload();
+                        }, 5000);
+                    }, 1000);
+
+                } catch (error) {
+                    console.error('Deployment failed:', error);
+                    alert('Deployment failed: ' + error.message);
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    return;
+                }
             }
         }
 
@@ -1087,7 +1165,34 @@ pub async fn index() -> impl IntoResponse {
             window.location.reload();
         }
 
-        function showDeployDialog() {
+        async function showDeployDialog() {
+            // Smart prepopulation: suggest first running validator as bootstrap node
+            try {
+                const response = await fetch('/api/nodes');
+                const data = await response.json();
+                
+                // Find first running validator (node_type is lowercase from API)
+                const runningValidator = data.nodes.find(n => 
+                    n.node_type === 'validator' && n.status === 'running'
+                );
+                
+                if (runningValidator) {
+                    // Prepopulate bootstrap field with validator's address
+                    // Ensure we use the P2P port, not the metrics port (which is usually port + 1)
+                    // The API returns the P2P port in the 'port' field, so this should be correct.
+                    // However, we'll double check against known metrics ports just in case.
+                    const bootstrapAddr = `/ip4/127.0.0.1/tcp/${runningValidator.port}`;
+                    document.getElementById('deploy-bootstrap').value = bootstrapAddr;
+                    document.getElementById('deploy-bootstrap').placeholder = `e.g., ${bootstrapAddr}`;
+                } else {
+                    // No running validator, suggest default
+                    document.getElementById('deploy-bootstrap').value = '';
+                    document.getElementById('deploy-bootstrap').placeholder = '/ip4/127.0.0.1/tcp/19000';
+                }
+            } catch (error) {
+                console.error('Failed to prepopulate bootstrap nodes:', error);
+            }
+            
             document.getElementById('deploy-overlay').classList.add('active');
         }
 
@@ -1098,10 +1203,53 @@ pub async fn index() -> impl IntoResponse {
         async function deployNodes() {
             const nodeType = document.getElementById('deploy-node-type').value;
             const count = parseInt(document.getElementById('deploy-count').value);
+            const enableDht = document.getElementById('deploy-enable-dht').checked;
+            const bootstrap = document.getElementById('deploy-bootstrap').value;
+            const keySeed = document.getElementById('deploy-key-seed').value;
 
             if (isNaN(count) || count < 1 || count > 10) {
                 alert('Please enter a valid number between 1 and 10');
                 return;
+            }
+
+            // Parse bootstrap nodes
+            let bootstrapNodes = bootstrap
+                ? bootstrap.split(',').map(s => s.trim()).filter(s => s.length > 0)
+                : [];
+
+            // Validate bootstrap ports - check if user is trying to connect to a metrics port
+            try {
+                const nodesRes = await fetch('/api/nodes');
+                const nodesData = await nodesRes.json();
+                
+                // Build map of metrics ports
+                const metricsPorts = new Set();
+                nodesData.nodes.forEach(n => {
+                    // Metrics port is typically port + 1
+                    metricsPorts.add(n.port + 1);
+                });
+
+                let warned = false;
+                bootstrapNodes = bootstrapNodes.map(addr => {
+                    // Extract port from multiaddr /ip4/x.x.x.x/tcp/PORT
+                    const match = addr.match(/\/tcp\/(\d+)/);
+                    if (match) {
+                        const port = parseInt(match[1]);
+                        if (metricsPorts.has(port)) {
+                            // This looks like a metrics port!
+                            const correctPort = port - 1;
+                            if (!warned) {
+                                if (confirm(`Warning: Port ${port} appears to be a metrics port (HTTP), not a P2P port. \n\nDo you want to automatically correct it to ${correctPort}?`)) {
+                                    return addr.replace(`/tcp/${port}`, `/tcp/${correctPort}`);
+                                }
+                                warned = true;
+                            }
+                        }
+                    }
+                    return addr;
+                });
+            } catch (e) {
+                console.warn("Failed to validate ports:", e);
             }
 
             try {
@@ -1110,7 +1258,13 @@ pub async fn index() -> impl IntoResponse {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         node_type: nodeType,
-                        count: count
+                        count: count,
+                        config: {
+                            network: "testnet",
+                            enable_dht: enableDht,
+                            bootstrap_nodes: bootstrapNodes,
+                            key_seed: keySeed || null
+                        }
                     })
                 });
 
@@ -1141,11 +1295,21 @@ pub async fn index() -> impl IntoResponse {
             }
         }
 
+        // Global metrics cache
+        let latestMetrics = null;
+
         // Fetch and update metrics
         async function updateMetrics() {
             try {
                 const response = await fetch('/api/metrics');
+                if (!response.ok) {
+                    // If service unavailable (no nodes), just clear metrics or ignore
+                    console.debug('Metrics unavailable:', response.status);
+                    return;
+                }
                 const data = await response.json();
+                if (!data || !data.chain) return;
+                latestMetrics = data; // Cache metrics
 
                 // Chain metrics
                 document.getElementById('chain-height').textContent = data.chain.height.toLocaleString();
@@ -1170,6 +1334,11 @@ pub async fn index() -> impl IntoResponse {
                 document.getElementById('sys-cpu').textContent = data.system.cpu_usage.toFixed(1) + '%';
                 document.getElementById('sys-mem').textContent = formatBytes(data.system.memory_usage_mb * 1024 * 1024);
                 document.getElementById('sys-disk').textContent = formatBytes(data.system.disk_usage_mb * 1024 * 1024);
+                
+                // Also refresh nodes list if we have new metrics
+                if (document.getElementById('nodes-list').children.length > 0) {
+                    updateNodes();
+                }
             } catch (error) {
                 console.error('Failed to fetch metrics:', error);
             }
@@ -1187,19 +1356,33 @@ pub async fn index() -> impl IntoResponse {
                     return;
                 }
 
-                nodesList.innerHTML = data.nodes.map(node => `
+                nodesList.innerHTML = data.nodes.map(node => {
+                    // Find metrics for this node
+                    let dhtPeers = 0;
+                    if (latestMetrics && latestMetrics.node_metrics) {
+                        const nodeMetric = latestMetrics.node_metrics.find(m => m.node_id === node.id);
+                        if (nodeMetric) {
+                            dhtPeers = nodeMetric.dht_peer_count || nodeMetric.peer_count || 0;
+                        }
+                    }
+                    
+                    return `
                     <div class="node-item">
                         <div class="node-info">
                             <h3>${node.id}</h3>
                             <p>Type: ${node.node_type} | ${node.address}:${node.port}</p>
+                            ${node.enable_dht ? `<p style="color: #00ffaa; font-size: 0.9rem;">🌐 DHT: ${dhtPeers} peer(s)</p>` : ''}
                         </div>
                         <div class="actions">
                             <span class="status status-${node.status}">${node.status}</span>
+                            <button class="btn" onclick="viewNodeConfig('${node.id}')" title="View Configuration">⚙️</button>
+                            <button class="btn" onclick="viewLogs('${node.id}')" title="View Logs">📋</button>
                             <button class="btn" onclick="startNode('${node.id}')" ${node.status === 'running' ? 'disabled' : ''}>Start</button>
                             <button class="btn btn-danger" onclick="stopNode('${node.id}')" ${node.status === 'stopped' ? 'disabled' : ''}>Stop</button>
+                            <button class="btn btn-danger" onclick="deleteNode('${node.id}')" title="Delete Node">🗑️</button>
                         </div>
                     </div>
-                `).join('');
+                `}).join('');
             } catch (error) {
                 console.error('Failed to fetch nodes:', error);
             }
@@ -1253,11 +1436,104 @@ pub async fn index() -> impl IntoResponse {
             }
         }
 
+        async function viewNodeConfig(id) {
+            try {
+                const response = await fetch(`/api/nodes/${id}`);
+                if (!response.ok) throw new Error('Failed to fetch node config');
+                
+                const data = await response.json();
+                const node = data.node;
+                
+                const configText = `
+Node ID: ${node.id}
+Type: ${node.node_type}
+Address: ${node.address}:${node.port}
+Status: ${node.status}
+DHT Enabled: ${node.enable_dht ? 'Yes' : 'No'}
+${node.enable_dht ? `DHT Peers: ${node.dht_peer_count || 0}` : ''}
+${node.bootstrap_nodes && node.bootstrap_nodes.length > 0 ? `Bootstrap Nodes: ${node.bootstrap_nodes.join(', ')}` : ''}
+${node.key_seed ? `Key Seed: ${node.key_seed}` : ''}
+                `.trim();
+                
+                alert(configText);
+            } catch (error) {
+                console.error('Failed to view node config:', error);
+                alert('Failed to view node configuration');
+            }
+        }
+
+        async function deleteNode(id) {
+            if (!confirm(`Are you sure you want to delete node "${id}"? This action cannot be undone.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/nodes/${id}`, { method: 'DELETE' });
+                
+                if (!response.ok) {
+                    let errorMessage = 'Failed to delete node';
+                    try {
+                        const error = await response.json();
+                        errorMessage = error.error || errorMessage;
+                    } catch (e) {
+                        // If JSON parsing fails, use default message
+                    }
+                    throw new Error(errorMessage);
+                }
+                
+                alert(`Node "${id}" deleted successfully`);
+                updateNodes();
+            } catch (error) {
+                console.error('Failed to delete node:', error);
+                alert('Failed to delete node: ' + error.message);
+            }
+        }
+
         function formatBytes(bytes) {
             if (bytes < 1024) return bytes + 'B';
             if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
             if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
             return (bytes / (1024 * 1024 * 1024)).toFixed(1) + 'GB';
+        }
+
+        // Log viewer functions
+        let currentLogNodeId = null;
+
+        async function viewLogs(nodeId) {
+            currentLogNodeId = nodeId;
+            document.getElementById('log-node-id').textContent = nodeId;
+            document.getElementById('log-modal').style.display = 'flex';
+            await refreshLogs();
+        }
+
+        async function refreshLogs() {
+            if (!currentLogNodeId) return;
+            
+            const lines = document.getElementById('log-lines').value;
+            const logContent = document.getElementById('log-content');
+            
+            try {
+                logContent.textContent = 'Loading logs...';
+                const response = await fetch(`/api/nodes/${currentLogNodeId}/logs?lines=${lines}`);
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch logs');
+                }
+                
+                const logs = await response.text();
+                logContent.textContent = logs || 'No logs available';
+                
+                // Auto-scroll to bottom
+                logContent.scrollTop = logContent.scrollHeight;
+            } catch (error) {
+                console.error('Failed to fetch logs:', error);
+                logContent.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        function closeLogModal() {
+            document.getElementById('log-modal').style.display = 'none';
+            currentLogNodeId = null;
         }
 
         function formatUptime(seconds) {
@@ -1390,6 +1666,13 @@ pub async fn index() -> impl IntoResponse {
         checkSetupStatus();
         updateMetrics();
         updateNodes();
+        
+        // DHT checkbox toggle handler
+        document.getElementById('deploy-enable-dht').addEventListener('change', function() {
+            const dhtOptions = document.getElementById('deploy-dht-options');
+            dhtOptions.style.display = this.checked ? 'block' : 'none';
+        });
+        
         setInterval(updateMetrics, 5000);
         setInterval(updateNodes, 10000);
     </script>

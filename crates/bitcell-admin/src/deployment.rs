@@ -16,13 +16,18 @@ impl DeploymentManager {
         Self { process, setup }
     }
 
-    pub async fn deploy_nodes(&self, deployment_id: &str, node_type: NodeType, count: usize) {
+    pub async fn deploy_nodes(&self, deployment_id: &str, node_type: NodeType, count: usize, config: Option<crate::api::deployment::DeploymentConfig>) -> Vec<crate::api::NodeInfo> {
         tracing::info!(
             "Starting deployment {}: deploying {} {:?} nodes",
             deployment_id,
             count,
             node_type
         );
+
+        // Extract DHT config or use defaults
+        let enable_dht = config.as_ref().and_then(|c| c.enable_dht).unwrap_or(false);
+        let bootstrap_nodes = config.as_ref().and_then(|c| c.bootstrap_nodes.clone()).unwrap_or_default();
+        let key_seed = config.as_ref().and_then(|c| c.key_seed.clone());
 
         // Find the highest used port to avoid conflicts
         // Using higher ports (19000+) to avoid conflicts with system services
@@ -60,6 +65,7 @@ impl DeploymentManager {
         }
 
         let base_rpc_port = base_port + 1000;
+        let mut deployed_nodes = Vec::new();
 
         for i in 0..count {
             let node_id = format!("{:?}-{}-{}", node_type, deployment_id, i);
@@ -74,19 +80,13 @@ impl DeploymentManager {
                 rpc_port,
                 log_level: "info".to_string(),
                 network: "testnet".to_string(),
+                enable_dht,
+                bootstrap_nodes: bootstrap_nodes.clone(),
+                key_seed: key_seed.clone(),
             };
 
-            // Register the node (but don't start it automatically)
-            // Note: The UI calls start_node separately, or we could start it here.
-            // But wait, the UI "Deploy" button calls deploy_node, which spawns this task.
-            // The UI then refreshes the list. It doesn't automatically start them?
-            // The screenshot shows them as "Running".
-            // Let's check process.rs start_node again.
-            // Ah, register_node returns NodeStatus::Stopped.
-            // So the user must have clicked Start.
-            // But wait, if I register them in SetupManager, they appear in the list.
-            
-            self.process.register_node(node_id.clone(), config);
+            // Register the node
+            let mut node_info = self.process.register_node(node_id.clone(), config);
             
             // Register in SetupManager so metrics can be fetched
             let endpoint = NodeEndpoint {
@@ -100,9 +100,16 @@ impl DeploymentManager {
             tracing::info!("Registered node '{}' in deployment {}", node_id, deployment_id);
             
             // Auto-start the node for convenience
-            if let Err(e) = self.process.start_node(&node_id) {
-                tracing::error!("Failed to auto-start node {}: {}", node_id, e);
+            match self.process.start_node(&node_id) {
+                Ok(started_info) => {
+                    node_info = started_info;
+                },
+                Err(e) => {
+                    tracing::error!("Failed to auto-start node {}: {}", node_id, e);
+                }
             }
+            
+            deployed_nodes.push(node_info);
         }
         
         // Save setup state
@@ -117,5 +124,7 @@ impl DeploymentManager {
             count,
             node_type
         );
+        
+        deployed_nodes
     }
 }

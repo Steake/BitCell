@@ -4,7 +4,8 @@ use crate::{Result, MetricsRegistry};
 use bitcell_consensus::{TournamentOrchestrator, TournamentPhase, GliderCommitment, GliderReveal, BattleProof};
 use bitcell_crypto::{Hash256, PublicKey};
 use bitcell_ebsl::{EvidenceCounters, EvidenceType, EbslParams, TrustScore};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock as StdRwLock};
+use tokio::sync::RwLock;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time;
@@ -23,10 +24,10 @@ pub struct TournamentManager {
     metrics: MetricsRegistry,
     
     /// Current block height being decided
-    current_height: Arc<RwLock<u64>>,
+    current_height: Arc<StdRwLock<u64>>,
     
     /// Miner evidence counters for EBSL
-    miner_evidence: Arc<RwLock<HashMap<PublicKey, EvidenceCounters>>>,
+    miner_evidence: Arc<StdRwLock<HashMap<PublicKey, EvidenceCounters>>>,
     
     /// EBSL parameters
     ebsl_params: EbslParams,
@@ -38,15 +39,15 @@ impl TournamentManager {
         Self {
             tournament: Arc::new(RwLock::new(None)),
             metrics,
-            current_height: Arc::new(RwLock::new(1)),
-            miner_evidence: Arc::new(RwLock::new(HashMap::new())),
+            current_height: Arc::new(StdRwLock::new(1)),
+            miner_evidence: Arc::new(StdRwLock::new(HashMap::new())),
             ebsl_params: EbslParams::default(),
         }
     }
     
     /// Start a new tournament for the given height
-    pub fn start_tournament(&self, height: u64, eligible_miners: Vec<PublicKey>, seed: Hash256) {
-        let mut tournament = self.tournament.write().unwrap();
+    pub async fn start_tournament(&self, height: u64, eligible_miners: Vec<PublicKey>, seed: Hash256) {
+        let mut tournament = self.tournament.write().await;
         *tournament = Some(TournamentOrchestrator::new(height, eligible_miners.clone(), seed));
         
         let mut current_height = self.current_height.write().unwrap();
@@ -59,8 +60,8 @@ impl TournamentManager {
     }
     
     /// Add a commitment
-    pub fn add_commitment(&self, commitment: GliderCommitment) -> Result<()> {
-        let mut tournament = self.tournament.write().unwrap();
+    pub async fn add_commitment(&self, commitment: GliderCommitment) -> Result<()> {
+        let mut tournament = self.tournament.write().await;
         if let Some(ref mut t) = *tournament {
             t.process_commit(commitment)
                 .map_err(|e| crate::Error::Node(format!("Tournament error: {}", e)))
@@ -70,8 +71,8 @@ impl TournamentManager {
     }
     
     /// Advance to reveal phase
-    pub fn advance_to_reveal(&self) -> Result<()> {
-        let mut tournament = self.tournament.write().unwrap();
+    pub async fn advance_to_reveal(&self) -> Result<()> {
+        let mut tournament = self.tournament.write().await;
         if let Some(ref mut t) = *tournament {
             t.advance_to_reveal()
                 .map_err(|e| crate::Error::Node(format!("Tournament error: {}", e)))
@@ -81,8 +82,8 @@ impl TournamentManager {
     }
     
     /// Add a reveal
-    pub fn add_reveal(&self, reveal: GliderReveal) -> Result<()> {
-        let mut tournament = self.tournament.write().unwrap();
+    pub async fn add_reveal(&self, reveal: GliderReveal) -> Result<()> {
+        let mut tournament = self.tournament.write().await;
         if let Some(ref mut t) = *tournament {
             t.process_reveal(reveal)
                 .map_err(|e| crate::Error::Node(format!("Tournament error: {}", e)))
@@ -92,8 +93,8 @@ impl TournamentManager {
     }
     
     /// Advance to battle phase
-    pub fn advance_to_battle(&self) -> Result<()> {
-        let mut tournament = self.tournament.write().unwrap();
+    pub async fn advance_to_battle(&self) -> Result<()> {
+        let mut tournament = self.tournament.write().await;
         if let Some(ref mut t) = *tournament {
             t.advance_to_battle()
                 .map_err(|e| crate::Error::Node(format!("Tournament error: {}", e)))
@@ -103,8 +104,9 @@ impl TournamentManager {
     }
     
     /// Run battles and get winner
-    pub fn run_battles(&self) -> Result<PublicKey> {
-        let mut tournament = self.tournament.write().unwrap();
+    pub async fn run_battles(&self) -> Result<PublicKey> {
+        let mut tournament = self.tournament.write().await;
+        
         if let Some(ref mut t) = *tournament {
             let winner = t.run_battles()
                 .map_err(|e| crate::Error::Node(format!("Tournament error: {}", e)))?;
@@ -117,26 +119,26 @@ impl TournamentManager {
     }
     
     /// Get current phase
-    pub fn current_phase(&self) -> Option<TournamentPhase> {
-        let tournament = self.tournament.read().unwrap();
+    pub async fn current_phase(&self) -> Option<TournamentPhase> {
+        let tournament = self.tournament.read().await;
         tournament.as_ref().map(|t| t.tournament.phase)
     }
     
     /// Get winner if tournament is complete
-    pub fn get_winner(&self) -> Option<PublicKey> {
-        let tournament = self.tournament.read().unwrap();
+    pub async fn get_winner(&self) -> Option<PublicKey> {
+        let tournament = self.tournament.read().await;
         tournament.as_ref().and_then(|t| t.get_winner())
     }
     
     /// Check if tournament is complete
-    pub fn is_complete(&self) -> bool {
-        let tournament = self.tournament.read().unwrap();
+    pub async fn is_complete(&self) -> bool {
+        let tournament = self.tournament.read().await;
         tournament.as_ref().map_or(false, |t| t.tournament.is_complete())
     }
     
     /// Get battle proofs (simplified - generate placeholder proofs)
-    pub fn get_battle_proofs(&self) -> Vec<BattleProof> {
-        let tournament = self.tournament.read().unwrap();
+    pub async fn get_battle_proofs(&self) -> Vec<BattleProof> {
+        let tournament = self.tournament.read().await;
         if let Some(ref t) = *tournament {
             // Generate placeholder battle proofs
             // In production, these would be actual ZK proofs from battles
@@ -156,14 +158,16 @@ impl TournamentManager {
     
     /// Record evidence for a miner
     pub fn record_evidence(&self, miner: PublicKey, evidence_type: EvidenceType) {
-        let mut evidence_map = self.miner_evidence.write().unwrap();
-        let counters = evidence_map.entry(miner).or_insert_with(EvidenceCounters::new);
+        {
+            let mut evidence_map = self.miner_evidence.write().unwrap();
+            let counters = evidence_map.entry(miner).or_insert_with(EvidenceCounters::new);
+            
+            // Add evidence with current block height
+            let height = *self.current_height.read().unwrap();
+            counters.add_evidence(bitcell_ebsl::Evidence::new(evidence_type, 0, height));
+        } // Drop write lock here
         
-        // Add evidence with current block height
-        let height = *self.current_height.read().unwrap();
-        counters.add_evidence(bitcell_ebsl::Evidence::new(evidence_type, 0, height));
-        
-        // Update metrics
+        // Update metrics (acquires read lock)
         self.update_ebsl_metrics();
     }
     
@@ -232,7 +236,7 @@ pub async fn run_tournament_cycle(
     use bitcell_ca::grid::Position;
     
     // Start tournament
-    manager.start_tournament(height, eligible_miners.clone(), seed);
+    manager.start_tournament(height, eligible_miners.clone(), seed).await;
     
     // For single-node testing, we'll submit commitments/reveals ourselves
     // In production, miners would do this over the network
@@ -252,13 +256,13 @@ pub async fn run_tournament_cycle(
             height,
         };
         
-        let _ = manager.add_commitment(commitment);
+        let _ = manager.add_commitment(commitment).await;
     }
     
     time::sleep(Duration::from_secs(COMMIT_PHASE_SECS)).await;
     
     // Advance to reveal
-    manager.advance_to_reveal()?;
+    manager.advance_to_reveal().await?;
     
     // Reveal phase - reveal the gliders
     println!("Tournament: Reveal phase ({}s)", REVEAL_PHASE_SECS);
@@ -280,20 +284,21 @@ pub async fn run_tournament_cycle(
             miner: *miner_pk,
         };
         
-        let _ = manager.add_reveal(reveal);
+        let _ = manager.add_reveal(reveal).await;
     }
     
     time::sleep(Duration::from_secs(REVEAL_PHASE_SECS)).await;
     
     // Advance to battle
-    manager.advance_to_battle()?;
+    manager.advance_to_battle().await?;
     
-    // Battle phase (run battles and determine winner)
+    // Battle phase
     println!("Tournament: Battle phase ({}s)", BATTLE_PHASE_SECS);
-    time::sleep(Duration::from_secs(BATTLE_PHASE_SECS)).await;
     
-    // Run battles and get winner
-    let winner = manager.run_battles()?;
+    // Run battles - now async, no need for spawn_blocking
+    let winner = manager.run_battles().await?;
+    
+    time::sleep(Duration::from_secs(BATTLE_PHASE_SECS)).await;
     
     println!("Tournament complete for height {}, winner: {:?}", height, winner);
     Ok(winner)
@@ -304,8 +309,8 @@ mod tests {
     use super::*;
     use bitcell_crypto::SecretKey;
     
-    #[test]
-    fn test_tournament_creation() {
+    #[tokio::test]
+    async fn test_tournament_creation() {
         let metrics = MetricsRegistry::new();
         let manager = TournamentManager::new(metrics);
         
@@ -313,7 +318,7 @@ mod tests {
         let miners = vec![sk.public_key()];
         let seed = Hash256::zero();
         
-        manager.start_tournament(1, miners, seed);
-        assert_eq!(manager.current_phase(), Some(TournamentPhase::Commit));
+        manager.start_tournament(1, miners, seed).await;
+        assert_eq!(manager.current_phase().await, Some(TournamentPhase::Commit));
     }
 }

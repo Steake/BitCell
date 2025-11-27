@@ -43,25 +43,16 @@ impl MinerNode {
         println!("Glider strategy: {:?}", self.glider_strategy);
         
         // Start network layer
-        self.network.start(self.config.network_port).await?;
+        self.network.start(self.config.network_port, self.config.bootstrap_nodes.clone()).await?;
         
-        // Try to connect to other nodes (simple peer discovery for local testing)
-        let network = self.network.clone();
-        let my_port = self.config.network_port;
-        tokio::spawn(async move {
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-            
-            // Try to connect to nearby ports (other nodes)
-            for base_port in [19000, 19100, 19200] {
-                for offset in 0..10 {
-                    let port = base_port + offset * 2;
-                    if port != my_port {
-                        let addr = format!("127.0.0.1:{}", port);
-                        let _ = network.connect_to_peer(&addr).await;
-                    }
-                }
-            }
-        });
+        // Enable DHT if configured
+        if self.config.enable_dht {
+            println!("Enabling DHT with bootstrap nodes: {:?}", self.config.bootstrap_nodes);
+            self.network.enable_dht(&self.secret_key, self.config.bootstrap_nodes.clone())?;
+        }
+        
+        // Legacy peer discovery removed in favor of DHT/Bootstrap
+        // The network stack now handles connections via NetworkManager::start()
         
         // Initialize metrics with actual state
         self.metrics.set_chain_height(self.blockchain.height());
@@ -125,11 +116,14 @@ impl MinerNode {
                                         if request.contains("GET /metrics") {
                                             let body = metrics.export_prometheus();
                                             let response = format!(
-                                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
                                                 body.len(),
                                                 body
                                             );
-                                            let _ = socket.write_all(response.as_bytes()).await;
+                                            if let Err(e) = socket.write_all(response.as_bytes()).await {
+                                                eprintln!("Failed to write metrics response: {}", e);
+                                            }
+                                            let _ = socket.flush().await;
                                         } else {
                                             let response = "HTTP/1.1 404 Not Found\r\n\r\n";
                                             let _ = socket.write_all(response.as_bytes()).await;

@@ -16,6 +16,7 @@ pub struct MetricsResponse {
     pub network: NetworkMetrics,
     pub ebsl: EbslMetrics,
     pub system: SystemMetrics,
+    pub node_metrics: Option<Vec<crate::metrics_client::NodeMetrics>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -58,20 +59,33 @@ pub struct SystemMetrics {
 pub async fn get_metrics(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<MetricsResponse>, (StatusCode, Json<String>)> {
-    let nodes = state.setup.get_nodes();
-
-    if nodes.is_empty() {
+    // Get all registered nodes from ProcessManager (which has status info)
+    let all_nodes = state.process.list_nodes();
+    tracing::info!("get_metrics: Found {} nodes", all_nodes.len());
+    
+    if all_nodes.is_empty() {
+        tracing::warn!("get_metrics: No nodes found, returning 503");
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
-            Json("No nodes configured. Please complete setup wizard and deploy nodes first.".to_string()),
+            Json("No nodes configured. Please deploy nodes first.".to_string()),
         ));
     }
 
-    // Get endpoints for metrics fetching
-    let endpoints: Vec<(String, String)> = nodes
+    // Get endpoints for metrics fetching (try all nodes)
+    let endpoints: Vec<(String, String)> = all_nodes
         .iter()
-        .map(|n| (n.id.clone(), n.metrics_endpoint.clone()))
+        .map(|n| {
+            let metrics_port = n.port + 1; // Metrics port is node port + 1
+            (n.id.clone(), format!("http://127.0.0.1:{}/metrics", metrics_port))
+        })
         .collect();
+
+    if endpoints.is_empty() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json("No running nodes. Please start some nodes first.".to_string()),
+        ));
+    }
 
     // Fetch aggregated metrics
     let aggregated = state.metrics_client.aggregate_metrics(&endpoints)
@@ -111,6 +125,7 @@ pub async fn get_metrics(
             memory_usage_mb: 0, // TODO: Requires system metrics collection
             disk_usage_mb: 0, // TODO: Requires system metrics collection
         },
+        node_metrics: Some(aggregated.node_metrics),
     };
 
     Ok(Json(response))

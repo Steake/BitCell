@@ -1,0 +1,49 @@
+[package]
+name = "bitcell-wallet"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Modular wallet for BitCell blockchain with multi-chain support"
+
+[dependencies]
+bitcell-crypto = { path = "../bitcell-crypto" }
+bitcell-state = { path = "../bitcell-state" }
+
+# Cryptography
+sha2.workspace = true
+blake3.workspace = true
+k256.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+hex.workspace = true
+
+# BIP39/BIP32 seed phrases
+tiny-bip39 = "1.0"
+hmac = "0.12"
+pbkdf2 = { version = "0.12", default-features = false }
+
+# Encoding
+bs58 = "0.5"
+
+# Serialization
+serde.workspace = true
+serde_json = "1.0"
+bincode.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# Utilities
+zeroize.workspace = true
+parking_lot.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[features]
+default = []
+bitcoin = []
+ethereum = []

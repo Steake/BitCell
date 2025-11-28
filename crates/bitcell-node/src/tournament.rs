@@ -140,15 +140,14 @@ impl TournamentManager {
     pub async fn get_battle_proofs(&self) -> Vec<BattleProof> {
         let tournament = self.tournament.read().await;
         if let Some(ref t) = *tournament {
-            // Generate placeholder battle proofs
-            // In production, these would be actual ZK proofs from battles
-            t.tournament.battles.iter().map(|_battle| {
+            // Generate battle proofs from matches
+            t.tournament.matches.iter().map(|match_record| {
                 BattleProof {
-                    participant_a: PublicKey::from_bytes([0u8; 33]).unwrap(),
-                    participant_b: PublicKey::from_bytes([1u8; 33]).unwrap(),
-                    winner: PublicKey::from_bytes([0u8; 33]).unwrap(),
-                    proof: vec![0u8; 64], // Placeholder
-                    public_inputs: vec![0u8; 32], // Placeholder
+                    participant_a: match_record.participant_a,
+                    participant_b: match_record.participant_b,
+                    winner: match_record.winner,
+                    proof: match_record.proof_data.clone(),
+                    public_inputs: match_record.entropy_seed.to_vec(),
                 }
             }).collect()
         } else {

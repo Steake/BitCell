@@ -112,6 +112,10 @@ impl AdminConsole {
             .route("/api/setup/data-dir", post(api::setup::set_data_dir))
             .route("/api/setup/complete", post(api::setup::complete_setup))
 
+            .route("/api/blocks", get(api::blocks::list_blocks))
+            .route("/api/blocks/:height", get(api::blocks::get_block))
+            .route("/api/blocks/:height/battles", get(api::blocks::get_block_battles))
+
             // Static files
             .nest_service("/static", ServeDir::new("static"))
 

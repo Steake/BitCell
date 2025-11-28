@@ -92,6 +92,16 @@ impl GliderPattern {
         }
     }
 
+    /// Convert pattern to bytes for hashing
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            GliderPattern::Standard => b"Standard".to_vec(),
+            GliderPattern::Lightweight => b"Lightweight".to_vec(),
+            GliderPattern::Middleweight => b"Middleweight".to_vec(),
+            GliderPattern::Heavyweight => b"Heavyweight".to_vec(),
+        }
+    }
+
     /// List all available patterns
     pub fn all() -> Vec<GliderPattern> {
         vec![

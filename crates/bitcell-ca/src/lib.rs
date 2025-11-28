@@ -13,7 +13,7 @@ pub mod battle;
 
 pub use grid::{Grid, Cell, Position};
 pub use glider::{Glider, GliderPattern};
-pub use battle::{Battle, BattleOutcome};
+pub use battle::{Battle, BattleOutcome, BattleHistory};
 
 /// Result type for CA operations
 pub type Result<T> = std::result::Result<T, Error>;

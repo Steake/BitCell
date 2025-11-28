@@ -11,6 +11,7 @@ members = [
     "crates/bitcell-network",
     "crates/bitcell-node",
     "crates/bitcell-admin",
+    "crates/bitcell-simulation",
     "crates/bitcell-wallet",
 ]
 resolver = "2"

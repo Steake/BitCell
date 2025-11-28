@@ -8,6 +8,10 @@ license.workspace = true
 repository.workspace = true
 description = "Modular wallet for BitCell blockchain with multi-chain support"
 
+[[bin]]
+name = "bitcell-wallet"
+path = "src/main.rs"
+
 [dependencies]
 bitcell-crypto = { path = "../bitcell-crypto" }
 bitcell-state = { path = "../bitcell-state" }
@@ -35,6 +39,9 @@ bincode.workspace = true
 
 # Error handling
 thiserror.workspace = true
+
+# CLI
+clap = { version = "4", features = ["derive"] }
 
 # Utilities
 zeroize.workspace = true

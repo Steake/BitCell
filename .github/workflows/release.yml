@@ -52,7 +52,7 @@ jobs:
             ${{ runner.os }}-${{ matrix.target }}-cargo-
 
       - name: Build release binaries
-        run: cargo build --release --target ${{ matrix.target }} -p bitcell-node -p bitcell-admin
+        run: cargo build --release --target ${{ matrix.target }} -p bitcell-node -p bitcell-admin -p bitcell-wallet
 
       - name: Create artifact directory
         shell: bash
@@ -64,6 +64,7 @@ jobs:
         run: |
           cp target/${{ matrix.target }}/release/bitcell-node artifacts/
           cp target/${{ matrix.target }}/release/bitcell-admin artifacts/
+          cp target/${{ matrix.target }}/release/bitcell-wallet artifacts/
 
       - name: Copy binaries (Windows)
         if: runner.os == 'Windows'
@@ -71,6 +72,7 @@ jobs:
         run: |
           cp target/${{ matrix.target }}/release/bitcell-node.exe artifacts/
           cp target/${{ matrix.target }}/release/bitcell-admin.exe artifacts/
+          cp target/${{ matrix.target }}/release/bitcell-wallet.exe artifacts/
 
       - name: Create archive (Unix)
         if: runner.os != 'Windows'

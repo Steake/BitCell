@@ -826,6 +826,99 @@ pub async fn index() -> impl IntoResponse {
             </div>
         </div>
 
+        <!-- Blocks Section -->
+        <div class="card" style="margin-top: 2rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="margin: 0;">⛓️ Recent Blocks</h2>
+                <button class="btn" onclick="loadBlocks()">🔄 Refresh</button>
+            </div>
+            <div id="blocks-list" class="node-list">
+                <div class="loading">Loading blocks...</div>
+            </div>
+        </div>
+
+        <!-- Block Detail Modal -->
+        <div id="block-modal" class="wizard-overlay" style="display: none;">
+            <div class="wizard-container" style="max-width: 1200px; max-height: 90vh; overflow-y: auto;">
+                <div class="wizard-header">
+                    <h2>📦 Block <span id="block-height-title"></span></h2>
+                    <button onclick="closeBlockModal()" class="btn btn-secondary" style="position: absolute; right: 1.5rem; top: 1.5rem;">×</button>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+                    <div>
+                        <div class="metric">
+                            <span class="metric-label">Block Hash</span>
+                            <span id="block-hash" style="font-size: 0.9rem; font-family: monospace; color: #00ffaa;"></span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Proposer</span>
+                            <span id="block-proposer" style="font-size: 0.9rem; color: #00ffaa;"></span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="metric">
+                            <span class="metric-label">Timestamp</span>
+                            <span id="block-timestamp" style="font-size: 0.9rem; color: #00ffaa;"></span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Transactions</span>
+                            <span id="block-tx-count" style="font-size: 0.9rem; color: #00ffaa;"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 style="color: #00ffaa; margin-bottom: 1rem;">⚔️ Tournament Battle</h3>
+                <div id="block-battle-container">
+                    <div class="loading">Loading battle data...</div>
+                </div>
+
+                <div id="block-battle-viz" style="display: none;">
+                    <div style="display: grid; grid-template-columns: 300px 1fr; gap: 2rem;">
+                        <div>
+                            <div class="metric">
+                                <span class="metric-label">Glider A</span>
+                                <span id="battle-glider-a" style="font-size: 0.9rem; color: #00ffaa;"></span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Glider B</span>
+                                <span id="battle-glider-b" style="font-size: 0.9rem; color: #00ffaa;"></span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Winner</span>
+                                <span id="battle-winner" style="font-size: 0.9rem; color: #00ff00; font-weight: bold;"></span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Energy A</span>
+                                <span id="battle-energy-a" style="font-size: 0.9rem; color: #00ffaa;"></span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Energy B</span>
+                                <span id="battle-energy-b" style="font-size: 0.9rem; color: #00ffaa;"></span>
+                            </div>
+                            <div style="margin-top: 1rem;">
+                                <button id="play-pause-btn" class="btn" onclick="togglePlayPause()" style="width: 100%; margin-bottom: 0.5rem;">▶️ Play</button>
+                                <div style="margin-top: 1rem;">
+                                    <label style="display: block; margin-bottom: 0.5rem; color: #94a3b8;">Frame: <span id="current-frame">0</span> / <span id="total-frames">0</span></label>
+                                    <input type="range" id="frame-slider" min="0" max="0" value="0" style="width: 100%;" oninput="seekFrame(this.value)">
+                                </div>
+                                <div style="margin-top: 1rem;">
+                                    <label style="display: block; margin-bottom: 0.5rem; color: #94a3b8;">Speed</label>
+                                    <input type="range" id="speed-slider" min="1" max="10" value="5" style="width: 100%;">
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <canvas id="block-battle-canvas" width="512" height="512" style="border: 2px solid #00ffaa; border-radius: 4px; image-rendering: pixelated; width: 100%; max-width: 512px;"></canvas>
+                            <div style="margin-top: 0.5rem; text-align: center; color: rgba(0, 255, 170, 0.6); font-size: 0.8rem;">
+                                Step: <span id="battle-step">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Battle Visualization Section -->
         <div class="card" style="margin-top: 2rem;">
             <h2>⚔️ Cellular Automata Battle Visualization</h2>
@@ -1662,10 +1755,182 @@ ${node.key_seed ? `Key Seed: ${node.key_seed}` : ''}
             renderFrame(parseInt(value));
         }
 
+        // Block visualization state
+        let blockBattleFrames = [];
+        let blockCurrentFrame = 0;
+        let blockIsPlaying = false;
+        let blockPlaybackInterval = null;
+
+        async function loadBlocks() {
+            const blocksList = document.getElementById('blocks-list');
+            
+            try {
+                blocksList.innerHTML = '<div class="loading">Loading blocks...</div>';
+                
+                const response = await fetch('/api/blocks');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch blocks');
+                }
+                
+                const data = await response.json();
+                
+                if (data.blocks.length === 0) {
+                    blocksList.innerHTML = '<div style="text-align: center; padding: 2rem; color: rgba(0, 255, 170, 0.5);">No blocks found</div>';
+                    return;
+                }
+                
+                blocksList.innerHTML = data.blocks.map(block => `
+                    <div class="node-item" onclick="showBlockDetail(${block.height})" style="cursor: pointer;">
+                        <div class="node-info">
+                            <h3>Block #${block.height}</h3>
+                            <p>Hash: ${block.hash} • Proposer: ${block.proposer}</p>
+                            <p>Timestamp: ${new Date(block.timestamp * 1000).toLocaleString()}</p>
+                        </div>
+                        <div class="actions">
+                            <span class="status status-running">${block.battle_count} Battle${block.battle_count !== 1 ? 's' : ''}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load blocks:', error);
+                blocksList.innerHTML = '<div style="text-align: center; padding: 2rem; color: #ff0064;">Failed to load blocks</div>';
+            }
+        }
+
+        async function showBlockDetail(height) {
+            const modal = document.getElementById('block-modal');
+            modal.style.display = 'flex';
+            
+            document.getElementById('block-height-title').textContent = `#${height}`;
+            document.getElementById('block-battle-container').style.display = 'block';
+            document.getElementById('block-battle-viz').style.display = 'none';
+            
+            try {
+                // Fetch block details
+                const blockResponse = await fetch(`/api/blocks/${height}`);
+                if (!blockResponse.ok) throw new Error('Failed to fetch block details');
+                const block = await blockResponse.json();
+                
+                document.getElementById('block-hash').textContent = block.hash;
+                document.getElementById('block-proposer').textContent = block.proposer;
+                document.getElementById('block-timestamp').textContent = new Date(block.timestamp * 1000).toLocaleString();
+                document.getElementById('block-tx-count').textContent = block.transactions.length;
+                
+                // Fetch battle visualization
+                const battleResponse = await fetch(`/api/blocks/${height}/battles`);
+                if (!battleResponse.ok) throw new Error('Failed to fetch battle data');
+                const battles = await battleResponse.json();
+                
+                if (battles.length > 0) {
+                    const battle = battles[0]; // Show first battle
+                    
+                    document.getElementById('battle-glider-a').textContent = battle.glider_a_pattern;
+                    document.getElementById('battle-glider-b').textContent = battle.glider_b_pattern;
+                    document.getElementById('battle-winner').textContent = battle.winner.replace('_', ' ').toUpperCase();
+                    
+                    blockBattleFrames = battle.frames;
+                    blockCurrentFrame = 0;
+                    
+                    document.getElementById('total-frames').textContent = blockBattleFrames.length;
+                    document.getElementById('frame-slider').max = blockBattleFrames.length - 1;
+                    document.getElementById('frame-slider').value = 0;
+                    
+                    document.getElementById('block-battle-container').style.display = 'none';
+                    document.getElementById('block-battle-viz').style.display = 'block';
+                    
+                    renderBlockFrame(0);
+                } else {
+                    document.getElementById('block-battle-container').innerHTML = '<div style="text-align: center; padding: 2rem; color: rgba(0, 255, 170, 0.5);">No battle data available</div>';
+                }
+            } catch (error) {
+                console.error('Failed to load block details:', error);
+                document.getElementById('block-battle-container').innerHTML = `<div style="text-align: center; padding: 2rem; color: #ff0064;">Error: ${error.message}</div>`;
+            }
+        }
+
+        function closeBlockModal() {
+            document.getElementById('block-modal').style.display = 'none';
+            if (blockIsPlaying) {
+                togglePlayPause();
+            }
+        }
+
+        function renderBlockFrame(frameIndex) {
+            if (!blockBattleFrames || blockBattleFrames.length === 0) return;
+            
+            const frame = blockBattleFrames[frameIndex];
+            const canvas = document.getElementById('block-battle-canvas');
+            const ctx = canvas.getContext('2d');
+            const grid = frame.grid;
+            const size = grid.length;
+            const cellSize = canvas.width / size;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Render grid with Game of Life cells
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const energy = grid[y][x];
+                    if (energy > 0) {
+                        // Color cells based on position and energy
+                        const normalizedX = x / size;
+                        const intensity = Math.min(255, energy * 2);
+
+                        // Left side = cyan (Glider A), right side = magenta (Glider B)
+                        if (normalizedX < 0.5) {
+                            ctx.fillStyle = `rgb(0, ${intensity}, ${intensity})`;
+                        } else {
+                            ctx.fillStyle = `rgb(${intensity}, 0, ${intensity})`;
+                        }
+
+                        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                    }
+                }
+            }
+
+            // Update displays
+            document.getElementById('current-frame').textContent = frameIndex + 1;
+            document.getElementById('battle-step').textContent = frame.step;
+            document.getElementById('battle-energy-a').textContent = frame.energy_a.toLocaleString();
+            document.getElementById('battle-energy-b').textContent = frame.energy_b.toLocaleString();
+            document.getElementById('frame-slider').value = frameIndex;
+            blockCurrentFrame = frameIndex;
+        }
+
+        function togglePlayPause() {
+            blockIsPlaying = !blockIsPlaying;
+            const btn = document.getElementById('play-pause-btn');
+
+            if (blockIsPlaying) {
+                btn.textContent = '⏸️ Pause';
+                const speed = parseInt(document.getElementById('speed-slider').value);
+                const delay = 1000 / speed; // Convert speed to delay
+                
+                blockPlaybackInterval = setInterval(() => {
+                    blockCurrentFrame = (blockCurrentFrame + 1) % blockBattleFrames.length;
+                    renderBlockFrame(blockCurrentFrame);
+                }, delay);
+            } else {
+                btn.textContent = '▶️ Play';
+                if (blockPlaybackInterval) {
+                    clearInterval(blockPlaybackInterval);
+                    blockPlaybackInterval = null;
+                }
+            }
+        }
+
+        function seekFrame(value) {
+            if (blockIsPlaying) {
+                togglePlayPause();
+            }
+            renderBlockFrame(parseInt(value));
+        }
+
         // Initial load and auto-refresh
         checkSetupStatus();
         updateMetrics();
         updateNodes();
+        loadBlocks();
         
         // DHT checkbox toggle handler
         document.getElementById('deploy-enable-dht').addEventListener('change', function() {

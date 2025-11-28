@@ -13,7 +13,7 @@ pub mod fork_choice;
 pub mod orchestrator;
 
 pub use block::{Block, BlockHeader, Transaction, BattleProof};
-pub use tournament::{Tournament, TournamentPhase, GliderCommitment, GliderReveal};
+pub use tournament::{Tournament, TournamentPhase, GliderCommitment, GliderReveal, TournamentMatch};
 pub use fork_choice::ChainState;
 pub use orchestrator::TournamentOrchestrator;
 

@@ -1,0 +1,17 @@
+[package]
+name = "bitcell-simulation"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+bitcell-consensus = { path = "../bitcell-consensus" }
+bitcell-ca = { path = "../bitcell-ca" }
+bitcell-ebsl = { path = "../bitcell-ebsl" }
+bitcell-crypto = { path = "../bitcell-crypto" }
+serde = { version = "1.0", features = ["derive"] }
+rand = "0.8"
+thiserror = "1.0"

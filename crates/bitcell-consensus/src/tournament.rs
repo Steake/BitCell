@@ -1,6 +1,6 @@
 //! Tournament protocol structures
 
-use bitcell_ca::{Battle, Glider};
+use bitcell_ca::{Battle, BattleOutcome, Glider, BattleHistory};
 use bitcell_crypto::{Hash256, PublicKey};
 use serde::{Deserialize, Serialize};
 
@@ -46,6 +46,40 @@ pub struct GliderReveal {
     pub miner: PublicKey,
 }
 
+/// A single match in the tournament
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TournamentMatch {
+    /// Round number (0-based)
+    pub round: u32,
+    
+    /// Match index within round (0-based)
+    pub match_index: u32,
+    
+    /// Participant A
+    pub participant_a: PublicKey,
+    
+    /// Participant B
+    pub participant_b: PublicKey,
+    
+    /// Winner
+    pub winner: PublicKey,
+    
+    /// Entropy seed used
+    pub entropy_seed: [u8; 32],
+    
+    /// Battle configuration
+    pub battle_config: Battle,
+    
+    /// Battle outcome
+    pub outcome: BattleOutcome,
+    
+    /// Battle history (only for finals/tracked battles)
+    pub history: Option<BattleHistory>,
+    
+    /// Proof data (placeholder for ZK proof)
+    pub proof_data: Vec<u8>,
+}
+
 /// Tournament state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tournament {
@@ -67,8 +101,8 @@ pub struct Tournament {
     /// Reveals received
     pub reveals: Vec<GliderReveal>,
     
-    /// Battles (one per pair)
-    pub battles: Vec<Battle>,
+    /// Matches executed
+    pub matches: Vec<TournamentMatch>,
     
     /// Winner
     pub winner: Option<PublicKey>,
@@ -84,7 +118,7 @@ impl Tournament {
             phase: TournamentPhase::Commit,
             commitments: Vec::new(),
             reveals: Vec::new(),
-            battles: Vec::new(),
+            matches: Vec::new(),
             winner: None,
         }
     }

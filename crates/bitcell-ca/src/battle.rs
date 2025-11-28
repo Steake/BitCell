@@ -820,8 +820,11 @@ mod tests {
         
         if hash_a < hash_b {
             assert_eq!(outcome, BattleOutcome::AWins);
-        } else {
+        } else if hash_a > hash_b {
             assert_eq!(outcome, BattleOutcome::BWins);
+        } else {
+            // If hashes are equal, lexicographic_break returns AWins
+            assert_eq!(outcome, BattleOutcome::AWins);
         }
     }
 }

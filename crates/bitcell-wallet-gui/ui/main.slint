@@ -1,0 +1,1098 @@
+// BitCell Wallet GUI - Main UI
+// Cross-platform native GUI using Slint
+// Targets: macOS, Linux, Windows
+// Features: 60fps smooth interactions, accessibility support
+
+import { Button, LineEdit, ComboBox, ScrollView, VerticalBox, HorizontalBox, GridBox, TabWidget, Palette, StyleMetrics } from "std-widgets.slint";
+
+// Custom color scheme for BitCell brand
+global Theme {
+    // Brand colors
+    in-out property <color> primary: #6366f1;
+    in-out property <color> primary-hover: #4f46e5;
+    in-out property <color> secondary: #10b981;
+    in-out property <color> accent: #f59e0b;
+    
+    // Background colors
+    in-out property <color> background: #0f172a;
+    in-out property <color> surface: #1e293b;
+    in-out property <color> surface-elevated: #334155;
+    
+    // Text colors
+    in-out property <color> text-primary: #f8fafc;
+    in-out property <color> text-secondary: #94a3b8;
+    in-out property <color> text-muted: #64748b;
+    
+    // Status colors
+    in-out property <color> success: #22c55e;
+    in-out property <color> warning: #eab308;
+    in-out property <color> error: #ef4444;
+    
+    // Spacing
+    in-out property <length> spacing-xs: 4px;
+    in-out property <length> spacing-sm: 8px;
+    in-out property <length> spacing-md: 16px;
+    in-out property <length> spacing-lg: 24px;
+    in-out property <length> spacing-xl: 32px;
+    
+    // Border radius
+    in-out property <length> radius-sm: 4px;
+    in-out property <length> radius-md: 8px;
+    in-out property <length> radius-lg: 12px;
+    in-out property <length> radius-xl: 16px;
+}
+
+// Wallet data model
+struct WalletAddress {
+    chain: string,
+    address: string,
+    balance: string,
+}
+
+struct TransactionItem {
+    tx-hash: string,
+    direction: string,
+    amount: string,
+    timestamp: string,
+    status: string,
+}
+
+// Global wallet state
+export global WalletState {
+    // Wallet info
+    in-out property <string> wallet-name: "BitCell Wallet";
+    in-out property <bool> wallet-locked: true;
+    in-out property <bool> wallet-exists: false;
+    
+    // Current view
+    in-out property <int> current-tab: 0;
+    
+    // Balances
+    in-out property <string> total-balance-usd: "$0.00";
+    in-out property <string> bitcell-balance: "0.00 CELL";
+    in-out property <string> bitcoin-balance: "0.00 BTC";
+    in-out property <string> ethereum-balance: "0.00 ETH";
+    
+    // Addresses
+    in-out property <[WalletAddress]> addresses: [];
+    
+    // Transactions
+    in-out property <[TransactionItem]> transactions: [];
+    
+    // Mnemonic display
+    in-out property <string> mnemonic-display: "";
+    in-out property <bool> show-mnemonic: false;
+    
+    // Input fields
+    in-out property <string> restore-mnemonic: "";
+    in-out property <string> restore-passphrase: "";
+    in-out property <string> send-to-address: "";
+    in-out property <string> send-amount: "";
+    in-out property <string> selected-chain: "BitCell";
+    
+    // Status
+    in-out property <string> status-message: "";
+    in-out property <bool> is-loading: false;
+    
+    // Callbacks for Rust backend
+    callback create-wallet();
+    callback restore-wallet(string, string);
+    callback lock-wallet();
+    callback unlock-wallet(string);
+    callback generate-address(string);
+    callback send-transaction(string, string, string);
+    callback refresh-balances();
+    callback copy-to-clipboard(string);
+}
+
+// Logo component
+component BitCellLogo inherits Rectangle {
+    width: 48px;
+    height: 48px;
+    border-radius: Theme.radius-lg;
+    background: Theme.primary;
+    
+    Text {
+        text: "₿C";
+        font-size: 20px;
+        font-weight: 700;
+        color: white;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// Primary button component
+component PrimaryButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked;
+    
+    height: 44px;
+    min-width: 120px;
+    border-radius: Theme.radius-md;
+    background: enabled ? (touch.has-hover ? Theme.primary-hover : Theme.primary) : Theme.surface-elevated;
+    
+    animate background { duration: 150ms; easing: ease-out; }
+    
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+    
+    Text {
+        text: root.text;
+        font-size: 14px;
+        font-weight: 600;
+        color: root.enabled ? white : Theme.text-muted;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// Secondary button component
+component SecondaryButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked;
+    
+    height: 44px;
+    min-width: 120px;
+    border-radius: Theme.radius-md;
+    border-width: 1px;
+    border-color: Theme.primary;
+    background: touch.has-hover ? Theme.surface-elevated : transparent;
+    
+    animate background { duration: 150ms; easing: ease-out; }
+    
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+    
+    Text {
+        text: root.text;
+        font-size: 14px;
+        font-weight: 600;
+        color: root.enabled ? Theme.primary : Theme.text-muted;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// Card component
+component Card inherits Rectangle {
+    in property <string> title: "";
+    
+    border-radius: Theme.radius-lg;
+    background: Theme.surface;
+    
+    VerticalLayout {
+        padding: Theme.spacing-lg;
+        spacing: Theme.spacing-md;
+        
+        if root.title != "" : Text {
+            text: root.title;
+            font-size: 18px;
+            font-weight: 600;
+            color: Theme.text-primary;
+        }
+        
+        @children
+    }
+}
+
+// Balance card component
+component BalanceCard inherits Rectangle {
+    in property <string> chain-name;
+    in property <string> balance;
+    in property <color> chain-color: Theme.primary;
+    
+    height: 80px;
+    border-radius: Theme.radius-lg;
+    background: Theme.surface;
+    
+    HorizontalLayout {
+        padding: Theme.spacing-md;
+        spacing: Theme.spacing-md;
+        alignment: start;
+        
+        Rectangle {
+            width: 48px;
+            height: 48px;
+            border-radius: Theme.radius-md;
+            background: root.chain-color;
+            
+            Text {
+                text: "•";
+                font-size: 24px;
+                font-weight: 700;
+                color: white;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.spacing-xs;
+            
+            Text {
+                text: root.chain-name;
+                font-size: 14px;
+                color: Theme.text-secondary;
+            }
+            
+            Text {
+                text: root.balance;
+                font-size: 18px;
+                font-weight: 600;
+                color: Theme.text-primary;
+            }
+        }
+    }
+}
+
+// Address row component
+component AddressRow inherits Rectangle {
+    in property <WalletAddress> addr;
+    
+    height: 60px;
+    border-radius: Theme.radius-md;
+    background: touch.has-hover ? Theme.surface-elevated : Theme.surface;
+    
+    animate background { duration: 100ms; }
+    
+    touch := TouchArea {
+        clicked => { WalletState.copy-to-clipboard(root.addr.address); }
+    }
+    
+    HorizontalLayout {
+        padding-left: Theme.spacing-md;
+        padding-right: Theme.spacing-md;
+        spacing: Theme.spacing-md;
+        alignment: space-between;
+        
+        HorizontalLayout {
+            spacing: Theme.spacing-md;
+            alignment: start;
+            
+            Text {
+                text: root.addr.chain;
+                font-size: 14px;
+                font-weight: 600;
+                color: Theme.primary;
+                vertical-alignment: center;
+            }
+            
+            Text {
+                text: root.addr.address;
+                font-size: 12px;
+                font-family: "monospace";
+                color: Theme.text-secondary;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+        
+        Text {
+            text: root.addr.balance;
+            font-size: 14px;
+            font-weight: 500;
+            color: Theme.text-primary;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Transaction row component
+component TransactionRow inherits Rectangle {
+    in property <TransactionItem> tx;
+    
+    height: 64px;
+    border-radius: Theme.radius-md;
+    background: touch.has-hover ? Theme.surface-elevated : Theme.surface;
+    
+    animate background { duration: 100ms; }
+    
+    touch := TouchArea {
+        clicked => { WalletState.copy-to-clipboard(root.tx.tx-hash); }
+    }
+    
+    HorizontalLayout {
+        padding-left: Theme.spacing-md;
+        padding-right: Theme.spacing-md;
+        spacing: Theme.spacing-md;
+        alignment: space-between;
+        
+        HorizontalLayout {
+            spacing: Theme.spacing-md;
+            alignment: start;
+            
+            Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: 16px;
+                background: root.tx.direction == "received" ? Theme.success : Theme.warning;
+                
+                Text {
+                    text: root.tx.direction == "received" ? "↓" : "↑";
+                    font-size: 16px;
+                    color: white;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                
+                Text {
+                    text: root.tx.direction == "received" ? "Received" : "Sent";
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: Theme.text-primary;
+                }
+                
+                Text {
+                    text: root.tx.timestamp;
+                    font-size: 12px;
+                    color: Theme.text-muted;
+                }
+            }
+        }
+        
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            
+            Text {
+                text: root.tx.amount;
+                font-size: 14px;
+                font-weight: 600;
+                color: root.tx.direction == "received" ? Theme.success : Theme.text-primary;
+                horizontal-alignment: right;
+            }
+            
+            Text {
+                text: root.tx.status;
+                font-size: 12px;
+                color: Theme.text-muted;
+                horizontal-alignment: right;
+            }
+        }
+    }
+}
+
+// Welcome/Setup view
+component WelcomeView inherits Rectangle {
+    background: Theme.background;
+    
+    VerticalLayout {
+        alignment: center;
+        spacing: Theme.spacing-xl;
+        padding: Theme.spacing-xl;
+        
+        // Logo and title
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.spacing-md;
+            
+            BitCellLogo {
+                width: 80px;
+                height: 80px;
+            }
+            
+            Text {
+                text: "BitCell Wallet";
+                font-size: 32px;
+                font-weight: 700;
+                color: Theme.text-primary;
+                horizontal-alignment: center;
+            }
+            
+            Text {
+                text: "Secure, cross-platform cryptocurrency wallet";
+                font-size: 16px;
+                color: Theme.text-secondary;
+                horizontal-alignment: center;
+            }
+        }
+        
+        // Action buttons
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.spacing-md;
+            
+            PrimaryButton {
+                text: "Create New Wallet";
+                width: 240px;
+                clicked => { WalletState.create-wallet(); }
+            }
+            
+            SecondaryButton {
+                text: "Restore Wallet";
+                width: 240px;
+                clicked => { WalletState.current-tab = 1; }
+            }
+        }
+        
+        // Version info
+        Text {
+            text: "v0.1.0 - Native • Secure • Open Source";
+            font-size: 12px;
+            color: Theme.text-muted;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// Restore wallet view
+component RestoreView inherits Rectangle {
+    background: Theme.background;
+    
+    VerticalLayout {
+        alignment: center;
+        spacing: Theme.spacing-lg;
+        padding: Theme.spacing-xl;
+        
+        Text {
+            text: "Restore Wallet";
+            font-size: 24px;
+            font-weight: 700;
+            color: Theme.text-primary;
+            horizontal-alignment: center;
+        }
+        
+        Text {
+            text: "Enter your 24-word recovery phrase";
+            font-size: 14px;
+            color: Theme.text-secondary;
+            horizontal-alignment: center;
+        }
+        
+        Card {
+            width: 480px;
+            
+            VerticalLayout {
+                spacing: Theme.spacing-md;
+                
+                Text {
+                    text: "Recovery Phrase";
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: Theme.text-secondary;
+                }
+                
+                LineEdit {
+                    placeholder-text: "Enter your 24-word mnemonic phrase...";
+                    text <=> WalletState.restore-mnemonic;
+                }
+                
+                Text {
+                    text: "Passphrase (optional)";
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: Theme.text-secondary;
+                }
+                
+                LineEdit {
+                    placeholder-text: "Enter passphrase if you used one...";
+                    text <=> WalletState.restore-passphrase;
+                    input-type: password;
+                }
+            }
+        }
+        
+        HorizontalLayout {
+            alignment: center;
+            spacing: Theme.spacing-md;
+            
+            SecondaryButton {
+                text: "Back";
+                clicked => { WalletState.current-tab = 0; }
+            }
+            
+            PrimaryButton {
+                text: "Restore";
+                clicked => { 
+                    WalletState.restore-wallet(
+                        WalletState.restore-mnemonic,
+                        WalletState.restore-passphrase
+                    );
+                }
+            }
+        }
+    }
+}
+
+// Mnemonic display view
+component MnemonicView inherits Rectangle {
+    background: Theme.background;
+    
+    VerticalLayout {
+        alignment: center;
+        spacing: Theme.spacing-lg;
+        padding: Theme.spacing-xl;
+        
+        Text {
+            text: "⚠️ Save Your Recovery Phrase";
+            font-size: 24px;
+            font-weight: 700;
+            color: Theme.warning;
+            horizontal-alignment: center;
+        }
+        
+        Text {
+            text: "Write down these 24 words and store them safely.\nAnyone with this phrase can access your funds.";
+            font-size: 14px;
+            color: Theme.text-secondary;
+            horizontal-alignment: center;
+        }
+        
+        Card {
+            width: 520px;
+            
+            Rectangle {
+                background: Theme.surface-elevated;
+                border-radius: Theme.radius-md;
+                
+                Text {
+                    text: WalletState.mnemonic-display;
+                    font-size: 14px;
+                    font-family: "monospace";
+                    color: Theme.text-primary;
+                    wrap: word-wrap;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                
+                height: 120px;
+            }
+        }
+        
+        HorizontalLayout {
+            alignment: center;
+            spacing: Theme.spacing-md;
+            
+            SecondaryButton {
+                text: "Copy to Clipboard";
+                clicked => { WalletState.copy-to-clipboard(WalletState.mnemonic-display); }
+            }
+            
+            PrimaryButton {
+                text: "I've Saved It";
+                clicked => { 
+                    WalletState.show-mnemonic = false;
+                    WalletState.current-tab = 3;
+                }
+            }
+        }
+    }
+}
+
+// Main dashboard view
+component DashboardView inherits Rectangle {
+    background: Theme.background;
+    
+    VerticalLayout {
+        padding: Theme.spacing-lg;
+        spacing: Theme.spacing-lg;
+        
+        // Header
+        HorizontalLayout {
+            alignment: space-between;
+            
+            HorizontalLayout {
+                spacing: Theme.spacing-md;
+                
+                BitCellLogo { }
+                
+                VerticalLayout {
+                    alignment: center;
+                    
+                    Text {
+                        text: WalletState.wallet-name;
+                        font-size: 20px;
+                        font-weight: 600;
+                        color: Theme.text-primary;
+                    }
+                    
+                    Text {
+                        text: WalletState.wallet-locked ? "🔒 Locked" : "🔓 Unlocked";
+                        font-size: 12px;
+                        color: Theme.text-secondary;
+                    }
+                }
+            }
+            
+            HorizontalLayout {
+                spacing: Theme.spacing-sm;
+                
+                SecondaryButton {
+                    text: "Refresh";
+                    width: 100px;
+                    clicked => { WalletState.refresh-balances(); }
+                }
+                
+                SecondaryButton {
+                    text: WalletState.wallet-locked ? "Unlock" : "Lock";
+                    width: 100px;
+                    clicked => { 
+                        if WalletState.wallet-locked {
+                            WalletState.current-tab = 5;
+                        } else {
+                            WalletState.lock-wallet();
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Total balance
+        Card {
+            VerticalLayout {
+                spacing: Theme.spacing-sm;
+                
+                Text {
+                    text: "Total Balance";
+                    font-size: 14px;
+                    color: Theme.text-secondary;
+                }
+                
+                Text {
+                    text: WalletState.total-balance-usd;
+                    font-size: 36px;
+                    font-weight: 700;
+                    color: Theme.text-primary;
+                }
+            }
+        }
+        
+        // Balance cards
+        HorizontalLayout {
+            spacing: Theme.spacing-md;
+            
+            BalanceCard {
+                horizontal-stretch: 1;
+                chain-name: "BitCell";
+                balance: WalletState.bitcell-balance;
+                chain-color: Theme.primary;
+            }
+            
+            BalanceCard {
+                horizontal-stretch: 1;
+                chain-name: "Bitcoin";
+                balance: WalletState.bitcoin-balance;
+                chain-color: #f7931a;
+            }
+            
+            BalanceCard {
+                horizontal-stretch: 1;
+                chain-name: "Ethereum";
+                balance: WalletState.ethereum-balance;
+                chain-color: #627eea;
+            }
+        }
+        
+        // Quick actions
+        HorizontalLayout {
+            spacing: Theme.spacing-md;
+            
+            PrimaryButton {
+                text: "Send";
+                horizontal-stretch: 1;
+                clicked => { WalletState.current-tab = 4; }
+            }
+            
+            SecondaryButton {
+                text: "Receive";
+                horizontal-stretch: 1;
+                clicked => { WalletState.current-tab = 6; }
+            }
+            
+            SecondaryButton {
+                text: "History";
+                horizontal-stretch: 1;
+                clicked => { WalletState.current-tab = 7; }
+            }
+        }
+        
+        // Recent transactions
+        Card {
+            title: "Recent Activity";
+            vertical-stretch: 1;
+            
+            if WalletState.transactions.length == 0 : VerticalLayout {
+                alignment: center;
+                
+                Text {
+                    text: "No transactions yet";
+                    font-size: 14px;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                }
+            }
+            
+            if WalletState.transactions.length > 0 : ScrollView {
+                VerticalLayout {
+                    spacing: Theme.spacing-sm;
+                    
+                    for tx in WalletState.transactions : TransactionRow {
+                        tx: tx;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Send transaction view
+component SendView inherits Rectangle {
+    background: Theme.background;
+    
+    VerticalLayout {
+        alignment: center;
+        spacing: Theme.spacing-lg;
+        padding: Theme.spacing-xl;
+        
+        Text {
+            text: "Send Crypto";
+            font-size: 24px;
+            font-weight: 700;
+            color: Theme.text-primary;
+            horizontal-alignment: center;
+        }
+        
+        Card {
+            width: 480px;
+            
+            VerticalLayout {
+                spacing: Theme.spacing-md;
+                
+                Text {
+                    text: "Chain";
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: Theme.text-secondary;
+                }
+                
+                ComboBox {
+                    model: ["BitCell", "Bitcoin", "Ethereum"];
+                    current-value <=> WalletState.selected-chain;
+                }
+                
+                Text {
+                    text: "Recipient Address";
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: Theme.text-secondary;
+                }
+                
+                LineEdit {
+                    placeholder-text: "Enter recipient address...";
+                    text <=> WalletState.send-to-address;
+                }
+                
+                Text {
+                    text: "Amount";
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: Theme.text-secondary;
+                }
+                
+                LineEdit {
+                    placeholder-text: "0.00";
+                    text <=> WalletState.send-amount;
+                    input-type: decimal;
+                }
+            }
+        }
+        
+        HorizontalLayout {
+            alignment: center;
+            spacing: Theme.spacing-md;
+            
+            SecondaryButton {
+                text: "Cancel";
+                clicked => { WalletState.current-tab = 3; }
+            }
+            
+            PrimaryButton {
+                text: "Send";
+                enabled: !WalletState.wallet-locked;
+                clicked => { 
+                    WalletState.send-transaction(
+                        WalletState.send-to-address,
+                        WalletState.send-amount,
+                        WalletState.selected-chain
+                    );
+                }
+            }
+        }
+        
+        if WalletState.wallet-locked : Text {
+            text: "⚠️ Unlock wallet to send transactions";
+            font-size: 14px;
+            color: Theme.warning;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// Unlock wallet view
+component UnlockView inherits Rectangle {
+    in-out property <string> passphrase: "";
+    
+    background: Theme.background;
+    
+    VerticalLayout {
+        alignment: center;
+        spacing: Theme.spacing-lg;
+        padding: Theme.spacing-xl;
+        
+        BitCellLogo {
+            width: 64px;
+            height: 64px;
+        }
+        
+        Text {
+            text: "Unlock Wallet";
+            font-size: 24px;
+            font-weight: 700;
+            color: Theme.text-primary;
+            horizontal-alignment: center;
+        }
+        
+        Card {
+            width: 400px;
+            
+            VerticalLayout {
+                spacing: Theme.spacing-md;
+                
+                Text {
+                    text: "Enter your passphrase";
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: Theme.text-secondary;
+                }
+                
+                LineEdit {
+                    placeholder-text: "Passphrase...";
+                    text <=> root.passphrase;
+                    input-type: password;
+                }
+            }
+        }
+        
+        HorizontalLayout {
+            alignment: center;
+            spacing: Theme.spacing-md;
+            
+            SecondaryButton {
+                text: "Cancel";
+                clicked => { WalletState.current-tab = 3; }
+            }
+            
+            PrimaryButton {
+                text: "Unlock";
+                clicked => { WalletState.unlock-wallet(root.passphrase); }
+            }
+        }
+    }
+}
+
+// Receive/Addresses view
+component ReceiveView inherits Rectangle {
+    background: Theme.background;
+    
+    VerticalLayout {
+        padding: Theme.spacing-lg;
+        spacing: Theme.spacing-lg;
+        
+        HorizontalLayout {
+            alignment: space-between;
+            
+            Text {
+                text: "Receive";
+                font-size: 24px;
+                font-weight: 700;
+                color: Theme.text-primary;
+            }
+            
+            SecondaryButton {
+                text: "Back";
+                width: 80px;
+                clicked => { WalletState.current-tab = 3; }
+            }
+        }
+        
+        Card {
+            title: "Your Addresses";
+            vertical-stretch: 1;
+            
+            VerticalLayout {
+                spacing: Theme.spacing-sm;
+                
+                HorizontalLayout {
+                    spacing: Theme.spacing-md;
+                    
+                    ComboBox {
+                        horizontal-stretch: 1;
+                        model: ["BitCell", "Bitcoin", "Ethereum"];
+                        current-value <=> WalletState.selected-chain;
+                    }
+                    
+                    PrimaryButton {
+                        text: "New Address";
+                        width: 120px;
+                        clicked => { WalletState.generate-address(WalletState.selected-chain); }
+                    }
+                }
+                
+                ScrollView {
+                    vertical-stretch: 1;
+                    
+                    VerticalLayout {
+                        spacing: Theme.spacing-sm;
+                        
+                        for addr in WalletState.addresses : AddressRow {
+                            addr: addr;
+                        }
+                    }
+                }
+            }
+        }
+        
+        Text {
+            text: "Click an address to copy it to clipboard";
+            font-size: 12px;
+            color: Theme.text-muted;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// Transaction history view
+component HistoryView inherits Rectangle {
+    background: Theme.background;
+    
+    VerticalLayout {
+        padding: Theme.spacing-lg;
+        spacing: Theme.spacing-lg;
+        
+        HorizontalLayout {
+            alignment: space-between;
+            
+            Text {
+                text: "Transaction History";
+                font-size: 24px;
+                font-weight: 700;
+                color: Theme.text-primary;
+            }
+            
+            HorizontalLayout {
+                spacing: Theme.spacing-sm;
+                
+                SecondaryButton {
+                    text: "Refresh";
+                    width: 80px;
+                    clicked => { WalletState.refresh-balances(); }
+                }
+                
+                SecondaryButton {
+                    text: "Back";
+                    width: 80px;
+                    clicked => { WalletState.current-tab = 3; }
+                }
+            }
+        }
+        
+        Card {
+            vertical-stretch: 1;
+            
+            if WalletState.transactions.length == 0 : VerticalLayout {
+                alignment: center;
+                vertical-stretch: 1;
+                
+                Text {
+                    text: "No transactions yet";
+                    font-size: 16px;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                }
+                
+                Text {
+                    text: "Your transaction history will appear here";
+                    font-size: 14px;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                }
+            }
+            
+            if WalletState.transactions.length > 0 : ScrollView {
+                VerticalLayout {
+                    spacing: Theme.spacing-sm;
+                    
+                    for tx in WalletState.transactions : TransactionRow {
+                        tx: tx;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Main application window
+export component MainWindow inherits Window {
+    title: "BitCell Wallet";
+    icon: @image-url("");
+    min-width: 800px;
+    min-height: 600px;
+    preferred-width: 960px;
+    preferred-height: 720px;
+    background: Theme.background;
+    
+    // View router based on current tab
+    if WalletState.current-tab == 0 && !WalletState.wallet-exists : WelcomeView { }
+    if WalletState.current-tab == 1 : RestoreView { }
+    if WalletState.current-tab == 2 || WalletState.show-mnemonic : MnemonicView { }
+    if WalletState.current-tab == 3 && WalletState.wallet-exists : DashboardView { }
+    if WalletState.current-tab == 4 : SendView { }
+    if WalletState.current-tab == 5 : UnlockView { }
+    if WalletState.current-tab == 6 : ReceiveView { }
+    if WalletState.current-tab == 7 : HistoryView { }
+    
+    // Status bar
+    if WalletState.status-message != "" : Rectangle {
+        y: parent.height - 40px;
+        width: 100%;
+        height: 40px;
+        background: Theme.surface;
+        
+        Text {
+            text: WalletState.status-message;
+            font-size: 14px;
+            color: Theme.text-secondary;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    
+    // Loading overlay
+    if WalletState.is-loading : Rectangle {
+        background: #00000080;
+        
+        VerticalLayout {
+            alignment: center;
+            
+            Text {
+                text: "Loading...";
+                font-size: 18px;
+                color: white;
+                horizontal-alignment: center;
+            }
+        }
+    }
+}

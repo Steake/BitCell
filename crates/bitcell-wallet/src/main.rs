@@ -167,7 +167,7 @@ fn main() {
             println!("Note: Connect to a node to fetch actual balances.");
         }
         Commands::Version => {
-            println!("bitcell-wallet v0.1.0");
+            println!("bitcell-wallet v{}", env!("CARGO_PKG_VERSION"));
             println!("BitCell blockchain wallet");
         }
     }

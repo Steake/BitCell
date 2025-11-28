@@ -9,6 +9,14 @@ use bitcell_ca::{Glider, GliderPattern, Position};
 
 use rand::Rng;
 
+/// Derive a spawn position from a public key for varied positions
+fn derive_position_from_pubkey(pk: &PublicKey) -> Position {
+    let pk_bytes = pk.as_bytes();
+    let x = ((pk_bytes[0] as usize) * 4) % 512 + 50;
+    let y = ((pk_bytes[1] as usize) * 4) % 512 + 50;
+    Position::new(x, y)
+}
+
 /// Trait defining a miner's behavior in the simulation
 pub trait MinerAgent {
     /// Get the miner's public key
@@ -47,13 +55,8 @@ impl MinerAgent for HonestMiner {
     }
 
     fn generate_commitment(&mut self, height: u64) -> GliderCommitment {
-        // Derive position from public key for varied spawn positions
-        let pk = self.public_key();
-        let pk_bytes = pk.as_bytes();
-        let x = ((pk_bytes[0] as usize) * 4) % 512 + 50;
-        let y = ((pk_bytes[1] as usize) * 4) % 512 + 50;
-        
-        let glider = Glider::new(GliderPattern::Standard, Position::new(x, y));
+        let position = derive_position_from_pubkey(&self.public_key());
+        let glider = Glider::new(GliderPattern::Standard, position);
         let nonce = vec![0u8; 32]; // Simplified nonce
         
         // Store for reveal
@@ -105,14 +108,9 @@ impl MinerAgent for TieFarmer {
     }
 
     fn generate_commitment(&mut self, height: u64) -> GliderCommitment {
-        // Derive position from public key for varied spawn positions
-        let pk = self.public_key();
-        let pk_bytes = pk.as_bytes();
-        let x = ((pk_bytes[0] as usize) * 4) % 512 + 50;
-        let y = ((pk_bytes[1] as usize) * 4) % 512 + 50;
-        
+        let position = derive_position_from_pubkey(&self.public_key());
         // Tie farmer picks a symmetric pattern (e.g., Heavyweight)
-        let glider = Glider::new(GliderPattern::Heavyweight, Position::new(x, y));
+        let glider = Glider::new(GliderPattern::Heavyweight, position);
         self.current_glider = Some(glider);
         
         GliderCommitment {
@@ -156,15 +154,10 @@ impl MinerAgent for ChaosSpammer {
     }
 
     fn generate_commitment(&mut self, height: u64) -> GliderCommitment {
-        // Derive position from public key for varied spawn positions
-        let pk = self.public_key();
-        let pk_bytes = pk.as_bytes();
-        let x = ((pk_bytes[0] as usize) * 4) % 512 + 50;
-        let y = ((pk_bytes[1] as usize) * 4) % 512 + 50;
-        
+        let position = derive_position_from_pubkey(&self.public_key());
         // Chaos spammer uses a custom high-entropy pattern (simulated here with Heavyweight for now)
         // In a real scenario, this would be a random blob
-        let glider = Glider::new(GliderPattern::Heavyweight, Position::new(x, y));
+        let glider = Glider::new(GliderPattern::Heavyweight, position);
         self.current_glider = Some(glider);
         
         GliderCommitment {
@@ -210,13 +203,8 @@ impl MinerAgent for FlakyGriefer {
     }
 
     fn generate_commitment(&mut self, height: u64) -> GliderCommitment {
-        // Derive position from public key for varied spawn positions
-        let pk = self.public_key();
-        let pk_bytes = pk.as_bytes();
-        let x = ((pk_bytes[0] as usize) * 4) % 512 + 50;
-        let y = ((pk_bytes[1] as usize) * 4) % 512 + 50;
-        
-        let glider = Glider::new(GliderPattern::Standard, Position::new(x, y));
+        let position = derive_position_from_pubkey(&self.public_key());
+        let glider = Glider::new(GliderPattern::Standard, position);
         self.current_glider = Some(glider);
         
         GliderCommitment {

@@ -167,18 +167,13 @@ impl Battle {
 
     /// Calculate spawn position jitter from entropy seed
     /// Returns (x_offset, y_offset) in range [-10, 10]
-    #[cfg(test)]
-    pub fn calculate_spawn_jitter(&self, seed_offset: usize) -> (isize, isize) {
-        self.calculate_spawn_jitter_internal(seed_offset)
-    }
-    
-    #[cfg(not(test))]
-    fn calculate_spawn_jitter(&self, seed_offset: usize) -> (isize, isize) {
-        self.calculate_spawn_jitter_internal(seed_offset)
-    }
-    
-    fn calculate_spawn_jitter_internal(&self, seed_offset: usize) -> (isize, isize) {
+    pub(crate) fn calculate_spawn_jitter(&self, seed_offset: usize) -> (isize, isize) {
         if self.entropy_seed == [0u8; 32] {
+            return (0, 0);
+        }
+
+        // Ensure seed_offset + 7 is within bounds of 32-byte array
+        if seed_offset + 7 >= 32 {
             return (0, 0);
         }
 
@@ -314,17 +309,7 @@ impl Battle {
     }
 
     /// Calculate energy fluctuations from entropy (±5%)
-    #[cfg(test)]
-    pub fn calculate_energy_fluctuations(&self) -> (f64, f64) {
-        self.calculate_energy_fluctuations_internal()
-    }
-    
-    #[cfg(not(test))]
-    fn calculate_energy_fluctuations(&self) -> (f64, f64) {
-        self.calculate_energy_fluctuations_internal()
-    }
-    
-    fn calculate_energy_fluctuations_internal(&self) -> (f64, f64) {
+    pub(crate) fn calculate_energy_fluctuations(&self) -> (f64, f64) {
         let fluct_a_byte = self.entropy_seed[24];
         let fluct_b_byte = self.entropy_seed[25];
 
@@ -452,17 +437,7 @@ impl Battle {
     }
 
     /// Lexicographic tiebreaker using hash of glider + entropy seed
-    #[cfg(test)]
-    pub fn lexicographic_break(&self) -> BattleOutcome {
-        self.lexicographic_break_internal()
-    }
-    
-    #[cfg(not(test))]
-    fn lexicographic_break(&self) -> BattleOutcome {
-        self.lexicographic_break_internal()
-    }
-    
-    fn lexicographic_break_internal(&self) -> BattleOutcome {
+    pub(crate) fn lexicographic_break(&self) -> BattleOutcome {
         let hash_a = self.hash_glider(&self.glider_a);
         let hash_b = self.hash_glider(&self.glider_b);
         
@@ -477,17 +452,7 @@ impl Battle {
     }
 
     /// Simple FNV-1a hash for deterministic tiebreaking
-    #[cfg(test)]
-    pub fn hash_glider(&self, glider: &Glider) -> u64 {
-        self.hash_glider_internal(glider)
-    }
-    
-    #[cfg(not(test))]
-    fn hash_glider(&self, glider: &Glider) -> u64 {
-        self.hash_glider_internal(glider)
-    }
-    
-    fn hash_glider_internal(&self, glider: &Glider) -> u64 {
+    pub(crate) fn hash_glider(&self, glider: &Glider) -> u64 {
         let mut hash = 0xcbf29ce484222325; // FNV offset basis
         
         // Mix in entropy seed

@@ -147,6 +147,14 @@ pub async fn get_block(
         ));
     }
 
+    // Handle edge case of height == 0 to prevent underflow
+    if height == 0 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json("Invalid block height: cannot be 0".to_string()),
+        ));
+    }
+
     Ok(Json(BlockDetailResponse {
         height,
         hash: format!("0x{:016x}", height * 12345),

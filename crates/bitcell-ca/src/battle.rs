@@ -167,8 +167,13 @@ impl Battle {
 
     /// Calculate spawn position jitter from entropy seed
     /// Returns (x_offset, y_offset) in range [-10, 10]
-    fn calculate_spawn_jitter(&self, seed_offset: usize) -> (isize, isize) {
+    pub(crate) fn calculate_spawn_jitter(&self, seed_offset: usize) -> (isize, isize) {
         if self.entropy_seed == [0u8; 32] {
+            return (0, 0);
+        }
+
+        // Ensure seed_offset + 7 is within bounds of 32-byte array
+        if seed_offset + 7 >= 32 {
             return (0, 0);
         }
 
@@ -186,12 +191,13 @@ impl Battle {
             self.entropy_seed[seed_offset + 7],
         ];
 
-        let x_val = i32::from_le_bytes(x_bytes);
-        let y_val = i32::from_le_bytes(y_bytes);
+        // Use u32 to avoid negative modulo issues
+        let x_val = u32::from_le_bytes(x_bytes);
+        let y_val = u32::from_le_bytes(y_bytes);
 
-        // Map to [-10, 10] range
-        let x_jitter = (x_val % 21 - 10) as isize;
-        let y_jitter = (y_val % 21 - 10) as isize;
+        // Map to [-10, 10] range: (x % 21) gives 0-20, subtract 10 gives -10 to 10
+        let x_jitter = (x_val % 21) as isize - 10;
+        let y_jitter = (y_val % 21) as isize - 10;
 
         (x_jitter, y_jitter)
     }
@@ -227,7 +233,12 @@ impl Battle {
             // Random energy from entropy
             let energy = (self.entropy_seed[(seed_idx + 20) % 32] % 100) + 1;
             
-            grid.set(Position::new(x, y), Cell::alive(energy));
+            // Skip positions that already have live cells (gliders)
+            let pos = Position::new(x, y);
+            if grid.get(pos).is_alive() {
+                continue;
+            }
+            grid.set(pos, Cell::alive(energy));
         }
     }
 
@@ -298,7 +309,7 @@ impl Battle {
     }
 
     /// Calculate energy fluctuations from entropy (±5%)
-    fn calculate_energy_fluctuations(&self) -> (f64, f64) {
+    pub(crate) fn calculate_energy_fluctuations(&self) -> (f64, f64) {
         let fluct_a_byte = self.entropy_seed[24];
         let fluct_b_byte = self.entropy_seed[25];
 
@@ -426,19 +437,22 @@ impl Battle {
     }
 
     /// Lexicographic tiebreaker using hash of glider + entropy seed
-    fn lexicographic_break(&self) -> BattleOutcome {
+    pub(crate) fn lexicographic_break(&self) -> BattleOutcome {
         let hash_a = self.hash_glider(&self.glider_a);
         let hash_b = self.hash_glider(&self.glider_b);
         
         if hash_a < hash_b {
             BattleOutcome::AWins
-        } else {
+        } else if hash_a > hash_b {
             BattleOutcome::BWins
+        } else {
+            // Hashes equal - should never happen with proper entropy, but handle gracefully
+            BattleOutcome::AWins
         }
     }
 
     /// Simple FNV-1a hash for deterministic tiebreaking
-    fn hash_glider(&self, glider: &Glider) -> u64 {
+    pub(crate) fn hash_glider(&self, glider: &Glider) -> u64 {
         let mut hash = 0xcbf29ce484222325; // FNV offset basis
         
         // Mix in entropy seed
@@ -452,6 +466,12 @@ impl Battle {
             hash ^= byte as u64;
             hash = hash.wrapping_mul(0x100000001b3);
         }
+        
+        // Mix in glider position
+        hash ^= glider.position.x as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+        hash ^= glider.position.y as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
         
         hash
     }
@@ -656,10 +676,155 @@ mod tests {
         assert!(ted_a >= 0.0);
         assert!(ted_b >= 0.0);
         
-        // Outcome should be valid
+        // Outcome should never be Tie with MII+ tiebreaker system fully implemented
         assert!(matches!(
             outcome,
-            BattleOutcome::AWins | BattleOutcome::BWins | BattleOutcome::Tie
+            BattleOutcome::AWins | BattleOutcome::BWins
         ));
+    }
+
+    #[test]
+    fn test_spawn_jitter_range() {
+        // Test that spawn jitter stays within [-10, 10] range
+        let glider_a = Glider::new(GliderPattern::Standard, SPAWN_A);
+        let glider_b = Glider::new(GliderPattern::Standard, SPAWN_B);
+        
+        // Test with various entropy seeds
+        for seed_byte in [0u8, 1, 127, 255] {
+            let entropy_seed = [seed_byte; 32];
+            let battle = Battle::with_entropy(glider_a.clone(), glider_b.clone(), 10, entropy_seed);
+            
+            let (jitter_x, jitter_y) = battle.calculate_spawn_jitter(0);
+            assert!(jitter_x >= -10 && jitter_x <= 10, "X jitter out of range: {}", jitter_x);
+            assert!(jitter_y >= -10 && jitter_y <= 10, "Y jitter out of range: {}", jitter_y);
+        }
+    }
+
+    #[test]
+    fn test_spawn_jitter_determinism() {
+        // Test that same entropy seed produces same jitter
+        let glider_a = Glider::new(GliderPattern::Standard, SPAWN_A);
+        let glider_b = Glider::new(GliderPattern::Standard, SPAWN_B);
+        let entropy_seed = [42u8; 32];
+        
+        let battle1 = Battle::with_entropy(glider_a.clone(), glider_b.clone(), 10, entropy_seed);
+        let battle2 = Battle::with_entropy(glider_a, glider_b, 10, entropy_seed);
+        
+        assert_eq!(battle1.calculate_spawn_jitter(0), battle2.calculate_spawn_jitter(0));
+        assert_eq!(battle1.calculate_spawn_jitter(8), battle2.calculate_spawn_jitter(8));
+    }
+
+    #[test]
+    fn test_energy_fluctuations_range() {
+        // Test that energy fluctuations stay within [0.95, 1.05] range
+        let glider_a = Glider::new(GliderPattern::Standard, SPAWN_A);
+        let glider_b = Glider::new(GliderPattern::Standard, SPAWN_B);
+        
+        for seed_byte in [0u8, 1, 127, 255] {
+            let entropy_seed = [seed_byte; 32];
+            let battle = Battle::with_entropy(glider_a.clone(), glider_b.clone(), 10, entropy_seed);
+            
+            let (fluct_a, fluct_b) = battle.calculate_energy_fluctuations();
+            assert!(fluct_a >= 0.95 && fluct_a <= 1.05, "Fluctuation A out of range: {}", fluct_a);
+            assert!(fluct_b >= 0.95 && fluct_b <= 1.05, "Fluctuation B out of range: {}", fluct_b);
+        }
+    }
+
+    #[test]
+    fn test_noise_skips_existing_cells() {
+        // Test that noise doesn't overwrite existing glider cells
+        let glider_a = Glider::with_energy(GliderPattern::Standard, SPAWN_A, 200);
+        let glider_b = Glider::with_energy(GliderPattern::Standard, SPAWN_B, 200);
+        let entropy_seed = [1u8; 32];
+        
+        let battle = Battle::with_entropy(glider_a, glider_b, 10, entropy_seed);
+        let grid = battle.initial_grid();
+        
+        // Glider cells should still have their original high energy (200)
+        // Noise cells have energy between 1-100
+        // Check that high-energy cells exist (indicating gliders weren't overwritten)
+        let mut high_energy_count = 0;
+        for y in 0..1024 {
+            for x in 0..1024 {
+                let cell = grid.get(Position::new(x, y));
+                if cell.energy() >= 200 {
+                    high_energy_count += 1;
+                }
+            }
+        }
+        
+        // Both gliders should have their cells intact (each has 5 cells for Standard pattern)
+        assert!(high_energy_count >= 10, "Expected at least 10 high-energy cells, got {}", high_energy_count);
+    }
+
+    #[test]
+    fn test_lexicographic_tiebreaker_determinism() {
+        // Test that same gliders with same entropy produce same outcome
+        let glider_a = Glider::new(GliderPattern::Standard, SPAWN_A);
+        let glider_b = Glider::new(GliderPattern::Standard, SPAWN_B);
+        let entropy_seed = [42u8; 32];
+        
+        let battle1 = Battle::with_entropy(glider_a.clone(), glider_b.clone(), 10, entropy_seed);
+        let battle2 = Battle::with_entropy(glider_a, glider_b, 10, entropy_seed);
+        
+        let outcome1 = battle1.lexicographic_break();
+        let outcome2 = battle2.lexicographic_break();
+        
+        assert_eq!(outcome1, outcome2, "Same inputs should produce same lexicographic outcome");
+    }
+
+    #[test]
+    fn test_lexicographic_different_positions() {
+        // Test that gliders with same pattern but different positions produce different hashes
+        let glider_a1 = Glider::new(GliderPattern::Standard, Position::new(100, 100));
+        let glider_a2 = Glider::new(GliderPattern::Standard, Position::new(200, 200));
+        let glider_b = Glider::new(GliderPattern::Standard, SPAWN_B);
+        let entropy_seed = [42u8; 32];
+        
+        let battle1 = Battle::with_entropy(glider_a1, glider_b.clone(), 10, entropy_seed);
+        let battle2 = Battle::with_entropy(glider_a2, glider_b, 10, entropy_seed);
+        
+        let hash1 = battle1.hash_glider(&battle1.glider_a);
+        let hash2 = battle2.hash_glider(&battle2.glider_a);
+        
+        assert_ne!(hash1, hash2, "Same pattern at different positions should produce different hashes");
+    }
+
+    #[test]
+    fn test_lexicographic_different_entropy() {
+        // Test that same gliders with different entropy produce different hashes
+        let glider_a = Glider::new(GliderPattern::Standard, SPAWN_A);
+        let glider_b = Glider::new(GliderPattern::Standard, SPAWN_B);
+        
+        let battle1 = Battle::with_entropy(glider_a.clone(), glider_b.clone(), 10, [1u8; 32]);
+        let battle2 = Battle::with_entropy(glider_a, glider_b, 10, [2u8; 32]);
+        
+        let hash1 = battle1.hash_glider(&battle1.glider_a);
+        let hash2 = battle2.hash_glider(&battle2.glider_a);
+        
+        assert_ne!(hash1, hash2, "Different entropy seeds should produce different hashes");
+    }
+
+    #[test]
+    fn test_lexicographic_ordering() {
+        // Test that hash ordering is consistent
+        let glider_a = Glider::new(GliderPattern::Standard, SPAWN_A);
+        let glider_b = Glider::new(GliderPattern::Heavyweight, SPAWN_B);
+        let entropy_seed = [42u8; 32];
+        
+        let battle = Battle::with_entropy(glider_a, glider_b, 10, entropy_seed);
+        let hash_a = battle.hash_glider(&battle.glider_a);
+        let hash_b = battle.hash_glider(&battle.glider_b);
+        
+        let outcome = battle.lexicographic_break();
+        
+        if hash_a < hash_b {
+            assert_eq!(outcome, BattleOutcome::AWins);
+        } else if hash_a > hash_b {
+            assert_eq!(outcome, BattleOutcome::BWins);
+        } else {
+            // If hashes are equal, lexicographic_break returns AWins
+            assert_eq!(outcome, BattleOutcome::AWins);
+        }
     }
 }

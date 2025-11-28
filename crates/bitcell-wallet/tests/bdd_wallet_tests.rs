@@ -23,6 +23,7 @@ use bitcell_wallet::{
     wallet::WalletState,
 };
 use bitcell_crypto::SecretKey;
+use hex;
 use std::collections::HashMap;
 
 // =============================================================================

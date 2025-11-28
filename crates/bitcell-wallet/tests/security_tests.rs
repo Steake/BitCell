@@ -414,13 +414,15 @@ mod input_validation_security {
     #[test]
     fn scenario_invalid_mnemonic_rejection() {
         // Given: Various malformed mnemonic inputs
+        // Test cases include: empty input, too few words, wrong word count (13 instead of 12),
+        // non-BIP39 words, and wrong case (BIP39 words are lowercase)
         let invalid_inputs = vec![
             "", // Empty
             "a", // Single character
             "word1 word2", // Too few words
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon", // 13 words (invalid)
-            "not real bip39 words here at all these are invalid completely", // Invalid words
-            "ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABOUT", // Wrong case
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon", // 13 words (BIP39 requires 12, 15, 18, 21, or 24)
+            "not real bip39 words here at all these are invalid completely", // Invalid words (not in BIP39 wordlist)
+            "ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABOUT", // Wrong case (BIP39 requires lowercase)
         ];
 
         for input in invalid_inputs {

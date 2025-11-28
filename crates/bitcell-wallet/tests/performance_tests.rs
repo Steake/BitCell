@@ -14,6 +14,10 @@ use bitcell_wallet::{
 use bitcell_crypto::{SecretKey, Hash256};
 use std::time::{Duration, Instant};
 use std::env;
+use zeroize::Zeroize;
+
+/// Minimum confirmations required for a transaction to be considered "fully confirmed"
+const FULLY_CONFIRMED_THRESHOLD: u32 = 10;
 
 // =============================================================================
 // Performance Baseline Tests
@@ -347,7 +351,7 @@ mod memory_usage_tests {
             );
             if i < 500 {
                 record.confirm(i);
-                record.confirmations = 10; // Fully confirmed
+                record.confirmations = FULLY_CONFIRMED_THRESHOLD; // Fully confirmed
             }
             history.add(record);
         }
@@ -379,7 +383,6 @@ mod memory_usage_tests {
         // SeedBytes implements Zeroize trait
         // The actual zeroization happens on Drop, which we can't easily test
         // But we can verify the type has the trait
-        use zeroize::Zeroize;
         let mut seed2 = mnemonic.to_seed("test2");
         seed2.zeroize();
         

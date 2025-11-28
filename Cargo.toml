@@ -13,6 +13,7 @@ members = [
     "crates/bitcell-admin",
     "crates/bitcell-simulation",
     "crates/bitcell-wallet",
+    "crates/bitcell-wallet-gui",
 ]
 resolver = "2"
 

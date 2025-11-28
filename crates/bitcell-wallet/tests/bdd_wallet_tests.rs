@@ -48,7 +48,7 @@ mod wallet_creation_tests {
 
         // Then: A valid 24-word mnemonic should be generated
         assert_eq!(mnemonic.word_count(), 24);
-        assert!(Mnemonic::validate(mnemonic.phrase()));
+        assert!(Mnemonic::validate(&mnemonic.phrase()));
 
         // And: The wallet should be in unlocked state
         assert!(wallet.is_unlocked());
@@ -187,7 +187,7 @@ mod seed_phrase_tests {
 
         // Then: It should contain exactly 12 valid BIP39 words
         assert_eq!(mnemonic.word_count(), 12);
-        assert!(Mnemonic::validate(mnemonic.phrase()));
+        assert!(Mnemonic::validate(&mnemonic.phrase()));
         assert_eq!(mnemonic.words().len(), 12);
     }
 
@@ -203,7 +203,7 @@ mod seed_phrase_tests {
 
         // Then: It should contain exactly 18 valid BIP39 words
         assert_eq!(mnemonic.word_count(), 18);
-        assert!(Mnemonic::validate(mnemonic.phrase()));
+        assert!(Mnemonic::validate(&mnemonic.phrase()));
     }
 
     /// Scenario: Generating a 24-word mnemonic (default)
@@ -218,7 +218,7 @@ mod seed_phrase_tests {
 
         // Then: It should contain exactly 24 valid BIP39 words
         assert_eq!(mnemonic.word_count(), 24);
-        assert!(Mnemonic::validate(mnemonic.phrase()));
+        assert!(Mnemonic::validate(&mnemonic.phrase()));
         for word in mnemonic.words() {
             assert!(!word.is_empty());
         }
@@ -937,7 +937,7 @@ mod security_tests {
         
         // Then: Private key material should not be visible
         // The phrase should not appear in debug output
-        assert!(!debug_output.contains(mnemonic.phrase()));
+        assert!(!debug_output.contains(&mnemonic.phrase()));
         // Should show redacted format
         assert!(debug_output.contains("Mnemonic"));
     }

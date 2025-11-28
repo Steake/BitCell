@@ -4,7 +4,7 @@
 //! for wallet creation and recovery.
 
 use crate::{Error, Result};
-use bip39::{Language, Mnemonic as Bip39Mnemonic, MnemonicType, Seed};
+use bip39::{Language, Mnemonic as Bip39Mnemonic};
 use zeroize::Zeroize;
 
 /// Mnemonic word count options
@@ -20,11 +20,12 @@ pub enum WordCount {
 }
 
 impl WordCount {
-    fn to_mnemonic_type(self) -> MnemonicType {
+    /// Get the number of entropy bytes for this word count
+    fn entropy_bytes(self) -> usize {
         match self {
-            WordCount::Words12 => MnemonicType::Words12,
-            WordCount::Words18 => MnemonicType::Words18,
-            WordCount::Words24 => MnemonicType::Words24,
+            WordCount::Words12 => 16,  // 128 bits
+            WordCount::Words18 => 24,  // 192 bits
+            WordCount::Words24 => 32,  // 256 bits
         }
     }
 }
@@ -38,7 +39,19 @@ pub struct Mnemonic {
 impl Mnemonic {
     /// Generate a new random mnemonic with the specified word count
     pub fn generate(word_count: WordCount) -> Self {
-        let mnemonic = Bip39Mnemonic::new(word_count.to_mnemonic_type(), Language::English);
+        let entropy_size = word_count.entropy_bytes();
+        let mut entropy = vec![0u8; entropy_size];
+        
+        // Use rand to generate entropy
+        use rand::RngCore;
+        rand::thread_rng().fill_bytes(&mut entropy);
+        
+        let mnemonic = Bip39Mnemonic::from_entropy(&entropy)
+            .expect("Valid entropy size should always produce valid mnemonic");
+        
+        // Securely clear entropy
+        entropy.zeroize();
+        
         Self { inner: mnemonic }
     }
 
@@ -49,35 +62,37 @@ impl Mnemonic {
 
     /// Parse a mnemonic from a phrase string
     pub fn from_phrase(phrase: &str) -> Result<Self> {
-        let mnemonic = Bip39Mnemonic::from_phrase(phrase, Language::English)
+        let mnemonic = Bip39Mnemonic::parse_in_normalized(Language::English, phrase)
             .map_err(|e| Error::InvalidMnemonic(e.to_string()))?;
         Ok(Self { inner: mnemonic })
     }
 
     /// Get the mnemonic phrase as a string
-    pub fn phrase(&self) -> &str {
-        self.inner.phrase()
+    pub fn phrase(&self) -> String {
+        self.inner.to_string()
     }
 
     /// Get words as a vector
     pub fn words(&self) -> Vec<&str> {
-        self.inner.phrase().split_whitespace().collect()
+        self.inner.words().collect()
     }
 
     /// Get the number of words in the mnemonic
     pub fn word_count(&self) -> usize {
-        self.words().len()
+        self.inner.word_count()
     }
 
     /// Derive a seed from the mnemonic with optional passphrase
     pub fn to_seed(&self, passphrase: &str) -> SeedBytes {
-        let seed = Seed::new(&self.inner, passphrase);
-        SeedBytes::new(seed.as_bytes().try_into().expect("Seed should be 64 bytes"))
+        let seed = self.inner.to_seed(passphrase);
+        let seed_array: [u8; 64] = seed.try_into()
+            .expect("BIP39 seed should always be 64 bytes");
+        SeedBytes::new(seed_array)
     }
 
     /// Validate the mnemonic phrase
     pub fn validate(phrase: &str) -> bool {
-        Bip39Mnemonic::from_phrase(phrase, Language::English).is_ok()
+        Bip39Mnemonic::parse_in_normalized(Language::English, phrase).is_ok()
     }
 }
 
@@ -185,7 +200,7 @@ mod tests {
     #[test]
     fn test_mnemonic_validation() {
         let mnemonic = Mnemonic::new();
-        assert!(Mnemonic::validate(mnemonic.phrase()));
+        assert!(Mnemonic::validate(&mnemonic.phrase()));
         assert!(!Mnemonic::validate("invalid phrase here"));
     }
 

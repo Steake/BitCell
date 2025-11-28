@@ -24,12 +24,19 @@ pub enum Chain {
 
 impl Chain {
     /// Get the chain ID
+    /// 
+    /// Each chain has a unique identifier to prevent replay attacks across chains.
+    /// - BitCell: 8888 (custom chain ID)
+    /// - Bitcoin: 0 (Bitcoin doesn't use chain IDs traditionally)
+    /// - Bitcoin Testnet: 1
+    /// - Ethereum Mainnet: 1 (EIP-155)
+    /// - Ethereum Sepolia: 11155111
     pub fn chain_id(&self) -> u32 {
         match self {
-            Chain::BitCell => 1,
-            Chain::Bitcoin => 0,
-            Chain::BitcoinTestnet => 1,
-            Chain::Ethereum => 1,
+            Chain::BitCell => 8888,      // Unique BitCell chain ID
+            Chain::Bitcoin => 0,          // Bitcoin mainnet
+            Chain::BitcoinTestnet => 1,   // Bitcoin testnet
+            Chain::Ethereum => 1,         // Ethereum mainnet (EIP-155)
             Chain::EthereumSepolia => 11155111,
             Chain::Custom(id) => *id,
         }

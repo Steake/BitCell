@@ -21,7 +21,7 @@ rand_core.workspace = true
 hex.workspace = true
 
 # BIP39/BIP32 seed phrases
-tiny-bip39 = "1.0"
+bip39 = "2.0"
 hmac = "0.12"
 pbkdf2 = { version = "0.12", default-features = false }
 

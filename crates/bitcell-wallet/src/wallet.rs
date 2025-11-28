@@ -156,7 +156,13 @@ impl Wallet {
             
             for (chain, lookahead) in chains {
                 for i in 0..lookahead {
-                    let _ = wallet.generate_address(chain, i);
+                    if let Err(e) = wallet.generate_address(chain, i) {
+                        // Log warning but continue - address generation failure shouldn't
+                        // prevent wallet creation
+                        #[cfg(debug_assertions)]
+                        eprintln!("Warning: failed to generate address for chain {:?} at index {}: {}", chain, i, e);
+                        let _ = e; // Suppress unused warning in release
+                    }
                 }
             }
         }
@@ -407,13 +413,43 @@ impl Drop for Wallet {
 }
 
 /// Exportable wallet data
+/// 
+/// Contains wallet configuration and state that can be safely exported
+/// and imported. Does not contain sensitive key material.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletExport {
-    pub config: WalletConfig,
-    pub addresses: AddressManager,
-    pub balances: BalanceTracker,
-    pub history: TransactionHistory,
-    pub nonces: HashMap<String, u64>,
+    config: WalletConfig,
+    addresses: AddressManager,
+    balances: BalanceTracker,
+    history: TransactionHistory,
+    nonces: HashMap<String, u64>,
+}
+
+impl WalletExport {
+    /// Get the wallet configuration
+    pub fn config(&self) -> &WalletConfig {
+        &self.config
+    }
+    
+    /// Get the address manager
+    pub fn addresses(&self) -> &AddressManager {
+        &self.addresses
+    }
+    
+    /// Get the balance tracker
+    pub fn balances(&self) -> &BalanceTracker {
+        &self.balances
+    }
+    
+    /// Get the transaction history
+    pub fn history(&self) -> &TransactionHistory {
+        &self.history
+    }
+    
+    /// Get the nonces map
+    pub fn nonces(&self) -> &HashMap<String, u64> {
+        &self.nonces
+    }
 }
 
 #[cfg(test)]

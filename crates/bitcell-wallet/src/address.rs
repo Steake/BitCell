@@ -45,9 +45,10 @@ impl Address {
     }
 
     /// Generate a BitCell address from a public key
+    /// 
+    /// Uses double SHA256 and takes the first 20 bytes as the address.
+    /// This is a simplified scheme for BitCell's native addresses.
     pub fn from_public_key_bitcell(public_key: &PublicKey, index: u32) -> Self {
-        // BitCell address = RIPEMD160(SHA256(compressed_pubkey))
-        // For simplicity, we use SHA256 twice (similar to Bitcoin but simplified)
         let pubkey_bytes = public_key.as_bytes();
         let hash1 = Sha256::digest(pubkey_bytes);
         let hash2 = Sha256::digest(hash1);
@@ -58,10 +59,15 @@ impl Address {
     }
 
     /// Generate a Bitcoin P2PKH address from a public key
+    /// 
+    /// Note: This is a simplified implementation using double SHA256.
+    /// For full Bitcoin compatibility, use RIPEMD160(SHA256(pubkey)).
+    /// Addresses generated here are for internal use and may not be
+    /// compatible with external Bitcoin wallets.
     pub fn from_public_key_bitcoin(public_key: &PublicKey, testnet: bool, index: u32) -> Self {
         let pubkey_bytes = public_key.as_bytes();
-        // Bitcoin address = RIPEMD160(SHA256(compressed_pubkey))
         // Simplified: using double SHA256 and taking 20 bytes
+        // For full compatibility, implement RIPEMD160(SHA256(pubkey))
         let hash1 = Sha256::digest(pubkey_bytes);
         let hash2 = Sha256::digest(hash1);
         let address_bytes = hash2[..20].to_vec();
@@ -71,10 +77,16 @@ impl Address {
     }
 
     /// Generate an Ethereum address from a public key
+    /// 
+    /// Note: This is a simplified implementation using SHA256.
+    /// For full Ethereum compatibility, use Keccak256 on the uncompressed
+    /// public key (excluding the 0x04 prefix) and take the last 20 bytes.
+    /// Addresses generated here are for internal use and may not be
+    /// compatible with external Ethereum wallets.
     pub fn from_public_key_ethereum(public_key: &PublicKey, testnet: bool, index: u32) -> Self {
-        // Ethereum address = last 20 bytes of Keccak256(uncompressed_pubkey[1:])
-        // Simplified: using SHA256 for demonstration
         let pubkey_bytes = public_key.as_bytes();
+        // Simplified: using SHA256 instead of Keccak256
+        // For full compatibility, implement Keccak256(uncompressed_pubkey[1:])
         let hash = Sha256::digest(pubkey_bytes);
         let address_bytes = hash[12..].to_vec(); // Last 20 bytes
         

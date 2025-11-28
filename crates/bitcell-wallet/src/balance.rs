@@ -54,15 +54,18 @@ impl Balance {
     }
 
     /// Format with fixed decimal places
+    /// 
+    /// Note: Uses u128 for intermediate calculations to prevent overflow
+    /// with large fractions (e.g., Ethereum's 18 decimals).
     pub fn format_fixed(&self, decimal_places: u8) -> String {
         let decimals = self.chain.decimals() as u32;
         let divisor = 10u64.pow(decimals);
         let whole = self.amount / divisor;
         let fraction = self.amount % divisor;
         
-        // Scale fraction to desired decimal places
+        // Scale fraction to desired decimal places using u128 to prevent overflow
         let scale = 10u64.pow(decimal_places as u32);
-        let scaled_fraction = (fraction * scale) / divisor;
+        let scaled_fraction = ((fraction as u128 * scale as u128) / divisor as u128) as u64;
         
         format!(
             "{}.{:0>width$} {}",
@@ -99,6 +102,10 @@ impl Balance {
     }
 
     /// Convert amount from one unit to smallest unit
+    /// 
+    /// Note: This conversion can lose precision for very large values or
+    /// values with many decimal places due to floating-point limitations.
+    /// For precise conversions, consider using a decimal arithmetic library.
     pub fn from_units(amount: f64, chain: Chain) -> Self {
         let decimals = chain.decimals() as u32;
         let multiplier = 10u64.pow(decimals);
@@ -127,6 +134,9 @@ impl std::fmt::Display for Balance {
 }
 
 /// Balance tracker for multiple addresses
+/// 
+/// Note: When deserializing, call `rebuild_totals()` to ensure
+/// the cached totals are correctly populated.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BalanceTracker {
     /// Balances by address string
@@ -143,6 +153,14 @@ impl BalanceTracker {
             balances: HashMap::new(),
             totals: HashMap::new(),
         }
+    }
+
+    /// Rebuild cached totals after deserialization
+    /// 
+    /// Call this method after deserializing a BalanceTracker to ensure
+    /// the totals cache is correctly populated.
+    pub fn rebuild_totals(&mut self) {
+        self.update_totals();
     }
 
     /// Set balance for an address

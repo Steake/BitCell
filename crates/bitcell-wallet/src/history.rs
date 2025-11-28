@@ -106,9 +106,15 @@ impl TransactionRecord {
     }
 
     /// Get a short version of the tx hash
+    /// 
+    /// Returns a truncated hash in the format "prefix...suffix".
+    /// Assumes the hash is an ASCII hex string.
     pub fn short_hash(&self) -> String {
-        if self.tx_hash.len() > 16 {
-            format!("{}...{}", &self.tx_hash[..8], &self.tx_hash[self.tx_hash.len()-8..])
+        let chars: Vec<char> = self.tx_hash.chars().collect();
+        if chars.len() > 16 {
+            let prefix: String = chars[..8].iter().collect();
+            let suffix: String = chars[chars.len()-8..].iter().collect();
+            format!("{}...{}", prefix, suffix)
         } else {
             self.tx_hash.clone()
         }
@@ -137,15 +143,76 @@ impl TransactionRecord {
     }
 
     /// Format date for display
+    /// 
+    /// Returns a human-readable date string in the format "YYYY-MM-DD HH:MM:SS UTC".
     pub fn format_date(&self) -> String {
-        // Simple date formatting (YYYY-MM-DD HH:MM)
-        use std::time::{Duration, UNIX_EPOCH};
-        let datetime = UNIX_EPOCH + Duration::from_secs(self.timestamp);
-        format!("{:?}", datetime) // Simplified; in production use chrono
+        // Convert Unix timestamp to date components
+        const SECONDS_PER_MINUTE: u64 = 60;
+        const SECONDS_PER_HOUR: u64 = 3600;
+        const SECONDS_PER_DAY: u64 = 86400;
+        
+        let mut remaining = self.timestamp;
+        
+        // Calculate days since epoch
+        let days = remaining / SECONDS_PER_DAY;
+        remaining %= SECONDS_PER_DAY;
+        
+        // Calculate time components
+        let hours = remaining / SECONDS_PER_HOUR;
+        remaining %= SECONDS_PER_HOUR;
+        let minutes = remaining / SECONDS_PER_MINUTE;
+        let seconds = remaining % SECONDS_PER_MINUTE;
+        
+        // Calculate year, month, day from days since epoch (1970-01-01)
+        let (year, month, day) = days_to_ymd(days);
+        
+        format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC", year, month, day, hours, minutes, seconds)
     }
 }
 
+/// Convert days since epoch to year, month, day
+fn days_to_ymd(days: u64) -> (u64, u64, u64) {
+    // Simplified calculation - handles dates from 1970 onwards
+    let mut remaining_days = days;
+    let mut year = 1970u64;
+    
+    loop {
+        let days_in_year = if is_leap_year(year) { 366 } else { 365 };
+        if remaining_days < days_in_year {
+            break;
+        }
+        remaining_days -= days_in_year;
+        year += 1;
+    }
+    
+    let days_in_months: [u64; 12] = if is_leap_year(year) {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+    
+    let mut month = 1u64;
+    for days_in_month in days_in_months.iter() {
+        if remaining_days < *days_in_month {
+            break;
+        }
+        remaining_days -= *days_in_month;
+        month += 1;
+    }
+    
+    let day = remaining_days + 1;
+    (year, month, day)
+}
+
+/// Check if a year is a leap year
+fn is_leap_year(year: u64) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+}
+
 /// Transaction history manager
+/// 
+/// Note: When deserializing, call `rebuild_index()` to ensure
+/// the hash index is correctly populated for lookups.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TransactionHistory {
     /// All transactions
@@ -161,6 +228,16 @@ impl TransactionHistory {
         Self {
             transactions: Vec::new(),
             hash_index: HashMap::new(),
+        }
+    }
+
+    /// Rebuild the hash index after deserialization
+    /// 
+    /// Call this method after deserializing a TransactionHistory to ensure
+    /// lookups via get() and get_mut() work correctly.
+    pub fn ensure_indexed(&mut self) {
+        if self.hash_index.is_empty() && !self.transactions.is_empty() {
+            self.rebuild_index();
         }
     }
 

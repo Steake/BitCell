@@ -219,6 +219,10 @@ impl TransactionBuilder {
     }
 
     /// Build the transaction
+    /// 
+    /// Note: A zero fee is allowed but may cause transactions to be rejected
+    /// or remain pending indefinitely on some chains. Consider using
+    /// FeeEstimator to calculate appropriate fees.
     pub fn build(self) -> Result<Transaction> {
         let from = self.from.ok_or(Error::TransactionError("Missing sender address".into()))?;
         let to = self.to.ok_or(Error::TransactionError("Missing recipient address".into()))?;
@@ -286,11 +290,17 @@ impl FeeEstimator {
     }
 
     /// Estimate fee for simple transfer
+    /// 
+    /// Note: These are placeholder values for demonstration purposes.
+    /// Real implementations should use dynamic fee estimation based on
+    /// network conditions (e.g., gas price oracles for Ethereum).
+    /// The Ethereum base fee of 20 Gwei may be outdated depending on
+    /// network congestion.
     pub fn estimate_simple_transfer(&self, chain: Chain) -> u64 {
         let base_fee: u64 = match chain {
             Chain::BitCell => 100,
             Chain::Bitcoin | Chain::BitcoinTestnet => 2000, // ~200 bytes * 10 sat/byte
-            Chain::Ethereum | Chain::EthereumSepolia => 21_000_u64 * 20_000_000_000_u64, // 21k gas * 20 Gwei
+            Chain::Ethereum | Chain::EthereumSepolia => 21_000_u64 * 20_000_000_000_u64, // 21k gas * 20 Gwei (placeholder)
             Chain::Custom(_) => 100,
         };
         

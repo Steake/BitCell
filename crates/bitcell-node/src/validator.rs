@@ -9,9 +9,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
 
-/// Block production interval (10 seconds for testing, TODO: make this 10 minutes in production)
-const BLOCK_TIME_SECS: u64 = 10;
-
 /// Max transactions per block
 const MAX_TXS_PER_BLOCK: usize = 1000;
 
@@ -167,9 +164,10 @@ impl ValidatorNode {
         let secret_key = self.secret_key.clone();
         let tournament_manager = self.tournament_manager.clone();
         let network = self.network.clone();
+        let block_time_secs = self.config.block_time_secs;
         
         tokio::spawn(async move {
-            let mut interval = time::interval(Duration::from_secs(BLOCK_TIME_SECS));
+            let mut interval = time::interval(Duration::from_secs(block_time_secs));
             let mut next_height = 1u64;
             
             loop {

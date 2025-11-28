@@ -12,6 +12,7 @@ members = [
     "crates/bitcell-node",
     "crates/bitcell-admin",
     "crates/bitcell-simulation",
+    "crates/bitcell-wallet",
 ]
 resolver = "2"
 
@@ -75,6 +76,7 @@ parking_lot = "0.12"
 rayon = "1.8"
 dashmap = "5.5"
 bytes = "1.5"
+zeroize = { version = "1.8", features = ["derive"] }
 
 [profile.release]
 opt-level = 3

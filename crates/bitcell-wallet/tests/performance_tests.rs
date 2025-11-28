@@ -350,7 +350,8 @@ mod memory_usage_tests {
                 1000000 + i,
             );
             if i < 500 {
-                record.confirm(i);
+                record.status = bitcell_wallet::transaction::TransactionStatus::Confirmed;
+                record.block_height = Some(i);
                 record.confirmations = FULLY_CONFIRMED_THRESHOLD; // Fully confirmed
             }
             history.add(record);
@@ -364,7 +365,7 @@ mod memory_usage_tests {
         // Then: Memory should be controlled
         // After pruning, should have fewer transactions
         println!("After pruning: {} transactions", history.count());
-        assert!(history.count() <= 1000, "Pruning should reduce count");
+        assert!(history.count() < 1000, "Pruning should reduce count from 1000");
     }
 
     /// Scenario: Seed and key material is zeroized on drop

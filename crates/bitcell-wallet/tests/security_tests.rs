@@ -430,13 +430,8 @@ mod input_validation_security {
             let result = Mnemonic::from_phrase(input);
 
             // Then: They should be rejected
-            if Mnemonic::validate(input) {
-                // If validation passes, parsing should work
-                assert!(result.is_ok());
-            } else {
-                // If validation fails, parsing should fail
-                assert!(result.is_err(), "Should reject invalid mnemonic: '{}'", input);
-            }
+            assert!(result.is_err(), "Should reject invalid mnemonic: '{}'", input);
+            assert!(!Mnemonic::validate(input), "Should fail validation: '{}'", input);
         }
     }
 

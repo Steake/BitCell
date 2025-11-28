@@ -1111,7 +1111,7 @@ mod security_tests {
         // Given: Various invalid mnemonic phrases
         let invalid_phrases = vec![
             "invalid words that are not bip39",
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about", // Valid but testing we can detect invalid
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon invalid", // Last word not in BIP39 wordlist, invalid checksum
             "one two three",
             "",
         ];
@@ -1120,11 +1120,9 @@ mod security_tests {
             // When: Parsing is attempted
             let result = Mnemonic::from_phrase(phrase);
 
-            // Then: It should be rejected for truly invalid phrases
-            // Note: Some phrases may be valid if they happen to match BIP39
-            if !Mnemonic::validate(phrase) {
-                assert!(result.is_err());
-            }
+            // Then: It should be rejected for all invalid phrases
+            assert!(result.is_err(), "Should reject invalid mnemonic: '{}'", phrase);
+            assert!(!Mnemonic::validate(phrase), "Should fail validation: '{}'", phrase);
         }
     }
 

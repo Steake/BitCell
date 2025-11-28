@@ -288,12 +288,6 @@ impl TournamentOrchestrator {
         let history_matches = matches.iter().filter(|m| m.battle_config.track_history).count();
         let avg_rounds = (matches.last().map(|m| m.round).unwrap_or(0) + 1) as f64;
         
-        // No need to explicitly drop matches as it's just a reference going out of scope
-        // But we need to ensure we don't use it after this point if we want to mutate self
-        // The borrow checker sees that we don't use `matches` after this point, so we can mutate `self`
-        // However, to be explicit and satisfy the compiler if it complains about overlapping borrows:
-        // We already calculated the metrics that needed `matches`.
-        
         // Apply evidence updates
         for (miner, evidence_type) in evidence_updates {
             self.record_evidence(miner, evidence_type);

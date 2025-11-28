@@ -47,8 +47,13 @@ impl MinerAgent for HonestMiner {
     }
 
     fn generate_commitment(&mut self, height: u64) -> GliderCommitment {
-        // Honest miner picks a standard glider
-        let glider = Glider::new(GliderPattern::Standard, Position::new(100, 100));
+        // Derive position from public key for varied spawn positions
+        let pk = self.public_key();
+        let pk_bytes = pk.as_bytes();
+        let x = ((pk_bytes[0] as usize) * 4) % 512 + 50;
+        let y = ((pk_bytes[1] as usize) * 4) % 512 + 50;
+        
+        let glider = Glider::new(GliderPattern::Standard, Position::new(x, y));
         let nonce = vec![0u8; 32]; // Simplified nonce
         
         // Store for reveal
@@ -100,8 +105,14 @@ impl MinerAgent for TieFarmer {
     }
 
     fn generate_commitment(&mut self, height: u64) -> GliderCommitment {
+        // Derive position from public key for varied spawn positions
+        let pk = self.public_key();
+        let pk_bytes = pk.as_bytes();
+        let x = ((pk_bytes[0] as usize) * 4) % 512 + 50;
+        let y = ((pk_bytes[1] as usize) * 4) % 512 + 50;
+        
         // Tie farmer picks a symmetric pattern (e.g., Heavyweight)
-        let glider = Glider::new(GliderPattern::Heavyweight, Position::new(100, 100));
+        let glider = Glider::new(GliderPattern::Heavyweight, Position::new(x, y));
         self.current_glider = Some(glider);
         
         GliderCommitment {
@@ -145,9 +156,15 @@ impl MinerAgent for ChaosSpammer {
     }
 
     fn generate_commitment(&mut self, height: u64) -> GliderCommitment {
+        // Derive position from public key for varied spawn positions
+        let pk = self.public_key();
+        let pk_bytes = pk.as_bytes();
+        let x = ((pk_bytes[0] as usize) * 4) % 512 + 50;
+        let y = ((pk_bytes[1] as usize) * 4) % 512 + 50;
+        
         // Chaos spammer uses a custom high-entropy pattern (simulated here with Heavyweight for now)
         // In a real scenario, this would be a random blob
-        let glider = Glider::new(GliderPattern::Heavyweight, Position::new(100, 100));
+        let glider = Glider::new(GliderPattern::Heavyweight, Position::new(x, y));
         self.current_glider = Some(glider);
         
         GliderCommitment {
@@ -193,7 +210,13 @@ impl MinerAgent for FlakyGriefer {
     }
 
     fn generate_commitment(&mut self, height: u64) -> GliderCommitment {
-        let glider = Glider::new(GliderPattern::Standard, Position::new(100, 100));
+        // Derive position from public key for varied spawn positions
+        let pk = self.public_key();
+        let pk_bytes = pk.as_bytes();
+        let x = ((pk_bytes[0] as usize) * 4) % 512 + 50;
+        let y = ((pk_bytes[1] as usize) * 4) % 512 + 50;
+        
+        let glider = Glider::new(GliderPattern::Standard, Position::new(x, y));
         self.current_glider = Some(glider);
         
         GliderCommitment {

@@ -67,6 +67,8 @@ This ensures fully deterministic resolution with no extra signalling channels.
 
 ## **4. Optional Mechanic: Deterministic Evolving Cell Phenotypes**
 
+> **Note:** This feature is deferred to a future PR. The implementation below describes the planned design.
+
 Add a phenotype field to each cell (2–4 bits). Mutation occurs when cell energy exceeds a threshold `theta`.
 
 Mutation rule:

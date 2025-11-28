@@ -156,12 +156,11 @@ impl Wallet {
             
             for (chain, lookahead) in chains {
                 for i in 0..lookahead {
-                    if let Err(e) = wallet.generate_address(chain, i) {
+                    if let Err(_e) = wallet.generate_address(chain, i) {
                         // Log warning but continue - address generation failure shouldn't
                         // prevent wallet creation
                         #[cfg(debug_assertions)]
-                        eprintln!("Warning: failed to generate address for chain {:?} at index {}: {}", chain, i, e);
-                        let _ = e; // Suppress unused warning in release
+                        eprintln!("Warning: failed to generate address for chain {:?} at index {}: {}", chain, i, _e);
                     }
                 }
             }

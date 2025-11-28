@@ -5,6 +5,7 @@
 
 use crate::{Error, Result};
 use bip39::{Language, Mnemonic as Bip39Mnemonic};
+use rand::RngCore;
 use zeroize::Zeroize;
 
 /// Mnemonic word count options
@@ -43,7 +44,6 @@ impl Mnemonic {
         let mut entropy = vec![0u8; entropy_size];
         
         // Use rand to generate entropy
-        use rand::RngCore;
         rand::thread_rng().fill_bytes(&mut entropy);
         
         let mnemonic = Bip39Mnemonic::from_entropy(&entropy)

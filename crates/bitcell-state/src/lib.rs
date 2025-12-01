@@ -28,6 +28,9 @@ pub enum Error {
     
     #[error("Invalid bond")]
     InvalidBond,
+    
+    #[error("Balance overflow")]
+    BalanceOverflow,
 }
 
 /// Global state manager
@@ -147,7 +150,7 @@ impl StateManager {
             .unwrap_or(Account { balance: 0, nonce: 0 });
         
         account.balance = account.balance.checked_add(amount)
-            .ok_or(Error::InsufficientBalance)?; // Reuse error type for overflow
+            .ok_or(Error::BalanceOverflow)?;
         
         tracing::debug!(
             "Credited account {:?} with {} units (new balance: {})",

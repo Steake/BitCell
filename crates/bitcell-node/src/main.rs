@@ -29,6 +29,10 @@ enum Commands {
         bootstrap: Option<String>,
         #[arg(long)]
         key_seed: Option<String>,
+        #[arg(long)]
+        key_file: Option<PathBuf>,
+        #[arg(long)]
+        private_key: Option<String>,
     },
     /// Run as miner
     Miner {
@@ -44,6 +48,10 @@ enum Commands {
         bootstrap: Option<String>,
         #[arg(long)]
         key_seed: Option<String>,
+        #[arg(long)]
+        key_file: Option<PathBuf>,
+        #[arg(long)]
+        private_key: Option<String>,
     },
     /// Run as full node
     FullNode {
@@ -59,6 +67,10 @@ enum Commands {
         bootstrap: Option<String>,
         #[arg(long)]
         key_seed: Option<String>,
+        #[arg(long)]
+        key_file: Option<PathBuf>,
+        #[arg(long)]
+        private_key: Option<String>,
     },
     /// Show version
     Version,
@@ -69,41 +81,86 @@ async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Validator { port, rpc_port: _, data_dir: _, enable_dht, bootstrap, key_seed } => {
+        Commands::Validator { port, rpc_port, data_dir: _, enable_dht, bootstrap, key_seed, key_file, private_key } => {
             println!("🌌 BitCell Validator Node");
             println!("=========================");
             
             let mut config = NodeConfig::default();
             config.network_port = port;
             config.enable_dht = enable_dht;
-            config.key_seed = key_seed;
+            config.key_seed = key_seed.clone();
             if let Some(bootstrap_node) = bootstrap {
                 config.bootstrap_nodes.push(bootstrap_node);
             }
-            // TODO: Use rpc_port and data_dir
+            // TODO: Use data_dir
             
-            let mut node = ValidatorNode::new(config);
+            // Resolve secret key
+            let secret_key = match bitcell_node::keys::resolve_secret_key(
+                private_key.as_deref(),
+                key_file.as_deref(),
+                None, // Mnemonic not yet supported in CLI args
+                key_seed.as_deref()
+            ) {
+                Ok(sk) => std::sync::Arc::new(sk),
+                Err(e) => {
+                    eprintln!("Error loading key: {}", e);
+                    std::process::exit(1);
+                }
+            };
             
-            // Start metrics server on port + 1 to avoid conflict with P2P port
-            let metrics_port = port + 1;
+            println!("Validator Public Key: {:?}", secret_key.public_key());
             
-            // We need to pass the metrics port to the node start
+            // Initialize node with explicit secret key
+            // Note: We need to modify ValidatorNode::new to accept an optional secret key or handle this differently
+            // For now, we'll modify ValidatorNode to take the key in config or constructor
+            // But since ValidatorNode::new takes config which has key_seed, we might need to update NodeConfig to hold the key
+            // or update ValidatorNode::new.
+            // Let's check ValidatorNode::new implementation again.
+            
+            // Actually, ValidatorNode::new derives key from config.key_seed. 
+            // We should modify ValidatorNode::new to take the secret key directly.
+            // Or we can modify NodeConfig to hold the secret key? No, NodeConfig is serializable.
+            
+            // Let's update ValidatorNode::new to take the secret key as an argument.
+            let mut node = ValidatorNode::with_key(config, secret_key);
+            
+            // Start metrics server on port + 2 to avoid conflict with P2P port (30333) and RPC port (30334)
+            let metrics_port = port + 2;
+            
+            // Start RPC server
+            let rpc_state = bitcell_node::rpc::RpcState {
+                blockchain: node.blockchain.clone(),
+                network: (*node.network).clone(),
+                tx_pool: node.tx_pool.clone(),
+                tournament_manager: Some(node.tournament_manager.clone()),
+                config: node.config.clone(),
+                node_type: "validator".to_string(),
+            };
+            
+            tokio::spawn(async move {
+                println!("RPC server listening on 0.0.0.0:{}", rpc_port);
+                if let Err(e) = bitcell_node::rpc::run_server(rpc_state, rpc_port).await {
+                    eprintln!("RPC server error: {}", e);
+                }
+            });
+
             if let Err(e) = node.start_with_metrics(metrics_port).await {
-                eprintln!("Error starting validator: {}", e);
+                eprintln!("Node error: {}", e);
                 std::process::exit(1);
             }
             
             println!("Validator ready on port {}", port);
             println!("Metrics available at http://localhost:{}/metrics", metrics_port);
+            println!("RPC server available at http://localhost:{}/rpc", rpc_port);
             println!("Press Ctrl+C to stop");
             
             // Keep running
             tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
             println!("\nShutting down...");
         }
-        Commands::Miner { port, rpc_port: _, data_dir: _, enable_dht, bootstrap, key_seed } => {
-            println!("🎮 BitCell Miner Node");
-            println!("=====================");
+        Commands::Miner { port, rpc_port, data_dir: _, enable_dht, bootstrap, key_seed, key_file, private_key } => {
+            println!("⛏️  BitCell Miner Node");
+            println!("======================");
             
             let mut config = NodeConfig::default();
             config.network_port = port;
@@ -113,47 +170,105 @@ async fn main() {
                 config.bootstrap_nodes.push(bootstrap_node);
             }
             
-            let sk = if let Some(seed) = key_seed {
-                println!("Generating key from seed: {}", seed);
-                let hash = bitcell_crypto::Hash256::hash(seed.as_bytes());
-                bitcell_crypto::SecretKey::from_bytes(hash.as_bytes()).expect("Invalid key seed")
-            } else {
-                SecretKey::generate()
+            // Resolve secret key
+            let secret_key = match bitcell_node::keys::resolve_secret_key(
+                private_key.as_deref(),
+                key_file.as_deref(),
+                None,
+                key_seed.as_deref()
+            ) {
+                Ok(sk) => std::sync::Arc::new(sk),
+                Err(e) => {
+                    eprintln!("Error loading key: {}", e);
+                    std::process::exit(1);
+                }
             };
-            println!("Public key: {:?}", sk.public_key());
             
-            let mut node = MinerNode::new(config, sk);
+            println!("Miner Public Key: {:?}", secret_key.public_key());
             
-            let metrics_port = port + 1;
+            let mut node = MinerNode::with_key(config, secret_key);
+            
+            let metrics_port = port + 2;
+
+            // Start RPC server
+            let rpc_state = bitcell_node::rpc::RpcState {
+                blockchain: node.blockchain.clone(),
+                network: (*node.network).clone(),
+                tx_pool: node.tx_pool.clone(),
+                tournament_manager: None, // Miner doesn't have tournament manager yet
+                config: node.config.clone(),
+                node_type: "miner".to_string(),
+            };
+            
+            tokio::spawn(async move {
+                println!("RPC server listening on 0.0.0.0:{}", rpc_port);
+                if let Err(e) = bitcell_node::rpc::run_server(rpc_state, rpc_port).await {
+                    eprintln!("RPC server error: {}", e);
+                }
+            });
 
             if let Err(e) = node.start_with_metrics(metrics_port).await {
-                eprintln!("Error starting miner: {}", e);
+                eprintln!("Node error: {}", e);
                 std::process::exit(1);
             }
             
             println!("Miner ready on port {}", port);
             println!("Metrics available at http://localhost:{}/metrics", metrics_port);
+            println!("RPC server available at http://localhost:{}/rpc", rpc_port);
             println!("Press Ctrl+C to stop");
             
             tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
             println!("\nShutting down...");
         }
-        Commands::FullNode { port, rpc_port: _, data_dir: _, enable_dht, bootstrap, key_seed } => {
+        Commands::FullNode { port, rpc_port, data_dir: _, enable_dht, bootstrap, key_seed, key_file, private_key } => {
             println!("🌍 BitCell Full Node");
             println!("====================");
             
             let mut config = NodeConfig::default();
             config.network_port = port;
             config.enable_dht = enable_dht;
-            config.key_seed = key_seed;
+            config.key_seed = key_seed.clone();
             if let Some(bootstrap_node) = bootstrap {
                 config.bootstrap_nodes.push(bootstrap_node);
             }
             
-            // Reuse ValidatorNode for now as FullNode logic is similar (just no voting)
-            let mut node = ValidatorNode::new(config);
+            // Resolve secret key
+            let secret_key = match bitcell_node::keys::resolve_secret_key(
+                private_key.as_deref(),
+                key_file.as_deref(),
+                None,
+                key_seed.as_deref()
+            ) {
+                Ok(sk) => std::sync::Arc::new(sk),
+                Err(e) => {
+                    eprintln!("Error loading key: {}", e);
+                    std::process::exit(1);
+                }
+            };
             
-            let metrics_port = port + 1;
+            println!("Full Node Public Key: {:?}", secret_key.public_key());
+
+            // Reuse ValidatorNode for now as FullNode logic is similar (just no voting)
+            let mut node = ValidatorNode::with_key(config, secret_key);
+            
+            let metrics_port = port + 2;
+
+            // Start RPC server
+            let rpc_state = bitcell_node::rpc::RpcState {
+                blockchain: node.blockchain.clone(),
+                network: (*node.network).clone(),
+                tx_pool: node.tx_pool.clone(),
+                tournament_manager: Some(node.tournament_manager.clone()),
+                config: node.config.clone(),
+                node_type: "full_node".to_string(),
+            };
+            
+            tokio::spawn(async move {
+                println!("RPC server listening on 0.0.0.0:{}", rpc_port);
+                if let Err(e) = bitcell_node::rpc::run_server(rpc_state, rpc_port).await {
+                    eprintln!("RPC server error: {}", e);
+                }
+            });
 
             if let Err(e) = node.start_with_metrics(metrics_port).await {
                 eprintln!("Error starting full node: {}", e);
@@ -162,6 +277,7 @@ async fn main() {
             
             println!("Full node ready on port {}", port);
             println!("Metrics available at http://localhost:{}/metrics", metrics_port);
+            println!("RPC server available at http://localhost:{}/rpc", rpc_port);
             println!("Press Ctrl+C to stop");
             
             tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");

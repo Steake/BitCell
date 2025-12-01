@@ -137,6 +137,19 @@ impl StateManager {
         self.recompute_root();
         Ok(self.state_root)
     }
+
+    /// Credit an account (minting/coinbase)
+    pub fn credit_account(&mut self, pubkey: [u8; 33], amount: u64) -> Hash256 {
+        let mut account = self.accounts.get(&pubkey)
+            .cloned()
+            .unwrap_or(Account { balance: 0, nonce: 0 });
+            
+        account.balance += amount;
+        self.accounts.insert(pubkey, account);
+        
+        self.recompute_root();
+        self.state_root
+    }
 }
 
 impl Default for StateManager {

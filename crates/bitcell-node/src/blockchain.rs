@@ -3,6 +3,7 @@
 use crate::{Result, MetricsRegistry};
 use bitcell_consensus::{Block, BlockHeader, Transaction, BattleProof};
 use bitcell_crypto::{Hash256, PublicKey, SecretKey};
+use bitcell_economics::{COIN, INITIAL_BLOCK_REWARD, HALVING_INTERVAL};
 use bitcell_state::StateManager;
 use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
@@ -92,6 +93,16 @@ impl Blockchain {
     /// Get block by height
     pub fn get_block(&self, height: u64) -> Option<Block> {
         self.blocks.read().unwrap().get(&height).cloned()
+    }
+    
+    /// Calculate block reward based on height (halves every HALVING_INTERVAL blocks)
+    pub fn calculate_block_reward(height: u64) -> u64 {
+        let halvings = height / HALVING_INTERVAL;
+        if halvings >= 64 {
+            // After 64 halvings, reward is effectively 0
+            return 0;
+        }
+        INITIAL_BLOCK_REWARD >> halvings
     }
     
     /// Produce a new block
@@ -192,6 +203,14 @@ impl Blockchain {
         // Apply transactions to state
         {
             let mut state = self.state.write().unwrap();
+            
+            // Apply block reward to proposer
+            let reward = Self::calculate_block_reward(block_height);
+            if reward > 0 {
+                state.credit_account(*block.header.proposer.as_bytes(), reward);
+                println!("Block reward credited: {} units to proposer", reward);
+            }
+            
             for tx in &block.transactions {
                 // Apply transaction and update state
                 match state.apply_transaction(
@@ -306,5 +325,25 @@ mod tests {
         
         assert_eq!(block.header.height, 1);
         assert_eq!(block.header.prev_hash, blockchain.latest_hash());
+    }
+    
+    #[test]
+    fn test_block_reward_halving() {
+        // Test initial reward
+        assert_eq!(Blockchain::calculate_block_reward(0), INITIAL_BLOCK_REWARD);
+        assert_eq!(Blockchain::calculate_block_reward(1), INITIAL_BLOCK_REWARD);
+        
+        // Test first halving at 210,000
+        assert_eq!(Blockchain::calculate_block_reward(HALVING_INTERVAL - 1), INITIAL_BLOCK_REWARD);
+        assert_eq!(Blockchain::calculate_block_reward(HALVING_INTERVAL), INITIAL_BLOCK_REWARD / 2);
+        
+        // Test second halving at 420,000
+        assert_eq!(Blockchain::calculate_block_reward(HALVING_INTERVAL * 2), INITIAL_BLOCK_REWARD / 4);
+        
+        // Test third halving at 630,000
+        assert_eq!(Blockchain::calculate_block_reward(HALVING_INTERVAL * 3), INITIAL_BLOCK_REWARD / 8);
+        
+        // Test reward becomes 0 after 64 halvings
+        assert_eq!(Blockchain::calculate_block_reward(HALVING_INTERVAL * 64), 0);
     }
 }

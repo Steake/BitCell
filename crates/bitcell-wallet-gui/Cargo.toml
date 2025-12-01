@@ -27,6 +27,19 @@ serde_json = "1.0"
 thiserror.workspace = true
 anyhow.workspace = true
 
+# Async runtime and HTTP client for RPC
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+reqwest = { version = "0.11", features = ["json"] }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# UI Extras
+qrcodegen = "1.8"
+image = { version = "0.24", default-features = false, features = ["png"] }
+slint-build = "1.9"
+
 [build-dependencies]
 slint-build = "1.9"
 

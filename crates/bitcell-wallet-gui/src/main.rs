@@ -10,10 +10,17 @@ use std::rc::Rc;
 
 slint::include_modules!();
 
+mod rpc_client;
+use rpc_client::RpcClient;
+
+mod qrcode;
+mod game_viz;
+
 /// Wallet application state
 struct AppState {
     wallet: Option<Wallet>,
     mnemonic: Option<Mnemonic>,
+    rpc_client: Option<RpcClient>,
 }
 
 impl AppState {
@@ -21,6 +28,7 @@ impl AppState {
         Self {
             wallet: None,
             mnemonic: None,
+            rpc_client: Some(RpcClient::new("127.0.0.1".to_string(), 30334)),
         }
     }
 }
@@ -46,7 +54,11 @@ fn chain_display_name(chain: Chain) -> &'static str {
     }
 }
 
-fn main() -> Result<(), slint::PlatformError> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize logging
+    tracing_subscriber::fmt::init();
+    
     // Create the main window
     let main_window = MainWindow::new()?;
     
@@ -64,8 +76,114 @@ fn main() -> Result<(), slint::PlatformError> {
     wallet_state.set_wallet_exists(false);
     wallet_state.set_wallet_locked(true);
     
+    // Create RPC client for polling
+    let rpc_client = state.borrow().rpc_client.clone().unwrap();
+    let main_window_weak = main_window.as_weak();
+    
+    // Start polling timer for RPC connection status
+    let timer = slint::Timer::default();
+    timer.start(slint::TimerMode::Repeated, std::time::Duration::from_secs(2), move || {
+        let client = rpc_client.clone();
+        let window_weak = main_window_weak.clone();
+        
+        tokio::spawn(async move {
+            let connected = client.get_node_info().await.is_ok();
+            
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(window) = window_weak.upgrade() {
+                    window.global::<WalletState>().set_rpc_connected(connected);
+                }
+            });
+        });
+    });
+    
+    // Start polling timer for tournament state
+    let rpc_client_tournament = state.borrow().rpc_client.clone().unwrap();
+    let tournament_window_weak = main_window.as_weak();
+    
+    let tournament_timer = slint::Timer::default();
+    tournament_timer.start(slint::TimerMode::Repeated, std::time::Duration::from_secs(2), move || {
+        let client = rpc_client_tournament.clone();
+        let window_weak = tournament_window_weak.clone();
+        
+        tokio::spawn(async move {
+            if let Ok(tournament_state) = client.get_tournament_state().await {
+                // Parse tournament state JSON
+                let phase = tournament_state
+                    .get("phase")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown")
+                    .to_string();
+                
+                let round = tournament_state
+                    .get("current_round")
+                    .and_then(|v| v.as_u64())
+                    .map(|r| r.to_string())
+                    .unwrap_or_else(|| "N/A".to_string());
+                
+                let winner = tournament_state
+                    .get("last_winner")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("None")
+                    .to_string();
+                
+                // Fetch battle replay if we have a winner
+                let current_block = tournament_state
+                    .get("current_round")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                
+                let mut grid_data = Vec::new();
+                let mut width = 0;
+                let mut height = 0;
+                let mut has_grid = false;
+                
+                if current_block > 0 {
+                    if let Ok(replay) = client.get_battle_replay(current_block).await {
+                        if let Some(grids) = replay.get("grid_states").and_then(|v| v.as_array()) {
+                            // Take the last frame for now
+                            if let Some(last_frame) = grids.last() {
+                                if let Some(rows) = last_frame.as_array() {
+                                    height = rows.len() as u32;
+                                    if height > 0 {
+                                        width = rows[0].as_array().map(|r| r.len()).unwrap_or(0) as u32;
+                                        
+                                        for row in rows {
+                                            if let Some(cells) = row.as_array() {
+                                                let row_vec: Vec<u8> = cells.iter()
+                                                    .map(|c| c.as_u64().unwrap_or(0) as u8)
+                                                    .collect();
+                                                grid_data.push(row_vec);
+                                            }
+                                        }
+                                        has_grid = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(window) = window_weak.upgrade() {
+                        let ws = window.global::<WalletState>();
+                        ws.set_tournament_phase(phase.into());
+                        ws.set_tournament_round(round.into());
+                        ws.set_last_winner(winner.into());
+                        
+                        if has_grid {
+                            let grid_image = crate::game_viz::render_grid(&grid_data, width, height);
+                            ws.set_game_grid(grid_image);
+                        }
+                    }
+                });
+            }
+        });
+    });
+    
     // Run the event loop
-    main_window.run()
+    main_window.run()?;
+    Ok(())
 }
 
 /// Setup all callback handlers for the UI
@@ -227,10 +345,16 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
             
             if let Some(ref mut wallet) = state.borrow_mut().wallet {
                 match wallet.next_address(chain) {
-                    Ok(_addr) => {
+                    Ok(addr) => {
+                        let addr_str = addr.to_string_formatted();
                         wallet_state.set_status_message(
                             format!("New {} address generated", chain_display_name(chain)).into()
                         );
+                        
+                        // Generate QR code
+                        let qr_image = qrcode::generate_qr_code(&addr_str);
+                        wallet_state.set_qr_code(qr_image);
+                        
                         update_addresses(&wallet_state, &state);
                     }
                     Err(e) => {
@@ -243,7 +367,7 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
     
     // Send transaction callback
     {
-        let _state = state.clone();
+        let state = state.clone();
         let window_weak = window.as_weak();
         
         wallet_state.on_send_transaction(move |to_address, amount, chain_str| {
@@ -262,34 +386,85 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                 return;
             }
             
-            // TODO: Implement actual transaction sending
-            // This is a placeholder that will be implemented when network integration is complete
-            // For now, show a message indicating the feature is not yet available
-            
-            wallet_state.set_status_message(
-                format!("Transaction prepared (offline): {} {} to {} - Connect to node to broadcast", 
-                    amount, chain_str, 
-                    if to_address.len() > 16 {
-                        format!("{}...", &to_address[..16])
-                    } else {
-                        to_address.to_string()
-                    }
-                ).into()
-            );
-            wallet_state.set_current_tab(3);
+            let app_state = state.borrow();
+            if let Some(rpc_client) = &app_state.rpc_client {
+                let client = rpc_client.clone();
+                let window_weak = window.as_weak();
+                let tx_data = format!("mock_tx:{}:{}:{}", to_address, amount, chain_str); // TODO: Build real tx
+                
+                wallet_state.set_is_loading(true);
+                
+                tokio::spawn(async move {
+                    let result = client.send_raw_transaction(&tx_data).await;
+                    
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(window) = window_weak.upgrade() {
+                            let wallet_state = window.global::<WalletState>();
+                            wallet_state.set_is_loading(false);
+                            match result {
+                                Ok(hash) => {
+                                    wallet_state.set_status_message(format!("Transaction sent! Hash: {}", hash).into());
+                                    wallet_state.set_current_tab(3);
+                                }
+                                Err(e) => {
+                                    wallet_state.set_status_message(format!("Error sending transaction: {}", e).into());
+                                }
+                            }
+                        }
+                    });
+                });
+            } else {
+                wallet_state.set_status_message("RPC client not initialized".into());
+            }
         });
     }
     
     // Refresh balances callback
     {
+        let state = state.clone();
         let window_weak = window.as_weak();
         
         wallet_state.on_refresh_balances(move || {
             let window = window_weak.unwrap();
             let wallet_state = window.global::<WalletState>();
             
-            // In a real implementation, this would fetch balances from nodes
-            wallet_state.set_status_message("Balances refreshed".into());
+            wallet_state.set_is_loading(true);
+            
+            let app_state = state.borrow();
+            if let Some(rpc_client) = &app_state.rpc_client {
+                let client = rpc_client.clone();
+                let window_weak = window.as_weak();
+                
+                // Get addresses to refresh
+                let addresses: Vec<String> = if let Some(ref wallet) = app_state.wallet {
+                    wallet.all_addresses().iter().map(|a| a.to_string_formatted()).collect()
+                } else {
+                    vec![]
+                };
+                
+                tokio::spawn(async move {
+                    // Fetch balances
+                    let mut updates = Vec::new();
+                    for addr in addresses {
+                        if let Ok(balance) = client.get_balance(&addr).await {
+                            updates.push((addr, balance));
+                        }
+                    }
+                    
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(window) = window_weak.upgrade() {
+                            let wallet_state = window.global::<WalletState>();
+                            wallet_state.set_is_loading(false);
+                            wallet_state.set_status_message(format!("Updated {} balances", updates.len()).into());
+                            // Note: Updating the actual model requires more complex logic to map back to the wallet
+                            // For now we just verify connectivity and data fetching works
+                        }
+                    });
+                });
+            } else {
+                wallet_state.set_is_loading(false);
+                wallet_state.set_status_message("RPC client not initialized".into());
+            }
         });
     }
     

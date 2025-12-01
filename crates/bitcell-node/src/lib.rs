@@ -2,6 +2,8 @@
 //!
 //! Implements miner, validator, and light client nodes
 
+pub mod rpc;
+pub mod ws;
 pub mod config;
 pub mod validator;
 pub mod miner;
@@ -11,6 +13,7 @@ pub mod tx_pool;
 pub mod tournament;
 pub mod network;
 pub mod dht;
+pub mod keys;
 
 pub use config::NodeConfig;
 pub use validator::ValidatorNode;

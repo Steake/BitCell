@@ -768,6 +768,45 @@ pub async fn index() -> impl IntoResponse {
             </div>
         </div>
 
+        <!-- Wallet Section -->
+        <div class="card" style="margin-top: 2rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="margin: 0;">💰 Wallet</h2>
+                <div style="display: flex; gap: 1rem;">
+                    <input type="text" id="wallet-address" placeholder="Enter Address (0x...)" style="padding: 0.5rem; background: rgba(0,0,0,0.5); border: 1px solid #00ffaa; color: #00ffaa; font-family: monospace;">
+                    <button class="btn" onclick="checkBalance()">Check Balance</button>
+                </div>
+            </div>
+            
+            <div class="grid" style="margin-top: 1rem;">
+                <div class="card" style="background: rgba(0, 255, 170, 0.05);">
+                    <h3>Balance</h3>
+                    <div class="metric">
+                        <span class="metric-label">Confirmed</span>
+                        <span class="metric-value" id="wallet-balance-confirmed">-</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Unconfirmed</span>
+                        <span class="metric-value" id="wallet-balance-unconfirmed">-</span>
+                    </div>
+                </div>
+                
+                <div class="card" style="background: rgba(0, 255, 170, 0.05);">
+                    <h3>Send Transaction</h3>
+                    <div class="form-group">
+                        <label>To Address</label>
+                        <input type="text" id="send-to" placeholder="0x...">
+                    </div>
+                    <div class="form-group">
+                        <label>Amount</label>
+                        <input type="number" id="send-amount" placeholder="0.0">
+                    </div>
+                    <button class="btn" onclick="sendTransaction()">Send</button>
+                    <div id="send-status" style="margin-top: 1rem; font-size: 0.8rem;"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- Deploy Dialog -->
         <div id="deploy-overlay" class="wizard-overlay">
             <div class="wizard-container" style="max-width: 500px;">

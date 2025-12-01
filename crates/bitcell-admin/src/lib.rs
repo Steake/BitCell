@@ -114,7 +114,6 @@ impl AdminConsole {
 
             .route("/api/blocks", get(api::blocks::list_blocks))
             .route("/api/blocks/:height", get(api::blocks::get_block))
-            .route("/api/blocks/:height", get(api::blocks::get_block))
             .route("/api/blocks/:height/battles", get(api::blocks::get_block_battles))
 
             // Wallet API

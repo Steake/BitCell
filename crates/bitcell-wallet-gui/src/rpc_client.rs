@@ -118,3 +118,93 @@ impl RpcClient {
         self.call("bitcell_getBattleReplay", params).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rpc_client_construction() {
+        let client = RpcClient::new("127.0.0.1".to_string(), 30334);
+        assert_eq!(client.url, "http://127.0.0.1:30334/rpc");
+    }
+
+    #[test]
+    fn test_rpc_client_url_format() {
+        let client = RpcClient::new("localhost".to_string(), 8545);
+        assert_eq!(client.url, "http://localhost:8545/rpc");
+    }
+
+    #[test]
+    fn test_json_rpc_request_serialization() {
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            method: "eth_blockNumber".to_string(),
+            params: json!([]),
+            id: 1,
+        };
+        
+        let json_str = serde_json::to_string(&request).unwrap();
+        assert!(json_str.contains("\"jsonrpc\":\"2.0\""));
+        assert!(json_str.contains("\"method\":\"eth_blockNumber\""));
+        assert!(json_str.contains("\"id\":1"));
+    }
+
+    #[test]
+    fn test_json_rpc_response_deserialization() {
+        let json_str = r#"{
+            "jsonrpc": "2.0",
+            "result": "0x10",
+            "id": 1
+        }"#;
+        
+        let response: JsonRpcResponse = serde_json::from_str(json_str).unwrap();
+        assert_eq!(response.jsonrpc, "2.0");
+        assert!(response.result.is_some());
+        assert_eq!(response.result.unwrap(), json!("0x10"));
+        assert!(response.error.is_none());
+    }
+
+    #[test]
+    fn test_json_rpc_error_response_deserialization() {
+        let json_str = r#"{
+            "jsonrpc": "2.0",
+            "error": {"code": -32602, "message": "Invalid params"},
+            "id": 1
+        }"#;
+        
+        let response: JsonRpcResponse = serde_json::from_str(json_str).unwrap();
+        assert!(response.result.is_none());
+        assert!(response.error.is_some());
+        
+        let error = response.error.unwrap();
+        assert_eq!(error["code"], -32602);
+    }
+
+    #[test]
+    fn test_block_number_hex_parsing() {
+        // Test parsing various hex formats
+        let hex1 = "0x10";
+        let parsed1 = u64::from_str_radix(hex1.trim_start_matches("0x"), 16);
+        assert_eq!(parsed1.unwrap(), 16);
+        
+        let hex2 = "0xff";
+        let parsed2 = u64::from_str_radix(hex2.trim_start_matches("0x"), 16);
+        assert_eq!(parsed2.unwrap(), 255);
+        
+        let hex3 = "0x3039"; // 12345
+        let parsed3 = u64::from_str_radix(hex3.trim_start_matches("0x"), 16);
+        assert_eq!(parsed3.unwrap(), 12345);
+    }
+
+    // Integration tests would require a mock HTTP server
+    // These are commented out but show the testing pattern
+    /*
+    #[tokio::test]
+    async fn test_get_balance_integration() {
+        // Would require a mock server or actual RPC endpoint
+        let client = RpcClient::new("127.0.0.1".to_string(), 30334);
+        // let result = client.get_balance("0x1234...").await;
+    }
+    */
+}

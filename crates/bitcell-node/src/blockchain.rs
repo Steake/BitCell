@@ -3,7 +3,7 @@
 use crate::{Result, MetricsRegistry};
 use bitcell_consensus::{Block, BlockHeader, Transaction, BattleProof};
 use bitcell_crypto::{Hash256, PublicKey, SecretKey};
-use bitcell_economics::{COIN, INITIAL_BLOCK_REWARD, HALVING_INTERVAL};
+use bitcell_economics::{COIN, INITIAL_BLOCK_REWARD, HALVING_INTERVAL, MAX_HALVINGS};
 use bitcell_state::StateManager;
 use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
@@ -98,8 +98,8 @@ impl Blockchain {
     /// Calculate block reward based on height (halves every HALVING_INTERVAL blocks)
     pub fn calculate_block_reward(height: u64) -> u64 {
         let halvings = height / HALVING_INTERVAL;
-        if halvings >= 64 {
-            // After 64 halvings, reward is effectively 0
+        if halvings >= MAX_HALVINGS {
+            // After MAX_HALVINGS halvings, reward is effectively 0
             return 0;
         }
         INITIAL_BLOCK_REWARD >> halvings
@@ -207,8 +207,15 @@ impl Blockchain {
             // Apply block reward to proposer
             let reward = Self::calculate_block_reward(block_height);
             if reward > 0 {
-                state.credit_account(*block.header.proposer.as_bytes(), reward);
-                println!("Block reward credited: {} units to proposer", reward);
+                match state.credit_account(*block.header.proposer.as_bytes(), reward) {
+                    Ok(_) => {
+                        tracing::info!("Block reward credited: {} units to proposer", reward);
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to credit block reward: {:?}", e);
+                        return Err(crate::Error::Node("Failed to credit block reward".to_string()));
+                    }
+                }
             }
             
             for tx in &block.transactions {
@@ -221,10 +228,10 @@ impl Blockchain {
                 ) {
                     Ok(new_state_root) => {
                         // State updated successfully
-                        println!("Transaction applied, new state root: {:?}", new_state_root);
+                        tracing::debug!("Transaction applied, new state root: {:?}", new_state_root);
                     }
                     Err(e) => {
-                        println!("Failed to apply transaction: {:?}", e);
+                        tracing::warn!("Failed to apply transaction: {:?}", e);
                         // In production, this should rollback the entire block
                         // For now, we just skip the transaction
                     }

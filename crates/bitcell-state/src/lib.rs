@@ -139,16 +139,27 @@ impl StateManager {
     }
 
     /// Credit an account (minting/coinbase)
-    pub fn credit_account(&mut self, pubkey: [u8; 33], amount: u64) -> Hash256 {
+    /// Returns the new state root on success, or an error if overflow would occur.
+    /// Note: This method should only be called by blockchain core during block processing.
+    pub fn credit_account(&mut self, pubkey: [u8; 33], amount: u64) -> Result<Hash256> {
         let mut account = self.accounts.get(&pubkey)
             .cloned()
             .unwrap_or(Account { balance: 0, nonce: 0 });
-            
-        account.balance += amount;
+        
+        account.balance = account.balance.checked_add(amount)
+            .ok_or(Error::InsufficientBalance)?; // Reuse error type for overflow
+        
+        tracing::debug!(
+            "Credited account {:?} with {} units (new balance: {})",
+            hex::encode(&pubkey[..8]), // Log first 8 bytes of pubkey
+            amount,
+            account.balance
+        );
+        
         self.accounts.insert(pubkey, account);
         
         self.recompute_root();
-        self.state_root
+        Ok(self.state_root)
     }
 }
 

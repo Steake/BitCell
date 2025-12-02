@@ -36,6 +36,9 @@ pub enum Error {
     
     #[error("Network error: {0}")]
     Network(String),
+    
+    #[error("Lock error: {0}")]
+    Lock(String),
 }
 
 impl From<String> for Error {

@@ -82,17 +82,26 @@ impl Blockchain {
     
     /// Get current chain height
     pub fn height(&self) -> u64 {
-        *self.height.read().unwrap()
+        *self.height.read().unwrap_or_else(|e| {
+            eprintln!("Lock poisoned in height(): {}", e);
+            e.into_inner()
+        })
     }
     
     /// Get latest block hash
     pub fn latest_hash(&self) -> Hash256 {
-        *self.latest_hash.read().unwrap()
+        *self.latest_hash.read().unwrap_or_else(|e| {
+            eprintln!("Lock poisoned in latest_hash(): {}", e);
+            e.into_inner()
+        })
     }
     
     /// Get block by height
     pub fn get_block(&self, height: u64) -> Option<Block> {
-        self.blocks.read().unwrap().get(&height).cloned()
+        self.blocks.read().unwrap_or_else(|e| {
+            eprintln!("Lock poisoned in get_block(): {}", e);
+            e.into_inner()
+        }).get(&height).cloned()
     }
     
     /// Get state manager (read-only access)

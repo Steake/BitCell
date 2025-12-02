@@ -357,7 +357,11 @@ async fn eth_get_balance(state: &RpcState, params: Option<Value>) -> Result<Valu
     // Fetch balance from blockchain state
     let balance = {
         let state_lock = state.blockchain.state();
-        let state = state_lock.read().unwrap();
+        let state = state_lock.read().map_err(|_| JsonRpcError {
+            code: -32603,
+            message: "Failed to acquire state lock".to_string(),
+            data: None,
+        })?;
         state.get_account(&address)
             .map(|account| account.balance)
             .unwrap_or(0)
@@ -422,7 +426,11 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
     // Validate nonce and balance
     {
         let state_lock = state.blockchain.state();
-        let state_guard = state_lock.read().unwrap();
+        let state_guard = state_lock.read().map_err(|_| JsonRpcError {
+            code: -32603,
+            message: "Failed to acquire state lock".to_string(),
+            data: None,
+        })?;
         
         if let Some(account) = state_guard.get_account(tx.from.as_bytes()) {
             if tx.nonce != account.nonce {

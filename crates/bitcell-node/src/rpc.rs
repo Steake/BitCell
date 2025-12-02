@@ -158,9 +158,36 @@ async fn eth_get_balance(state: &RpcState, params: Option<Value>) -> Result<Valu
         data: None,
     })?;
 
-    // TODO: Parse address and fetch balance from state
-    // For now, return mock balance
-    Ok(json!("0x0"))
+    // Parse address (hex string to PublicKey)
+    let address_hex = address_str.strip_prefix("0x").unwrap_or(address_str);
+    let address_bytes = hex::decode(address_hex).map_err(|_| JsonRpcError {
+        code: -32602,
+        message: "Invalid address format".to_string(),
+        data: None,
+    })?;
+    
+    if address_bytes.len() != 33 {
+        return Err(JsonRpcError {
+            code: -32602,
+            message: "Address must be 33 bytes (compressed public key)".to_string(),
+            data: None,
+        });
+    }
+    
+    let mut address = [0u8; 33];
+    address.copy_from_slice(&address_bytes);
+    
+    // Fetch balance from blockchain state
+    let balance = {
+        let state_lock = state.blockchain.state();
+        let state = state_lock.read().unwrap();
+        state.get_account(&address)
+            .map(|account| account.balance)
+            .unwrap_or(0)
+    };
+    
+    // Return balance as hex string
+    Ok(json!(format!("0x{:x}", balance)))
 }
 
 async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Result<Value, JsonRpcError> {
@@ -190,11 +217,72 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
         data: None,
     })?;
 
-    // TODO: Decode transaction, validate, and add to mempool
-    // For now, return a mock hash
-    let hash = bitcell_crypto::Hash256::hash(tx_data.as_bytes());
-    let mock_hash = format!("0x{}", hex::encode(hash));
-    Ok(json!(mock_hash))
+    // Decode hex transaction data
+    let tx_hex = tx_data.strip_prefix("0x").unwrap_or(tx_data);
+    let tx_bytes = hex::decode(tx_hex).map_err(|_| JsonRpcError {
+        code: -32602,
+        message: "Invalid hex encoding".to_string(),
+        data: None,
+    })?;
+    
+    // Deserialize transaction
+    let tx: bitcell_consensus::Transaction = bincode::deserialize(&tx_bytes).map_err(|e| JsonRpcError {
+        code: -32602,
+        message: format!("Failed to deserialize transaction: {}", e),
+        data: None,
+    })?;
+    
+    // Validate transaction signature
+    let tx_hash = tx.hash();
+    if tx.signature.verify(&tx.from, tx_hash.as_bytes()).is_err() {
+        return Err(JsonRpcError {
+            code: -32602,
+            message: "Invalid transaction signature".to_string(),
+            data: None,
+        });
+    }
+    
+    // Validate nonce and balance
+    {
+        let state_lock = state.blockchain.state();
+        let state_guard = state_lock.read().unwrap();
+        
+        if let Some(account) = state_guard.get_account(tx.from.as_bytes()) {
+            if tx.nonce != account.nonce {
+                return Err(JsonRpcError {
+                    code: -32602,
+                    message: format!("Invalid nonce: expected {}, got {}", account.nonce, tx.nonce),
+                    data: None,
+                });
+            }
+            
+            if tx.amount > account.balance {
+                return Err(JsonRpcError {
+                    code: -32602,
+                    message: "Insufficient balance".to_string(),
+                    data: None,
+                });
+            }
+        } else {
+            return Err(JsonRpcError {
+                code: -32602,
+                message: "Account not found".to_string(),
+                data: None,
+            });
+        }
+    }
+    
+    // Add to transaction pool
+    if let Err(e) = state.tx_pool.add_transaction(tx.clone()) {
+        return Err(JsonRpcError {
+            code: -32603,
+            message: format!("Failed to add transaction to pool: {}", e),
+            data: None,
+        });
+    }
+    
+    // Return transaction hash
+    Ok(json!(format!("0x{}", hex::encode(tx_hash.as_bytes()))))
 }
 
 async fn bitcell_get_node_info(state: &RpcState) -> Result<Value, JsonRpcError> {

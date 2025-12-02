@@ -95,6 +95,11 @@ impl Blockchain {
         self.blocks.read().unwrap().get(&height).cloned()
     }
     
+    /// Get state manager (read-only access)
+    pub fn state(&self) -> Arc<RwLock<StateManager>> {
+        Arc::clone(&self.state)
+    }
+    
     /// Calculate block reward based on height (halves every HALVING_INTERVAL blocks)
     pub fn calculate_block_reward(height: u64) -> u64 {
         let halvings = height / HALVING_INTERVAL;

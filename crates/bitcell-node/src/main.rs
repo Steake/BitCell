@@ -108,7 +108,7 @@ async fn main() {
                 }
             };
             
-            tracing::debug!("Validator Public Key: {:?}", secret_key.public_key());
+            println!("Validator Public Key: {:?}", secret_key.public_key());
             
             // Initialize node with explicit secret key
             // Note: We need to modify ValidatorNode::new to accept an optional secret key or handle this differently
@@ -184,7 +184,7 @@ async fn main() {
                 }
             };
             
-            tracing::debug!("Miner Public Key: {:?}", secret_key.public_key());
+            println!("Miner Public Key: {:?}", secret_key.public_key());
             
             let mut node = MinerNode::with_key(config, secret_key);
             
@@ -246,7 +246,7 @@ async fn main() {
                 }
             };
             
-            tracing::debug!("Full Node Public Key: {:?}", secret_key.public_key());
+            println!("Full Node Public Key: {:?}", secret_key.public_key());
 
             // Reuse ValidatorNode for now as FullNode logic is similar (just no voting)
             let mut node = ValidatorNode::with_key(config, secret_key);

@@ -85,12 +85,25 @@ impl NetworkManager {
     
     /// Enable DHT
     pub fn enable_dht(&self, secret_key: &bitcell_crypto::SecretKey, bootstrap: Vec<String>) -> Result<()> {
-        let dht_manager = crate::dht::DhtManager::new(secret_key, bootstrap)?;
+        // Create channels if they don't exist
+        let block_tx = {
+            let guard = self.block_tx.read();
+            guard.as_ref().ok_or("Block channel not set")?.clone()
+        };
+        
+        let tx_tx = {
+            let guard = self.tx_tx.read();
+            guard.as_ref().ok_or("Transaction channel not set")?.clone()
+        };
+        
+        let dht_manager = crate::dht::DhtManager::new(secret_key, bootstrap, block_tx, tx_tx)?;
         let mut dht = self.dht.write();
         *dht = Some(dht_manager);
         println!("DHT enabled");
         Ok(())
     }
+
+
     
     /// Start the network listener
     pub async fn start(&self, port: u16, bootstrap_nodes: Vec<String>) -> Result<()> {
@@ -552,6 +565,7 @@ impl NetworkManager {
     
     /// Broadcast a block to all connected peers
     pub async fn broadcast_block(&self, block: &Block) -> Result<()> {
+        // Broadcast via TCP
         let peer_ids: Vec<PublicKey> = {
             let peers = self.peers.read();
             println!("Broadcasting block {} to {} peers", block.header.height, peers.len());
@@ -567,11 +581,25 @@ impl NetworkManager {
         }
         
         self.metrics.add_bytes_sent(block_size * peer_ids.len() as u64);
+        
+        // Broadcast via Gossipsub
+        let dht_opt = {
+            let guard = self.dht.read();
+            guard.clone()
+        };
+        
+        if let Some(dht) = dht_opt {
+            if let Err(e) = dht.broadcast_block(block).await {
+                eprintln!("Failed to broadcast block via DHT: {}", e);
+            }
+        }
+        
         Ok(())
     }
     
     /// Broadcast a transaction to all connected peers
     pub async fn broadcast_transaction(&self, tx: &Transaction) -> Result<()> {
+        // Broadcast via TCP
         let peer_ids: Vec<PublicKey> = {
             let peers = self.peers.read();
             println!("Broadcasting transaction to {} peers", peers.len());
@@ -587,6 +615,19 @@ impl NetworkManager {
         }
         
         self.metrics.add_bytes_sent(tx_size * peer_ids.len() as u64);
+        
+        // Broadcast via Gossipsub
+        let dht_opt = {
+            let guard = self.dht.read();
+            guard.clone()
+        };
+        
+        if let Some(dht) = dht_opt {
+            if let Err(e) = dht.broadcast_transaction(tx).await {
+                eprintln!("Failed to broadcast transaction via DHT: {}", e);
+            }
+        }
+        
         Ok(())
     }
     

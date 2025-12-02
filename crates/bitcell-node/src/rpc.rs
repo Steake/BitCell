@@ -86,6 +86,8 @@ async fn handle_json_rpc(
     let result = match req.method.as_str() {
         // Standard Namespace
         "eth_blockNumber" => eth_block_number(&state).await,
+        "eth_getBlockByNumber" => eth_get_block_by_number(&state, req.params).await,
+        "eth_getTransactionByHash" => eth_get_transaction_by_hash(&state, req.params).await,
         "eth_getBalance" => eth_get_balance(&state, req.params).await,
         "eth_sendRawTransaction" => eth_send_raw_transaction(&state, req.params).await,
         
@@ -131,36 +133,181 @@ async fn eth_block_number(state: &RpcState) -> Result<Value, JsonRpcError> {
     Ok(json!(format!("0x{:x}", height)))
 }
 
-/// Validate an address string format (hex string of correct length)
-fn validate_address(address: &str) -> Result<(), JsonRpcError> {
-    if !address.starts_with("0x") || address.len() != 42 {
+async fn eth_get_block_by_number(state: &RpcState, params: Option<Value>) -> Result<Value, JsonRpcError> {
+    let params = params.ok_or(JsonRpcError {
+        code: -32602,
+        message: "Invalid params".to_string(),
+        data: None,
+    })?;
+
+    let args = params.as_array().ok_or(JsonRpcError {
+        code: -32602,
+        message: "Params must be an array".to_string(),
+        data: None,
+    })?;
+    
+    if args.is_empty() {
         return Err(JsonRpcError {
             code: -32602,
-            message: "Invalid address format: expected 0x followed by 40 hex characters".to_string(),
+            message: "Missing block number".to_string(),
             data: None,
         });
     }
+
+    let block_param = args[0].as_str().ok_or(JsonRpcError {
+        code: -32602,
+        message: "Block number must be a string".to_string(),
+        data: None,
+    })?;
     
-    // Verify it's valid hex
-    if !address[2..].chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(JsonRpcError {
+    let include_txs = if args.len() > 1 {
+        args[1].as_bool().unwrap_or(false)
+    } else {
+        false
+    };
+
+    let height = if block_param == "latest" {
+        state.blockchain.height()
+    } else if block_param == "earliest" {
+        0
+    } else if block_param == "pending" {
+        state.blockchain.height() // TODO: Support pending block
+    } else {
+        let hex = block_param.strip_prefix("0x").unwrap_or(block_param);
+        u64::from_str_radix(hex, 16).map_err(|_| JsonRpcError {
             code: -32602,
-            message: "Invalid address format: contains non-hex characters".to_string(),
+            message: "Invalid block number format".to_string(),
             data: None,
-        });
-    }
+        })?
+    };
     
-    Ok(())
+    if let Some(block) = state.blockchain.get_block(height) {
+        let transactions = if include_txs {
+            let txs: Vec<Value> = block.transactions.iter().enumerate().map(|(i, tx)| {
+                json!({
+                    "hash": format!("0x{}", hex::encode(tx.hash().as_bytes())),
+                    "nonce": format!("0x{:x}", tx.nonce),
+                    "blockHash": format!("0x{}", hex::encode(block.hash().as_bytes())),
+                    "blockNumber": format!("0x{:x}", block.header.height),
+                    "transactionIndex": format!("0x{:x}", i),
+                    "from": format!("0x{}", hex::encode(tx.from.as_bytes())),
+                    "to": format!("0x{}", hex::encode(tx.to.as_bytes())),
+                    "value": format!("0x{:x}", tx.amount),
+                    "gas": format!("0x{:x}", tx.gas_limit),
+                    "gasPrice": format!("0x{:x}", tx.gas_price),
+                    "input": format!("0x{}", hex::encode(&tx.data)),
+                })
+            }).collect();
+            json!(txs)
+        } else {
+            let tx_hashes: Vec<String> = block.transactions.iter()
+                .map(|tx| format!("0x{}", hex::encode(tx.hash().as_bytes())))
+                .collect();
+            json!(tx_hashes)
+        };
+        
+        Ok(json!({
+            "number": format!("0x{:x}", block.header.height),
+            "hash": format!("0x{}", hex::encode(block.hash().as_bytes())),
+            "parentHash": format!("0x{}", hex::encode(block.header.prev_hash.as_bytes())),
+            "nonce": "0x0000000000000000", // TODO: Use work/nonce
+            "sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347", // Empty uncle hash
+            "logsBloom": "0x00", // TODO: Bloom filter
+            "transactionsRoot": format!("0x{}", hex::encode(block.header.tx_root.as_bytes())),
+            "stateRoot": format!("0x{}", hex::encode(block.header.state_root.as_bytes())),
+            "receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421", // Empty receipts root
+            "miner": format!("0x{}", hex::encode(block.header.proposer.as_bytes())),
+            "difficulty": "0x1",
+            "totalDifficulty": format!("0x{:x}", block.header.height), // Simplified
+            "extraData": "0x",
+            "size": format!("0x{:x}", 1000), // TODO: Real size
+            "gasLimit": "0x1fffffffffffff",
+            "gasUsed": "0x0",
+            "timestamp": format!("0x{:x}", block.header.timestamp),
+            "transactions": transactions,
+            "uncles": []
+        }))
+    } else {
+        Ok(Value::Null)
+    }
 }
 
-/// Get the balance of an address at a given block
-/// 
-/// # Parameters
-/// - `address`: 20-byte Ethereum-style address (0x-prefixed hex string)
-/// - `block_parameter`: Block number or tag ("latest", "earliest", "pending")
-/// 
-/// # Returns
-/// Balance as a hex-encoded string (e.g., "0x0")
+async fn eth_get_transaction_by_hash(state: &RpcState, params: Option<Value>) -> Result<Value, JsonRpcError> {
+    let params = params.ok_or(JsonRpcError {
+        code: -32602,
+        message: "Invalid params".to_string(),
+        data: None,
+    })?;
+
+    let args = params.as_array().ok_or(JsonRpcError {
+        code: -32602,
+        message: "Params must be an array".to_string(),
+        data: None,
+    })?;
+    
+    if args.is_empty() {
+        return Err(JsonRpcError {
+            code: -32602,
+            message: "Missing transaction hash".to_string(),
+            data: None,
+        });
+    }
+
+    let tx_hash_str = args[0].as_str().ok_or(JsonRpcError {
+        code: -32602,
+        message: "Transaction hash must be a string".to_string(),
+        data: None,
+    })?;
+    
+    let tx_hash_hex = tx_hash_str.strip_prefix("0x").unwrap_or(tx_hash_str);
+    let tx_hash_bytes = hex::decode(tx_hash_hex).map_err(|_| JsonRpcError {
+        code: -32602,
+        message: "Invalid hex encoding".to_string(),
+        data: None,
+    })?;
+    
+    if tx_hash_bytes.len() != 32 {
+        return Err(JsonRpcError {
+            code: -32602,
+            message: "Transaction hash must be 32 bytes".to_string(),
+            data: None,
+        });
+    }
+    
+    let mut hash = [0u8; 32];
+    hash.copy_from_slice(&tx_hash_bytes);
+    let target_hash = bitcell_crypto::Hash256::from(hash);
+    
+    // Search in blockchain (inefficient linear scan for now, need index later)
+    let height = state.blockchain.height();
+    // Scan last 100 blocks for efficiency in this demo
+    let start_height = if height > 100 { height - 100 } else { 0 };
+    
+    for h in (start_height..=height).rev() {
+        if let Some(block) = state.blockchain.get_block(h) {
+            for (i, tx) in block.transactions.iter().enumerate() {
+                if tx.hash() == target_hash {
+                    return Ok(json!({
+                        "hash": format!("0x{}", hex::encode(tx.hash().as_bytes())),
+                        "nonce": format!("0x{:x}", tx.nonce),
+                        "blockHash": format!("0x{}", hex::encode(block.hash().as_bytes())),
+                        "blockNumber": format!("0x{:x}", block.header.height),
+                        "transactionIndex": format!("0x{:x}", i),
+                        "from": format!("0x{}", hex::encode(tx.from.as_bytes())),
+                        "to": format!("0x{}", hex::encode(tx.to.as_bytes())),
+                        "value": format!("0x{:x}", tx.amount),
+                        "gas": format!("0x{:x}", tx.gas_limit),
+                        "gasPrice": format!("0x{:x}", tx.gas_price),
+                        "input": format!("0x{}", hex::encode(&tx.data)),
+                    }));
+                }
+            }
+        }
+    }
+    
+    Ok(Value::Null)
+}
+
 async fn eth_get_balance(state: &RpcState, params: Option<Value>) -> Result<Value, JsonRpcError> {
     let params = params.ok_or(JsonRpcError {
         code: -32602,
@@ -187,13 +334,41 @@ async fn eth_get_balance(state: &RpcState, params: Option<Value>) -> Result<Valu
         message: "Address must be a string".to_string(),
         data: None,
     })?;
-    
-    // Validate address format
-    validate_address(address_str)?;
 
-    // TODO: Parse address and fetch balance from state
-    // For now, return mock balance
-    Ok(json!("0x0"))
+    // Parse address (hex string to PublicKey)
+    let address_hex = address_str.strip_prefix("0x").unwrap_or(address_str);
+    let address_bytes = hex::decode(address_hex).map_err(|_| JsonRpcError {
+        code: -32602,
+        message: "Invalid address format".to_string(),
+        data: None,
+    })?;
+    
+    if address_bytes.len() != 33 {
+        return Err(JsonRpcError {
+            code: -32602,
+            message: "Address must be 33 bytes (compressed public key)".to_string(),
+            data: None,
+        });
+    }
+    
+    let mut address = [0u8; 33];
+    address.copy_from_slice(&address_bytes);
+    
+    // Fetch balance from blockchain state
+    let balance = {
+        let state_lock = state.blockchain.state();
+        let state = state_lock.read().map_err(|_| JsonRpcError {
+            code: -32603,
+            message: "Failed to acquire state lock".to_string(),
+            data: None,
+        })?;
+        state.get_account(&address)
+            .map(|account| account.balance)
+            .unwrap_or(0)
+    };
+    
+    // Return balance as hex string
+    Ok(json!(format!("0x{:x}", balance)))
 }
 
 async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Result<Value, JsonRpcError> {
@@ -223,11 +398,76 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
         data: None,
     })?;
 
-    // TODO: Decode transaction, validate, and add to mempool
-    // For now, return a mock hash
-    let hash = bitcell_crypto::Hash256::hash(tx_data.as_bytes());
-    let mock_hash = format!("0x{}", hex::encode(hash.as_bytes()));
-    Ok(json!(mock_hash))
+    // Decode hex transaction data
+    let tx_hex = tx_data.strip_prefix("0x").unwrap_or(tx_data);
+    let tx_bytes = hex::decode(tx_hex).map_err(|_| JsonRpcError {
+        code: -32602,
+        message: "Invalid hex encoding".to_string(),
+        data: None,
+    })?;
+    
+    // Deserialize transaction
+    let tx: bitcell_consensus::Transaction = bincode::deserialize(&tx_bytes).map_err(|e| JsonRpcError {
+        code: -32602,
+        message: format!("Failed to deserialize transaction: {}", e),
+        data: None,
+    })?;
+    
+    // Validate transaction signature
+    let tx_hash = tx.hash();
+    if tx.signature.verify(&tx.from, tx_hash.as_bytes()).is_err() {
+        return Err(JsonRpcError {
+            code: -32602,
+            message: "Invalid transaction signature".to_string(),
+            data: None,
+        });
+    }
+    
+    // Validate nonce and balance
+    {
+        let state_lock = state.blockchain.state();
+        let state_guard = state_lock.read().map_err(|_| JsonRpcError {
+            code: -32603,
+            message: "Failed to acquire state lock".to_string(),
+            data: None,
+        })?;
+        
+        if let Some(account) = state_guard.get_account(tx.from.as_bytes()) {
+            if tx.nonce != account.nonce {
+                return Err(JsonRpcError {
+                    code: -32602,
+                    message: format!("Invalid nonce: expected {}, got {}", account.nonce, tx.nonce),
+                    data: None,
+                });
+            }
+            
+            if tx.amount > account.balance {
+                return Err(JsonRpcError {
+                    code: -32602,
+                    message: "Insufficient balance".to_string(),
+                    data: None,
+                });
+            }
+        } else {
+            return Err(JsonRpcError {
+                code: -32602,
+                message: "Account not found".to_string(),
+                data: None,
+            });
+        }
+    }
+    
+    // Add to transaction pool
+    if let Err(e) = state.tx_pool.add_transaction(tx.clone()) {
+        return Err(JsonRpcError {
+            code: -32603,
+            message: format!("Failed to add transaction to pool: {}", e),
+            data: None,
+        });
+    }
+    
+    // Return transaction hash
+    Ok(json!(format!("0x{}", hex::encode(tx_hash.as_bytes()))))
 }
 
 async fn bitcell_get_node_info(state: &RpcState) -> Result<Value, JsonRpcError> {
@@ -256,17 +496,6 @@ async fn bitcell_get_network_metrics(state: &RpcState) -> Result<Value, JsonRpcE
     }))
 }
 
-/// Get the current state of the mining tournament.
-///
-/// # Parameters
-/// None
-///
-/// # Returns
-/// An object containing:
-/// - `block`: Current block number (hex string)
-/// - `current_round`: Tournament round number
-/// - `phase`: Current phase ("commitment", "reveal", "battle", "cooldown", or "idle")
-/// - `last_winner`: Public key of the last tournament winner
 async fn bitcell_get_tournament_state(state: &RpcState) -> Result<Value, JsonRpcError> {
     if let Some(tm) = &state.tournament_manager {
         let phase = tm.current_phase().await;
@@ -517,21 +746,6 @@ async fn bitcell_submit_reveal(state: &RpcState, params: Option<Value>) -> Resul
     }
 }
 
-/// Get the replay data for a battle at a specific block height.
-///
-/// # Parameters
-/// - `block_height`: The block height to fetch the battle replay for
-///
-/// # Returns
-/// An object containing:
-/// - `block_height`: The requested block height
-/// - `grid_states`: Array of 2D grid states showing battle progression (64x64 cells)
-/// - `outcome`: Battle result ("Miner A Wins", "Miner B Wins", or "Tie")
-///
-/// Each cell in the grid can be:
-/// - 0: Empty/dead cell
-/// - 1: Cell belonging to Player A (left side)
-/// - 2: Cell belonging to Player B (right side)
 async fn bitcell_get_battle_replay(state: &RpcState, params: Option<Value>) -> Result<Value, JsonRpcError> {
     let params = params.ok_or(JsonRpcError {
         code: -32602,

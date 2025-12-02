@@ -26,7 +26,7 @@ clap = { version = "4", features = ["derive"] }
 rand = "0.8"
 bincode = "1.3"
 parking_lot = "0.12"
-libp2p = { version = "0.53", features = ["kad", "tcp", "noise", "yamux", "identify", "dns", "macros"] }
+libp2p = { version = "0.53", features = ["kad", "tcp", "noise", "yamux", "identify", "dns", "macros", "gossipsub", "tokio"] }
 futures = "0.3"
 axum = { version = "0.7", features = ["ws", "macros"] }
 tower = { version = "0.4", features = ["util"] }

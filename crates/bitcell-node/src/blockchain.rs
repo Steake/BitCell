@@ -82,17 +82,31 @@ impl Blockchain {
     
     /// Get current chain height
     pub fn height(&self) -> u64 {
-        *self.height.read().unwrap()
+        *self.height.read().unwrap_or_else(|e| {
+            eprintln!("Lock poisoned in height(): {}", e);
+            e.into_inner()
+        })
     }
     
     /// Get latest block hash
     pub fn latest_hash(&self) -> Hash256 {
-        *self.latest_hash.read().unwrap()
+        *self.latest_hash.read().unwrap_or_else(|e| {
+            eprintln!("Lock poisoned in latest_hash(): {}", e);
+            e.into_inner()
+        })
     }
     
     /// Get block by height
     pub fn get_block(&self, height: u64) -> Option<Block> {
-        self.blocks.read().unwrap().get(&height).cloned()
+        self.blocks.read().unwrap_or_else(|e| {
+            eprintln!("Lock poisoned in get_block(): {}", e);
+            e.into_inner()
+        }).get(&height).cloned()
+    }
+    
+    /// Get state manager (read-only access)
+    pub fn state(&self) -> Arc<RwLock<StateManager>> {
+        Arc::clone(&self.state)
     }
     
     /// Calculate block reward based on height (halves every HALVING_INTERVAL blocks)
@@ -125,6 +139,21 @@ impl Blockchain {
             state.state_root
         };
         
+        // Generate VRF output and proof
+        // Input is previous block's VRF output (or hash if genesis)
+        let vrf_input = if new_height == 1 {
+            prev_hash.as_bytes().to_vec()
+        } else {
+            // In a real implementation, we'd get the previous block's VRF output
+            // For now, we mix the prev_hash with the height to ensure uniqueness
+            let mut input = prev_hash.as_bytes().to_vec();
+            input.extend_from_slice(&new_height.to_le_bytes());
+            input
+        };
+        
+        let (vrf_output, vrf_proof) = self.secret_key.vrf_prove(&vrf_input);
+        let vrf_proof_bytes = bincode::serialize(&vrf_proof).unwrap_or_default();
+
         // Create block header
         let header = BlockHeader {
             height: new_height,
@@ -136,8 +165,8 @@ impl Blockchain {
                 .unwrap()
                 .as_secs(),
             proposer: winner,
-            vrf_output: [0u8; 32], // TODO: Implement VRF
-            vrf_proof: vec![],
+            vrf_output: *vrf_output.as_bytes(),
+            vrf_proof: vrf_proof_bytes,
             work: battle_proofs.len() as u64 * 1000, // Simplified work calculation
         };
         
@@ -176,6 +205,25 @@ impl Blockchain {
         let header_hash = block.header.hash();
         if block.signature.verify(&block.header.proposer, header_hash.as_bytes()).is_err() {
             return Err(crate::Error::Node("Invalid block signature".to_string()));
+        }
+        
+        // Verify VRF
+        let vrf_proof: bitcell_crypto::VrfProof = bincode::deserialize(&block.header.vrf_proof)
+            .map_err(|_| crate::Error::Node("Invalid VRF proof format".to_string()))?;
+            
+        let vrf_input = if block.header.height == 1 {
+            block.header.prev_hash.as_bytes().to_vec()
+        } else {
+            let mut input = block.header.prev_hash.as_bytes().to_vec();
+            input.extend_from_slice(&block.header.height.to_le_bytes());
+            input
+        };
+        
+        let vrf_output = vrf_proof.verify(&block.header.proposer, &vrf_input)
+            .map_err(|_| crate::Error::Node("VRF verification failed".to_string()))?;
+            
+        if vrf_output.as_bytes() != &block.header.vrf_output {
+            return Err(crate::Error::Node("VRF output mismatch".to_string()));
         }
         
         // Verify transaction root

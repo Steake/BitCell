@@ -37,6 +37,8 @@ tracing-subscriber = { workspace = true }
 
 # UI Extras
 qrcodegen = "1.8"
+image = { version = "0.24", default-features = false, features = ["png"] }
+slint-build = "1.9"
 
 [build-dependencies]
 slint-build = "1.9"

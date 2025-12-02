@@ -87,13 +87,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let window_weak = main_window_weak.clone();
         
         tokio::spawn(async move {
-            let connected = client.get_node_info().await.is_ok();
-            
-            let _ = slint::invoke_from_event_loop(move || {
-                if let Some(window) = window_weak.upgrade() {
-                    window.global::<WalletState>().set_rpc_connected(connected);
+            match client.get_node_info().await {
+                Ok(_) => {
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(window) = window_weak.upgrade() {
+                            window.global::<WalletState>().set_rpc_connected(true);
+                        }
+                    });
                 }
-            });
+                Err(e) => {
+                    tracing::debug!("RPC connection check failed: {}", e);
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(window) = window_weak.upgrade() {
+                            window.global::<WalletState>().set_rpc_connected(false);
+                        }
+                    });
+                }
+            }
         });
     });
     
@@ -386,36 +396,9 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                 return;
             }
             
-            let app_state = state.borrow();
-            if let Some(rpc_client) = &app_state.rpc_client {
-                let client = rpc_client.clone();
-                let window_weak = window.as_weak();
-                let tx_data = format!("mock_tx:{}:{}:{}", to_address, amount, chain_str); // TODO: Build real tx
-                
-                wallet_state.set_is_loading(true);
-                
-                tokio::spawn(async move {
-                    let result = client.send_raw_transaction(&tx_data).await;
-                    
-                    let _ = slint::invoke_from_event_loop(move || {
-                        if let Some(window) = window_weak.upgrade() {
-                            let wallet_state = window.global::<WalletState>();
-                            wallet_state.set_is_loading(false);
-                            match result {
-                                Ok(hash) => {
-                                    wallet_state.set_status_message(format!("Transaction sent! Hash: {}", hash).into());
-                                    wallet_state.set_current_tab(3);
-                                }
-                                Err(e) => {
-                                    wallet_state.set_status_message(format!("Error sending transaction: {}", e).into());
-                                }
-                            }
-                        }
-                    });
-                });
-            } else {
-                wallet_state.set_status_message("RPC client not initialized".into());
-            }
+            // Transaction sending is not yet implemented
+            // TODO: Build and sign a real transaction using the wallet's private key
+            wallet_state.set_status_message("Transaction sending is not yet implemented. This feature is coming soon.".into());
         });
     }
     

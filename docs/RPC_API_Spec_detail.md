@@ -33,15 +33,6 @@ graph TD
         NB -->|Propagates & Receives Confirmations (&gt; 6)| F[Finalized State]
         F -->|Updates Recipient's Account Balance| R[Recipient Account]
     end
-        TX -->|Wallet Signs Transaction| STX[Signed Transaction]
-        STX -->|Broadcasts to Network Peers| MP[Mempool]
-        MP -->|Node Includes in New Block| NB[New Block Proposal]
-    end
-
-    subgraph Finality ["Phase 4: Confirmation & Finality"]
-        NB -->|Propagates & Receives Confirmations (> 6)| F[Finalized State]
-        F -->|Updates Recipient's Account Balance| R[Recipient Account]
-    end
 
     style M fill:#f9f,stroke:#333,stroke-width:2px,color:#000
     style T fill:#add8e6,stroke:#333,stroke-width:2px,color:#000

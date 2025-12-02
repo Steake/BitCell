@@ -108,7 +108,7 @@ async fn main() {
                 }
             };
             
-            println!("Validator Public Key: {:?}", secret_key.public_key());
+            tracing::debug!("Validator Public Key: {:?}", secret_key.public_key());
             
             // Initialize node with explicit secret key
             // Note: We need to modify ValidatorNode::new to accept an optional secret key or handle this differently

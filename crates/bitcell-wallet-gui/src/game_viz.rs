@@ -6,38 +6,43 @@ pub fn render_grid(grid: &[Vec<u8>], width: u32, height: u32) -> Image {
     let img_width = width * scale;
     let img_height = height * scale;
     
-    let mut pixels = Vec::with_capacity((img_width * img_height) as usize);
+    // Create pixel data safely as raw bytes
+    let mut pixel_bytes = Vec::with_capacity((img_width * img_height * 4) as usize);
     
     for y in 0..img_height {
         for x in 0..img_width {
             let cell_x = x / scale;
             let cell_y = y / scale;
             
-            let color = if cell_y < height && cell_x < width {
+            // Determine base color
+            let (r, g, b) = if cell_y < height && cell_x < width {
                 match grid[cell_y as usize][cell_x as usize] {
-                    0 => Rgba8Pixel { r: 15, g: 23, b: 42, a: 255 }, // Background (Theme.background)
-                    1 => Rgba8Pixel { r: 99, g: 102, b: 241, a: 255 }, // Player A (Theme.primary)
-                    2 => Rgba8Pixel { r: 245, g: 158, b: 11, a: 255 }, // Player B (Theme.accent)
-                    _ => Rgba8Pixel { r: 255, g: 255, b: 255, a: 255 }, // Unknown
+                    0 => (15, 23, 42),      // Background (Theme.background)
+                    1 => (99, 102, 241),    // Player A (Theme.primary)
+                    2 => (245, 158, 11),    // Player B (Theme.accent)
+                    _ => (255, 255, 255),   // Unknown
                 }
             } else {
-                Rgba8Pixel { r: 0, g: 0, b: 0, a: 255 }
+                (0, 0, 0)
             };
             
             // Add grid lines
             let is_grid_line = x % scale == 0 || y % scale == 0;
-            let final_color = if is_grid_line {
-                Rgba8Pixel { r: 30, g: 41, b: 59, a: 255 } // Grid line color
+            let (final_r, final_g, final_b) = if is_grid_line {
+                (30, 41, 59) // Grid line color
             } else {
-                color
+                (r, g, b)
             };
             
-            pixels.push(final_color);
+            pixel_bytes.push(final_r);
+            pixel_bytes.push(final_g);
+            pixel_bytes.push(final_b);
+            pixel_bytes.push(255); // alpha
         }
     }
     
     let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
-        unsafe { std::slice::from_raw_parts(pixels.as_ptr() as *const u8, pixels.len() * 4) },
+        &pixel_bytes,
         img_width,
         img_height,
     );

@@ -131,6 +131,36 @@ async fn eth_block_number(state: &RpcState) -> Result<Value, JsonRpcError> {
     Ok(json!(format!("0x{:x}", height)))
 }
 
+/// Validate an address string format (hex string of correct length)
+fn validate_address(address: &str) -> Result<(), JsonRpcError> {
+    if !address.starts_with("0x") || address.len() != 42 {
+        return Err(JsonRpcError {
+            code: -32602,
+            message: "Invalid address format: expected 0x followed by 40 hex characters".to_string(),
+            data: None,
+        });
+    }
+    
+    // Verify it's valid hex
+    if !address[2..].chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(JsonRpcError {
+            code: -32602,
+            message: "Invalid address format: contains non-hex characters".to_string(),
+            data: None,
+        });
+    }
+    
+    Ok(())
+}
+
+/// Get the balance of an address at a given block
+/// 
+/// # Parameters
+/// - `address`: 20-byte Ethereum-style address (0x-prefixed hex string)
+/// - `block_parameter`: Block number or tag ("latest", "earliest", "pending")
+/// 
+/// # Returns
+/// Balance as a hex-encoded string (e.g., "0x0")
 async fn eth_get_balance(state: &RpcState, params: Option<Value>) -> Result<Value, JsonRpcError> {
     let params = params.ok_or(JsonRpcError {
         code: -32602,
@@ -157,6 +187,9 @@ async fn eth_get_balance(state: &RpcState, params: Option<Value>) -> Result<Valu
         message: "Address must be a string".to_string(),
         data: None,
     })?;
+    
+    // Validate address format
+    validate_address(address_str)?;
 
     // TODO: Parse address and fetch balance from state
     // For now, return mock balance
@@ -193,7 +226,7 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
     // TODO: Decode transaction, validate, and add to mempool
     // For now, return a mock hash
     let hash = bitcell_crypto::Hash256::hash(tx_data.as_bytes());
-    let mock_hash = format!("0x{}", hex::encode(hash));
+    let mock_hash = format!("0x{}", hex::encode(hash.as_bytes()));
     Ok(json!(mock_hash))
 }
 
@@ -223,6 +256,17 @@ async fn bitcell_get_network_metrics(state: &RpcState) -> Result<Value, JsonRpcE
     }))
 }
 
+/// Get the current state of the mining tournament.
+///
+/// # Parameters
+/// None
+///
+/// # Returns
+/// An object containing:
+/// - `block`: Current block number (hex string)
+/// - `current_round`: Tournament round number
+/// - `phase`: Current phase ("commitment", "reveal", "battle", "cooldown", or "idle")
+/// - `last_winner`: Public key of the last tournament winner
 async fn bitcell_get_tournament_state(state: &RpcState) -> Result<Value, JsonRpcError> {
     if let Some(tm) = &state.tournament_manager {
         let phase = tm.current_phase().await;
@@ -473,6 +517,21 @@ async fn bitcell_submit_reveal(state: &RpcState, params: Option<Value>) -> Resul
     }
 }
 
+/// Get the replay data for a battle at a specific block height.
+///
+/// # Parameters
+/// - `block_height`: The block height to fetch the battle replay for
+///
+/// # Returns
+/// An object containing:
+/// - `block_height`: The requested block height
+/// - `grid_states`: Array of 2D grid states showing battle progression (64x64 cells)
+/// - `outcome`: Battle result ("Miner A Wins", "Miner B Wins", or "Tie")
+///
+/// Each cell in the grid can be:
+/// - 0: Empty/dead cell
+/// - 1: Cell belonging to Player A (left side)
+/// - 2: Cell belonging to Player B (right side)
 async fn bitcell_get_battle_replay(state: &RpcState, params: Option<Value>) -> Result<Value, JsonRpcError> {
     let params = params.ok_or(JsonRpcError {
         code: -32602,

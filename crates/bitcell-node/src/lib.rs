@@ -50,6 +50,36 @@ impl From<&str> for Error {
     }
 }
 
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::Network(e.to_string())
+    }
+}
+
+impl From<libp2p::TransportError<std::io::Error>> for Error {
+    fn from(e: libp2p::TransportError<std::io::Error>) -> Self {
+        Error::Network(e.to_string())
+    }
+}
+
+impl From<libp2p::gossipsub::SubscriptionError> for Error {
+    fn from(e: libp2p::gossipsub::SubscriptionError) -> Self {
+        Error::Network(e.to_string())
+    }
+}
+
+impl From<libp2p::gossipsub::PublishError> for Error {
+    fn from(e: libp2p::gossipsub::PublishError) -> Self {
+        Error::Network(e.to_string())
+    }
+}
+
+impl From<libp2p::multiaddr::Error> for Error {
+    fn from(e: libp2p::multiaddr::Error) -> Self {
+        Error::Network(e.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

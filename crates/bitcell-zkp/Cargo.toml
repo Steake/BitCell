@@ -21,6 +21,7 @@ ark-serialize.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 ark-crypto-primitives.workspace = true
+ark-snark.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

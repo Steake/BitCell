@@ -71,7 +71,10 @@ impl SystemMetricsCollector {
     pub fn collect(&self) -> SystemMetrics {
         // Refresh CPU and memory
         let (cpu_usage, memory_usage_mb, total_memory_mb) = {
-            let mut system = self.system.write().unwrap();
+            let mut system = self.system.write().unwrap_or_else(|poisoned| {
+                tracing::error!("System metrics lock poisoned, recovering");
+                poisoned.into_inner()
+            });
             system.refresh_all();
             
             // Calculate average CPU usage across all cores
@@ -92,7 +95,10 @@ impl SystemMetricsCollector {
         
         // Refresh disk info
         let (disk_usage_mb, total_disk_mb) = {
-            let mut disks = self.disks.write().unwrap();
+            let mut disks = self.disks.write().unwrap_or_else(|poisoned| {
+                tracing::error!("Disk metrics lock poisoned, recovering");
+                poisoned.into_inner()
+            });
             disks.refresh();
             
             let mut total_used: u64 = 0;

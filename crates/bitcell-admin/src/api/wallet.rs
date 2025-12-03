@@ -180,7 +180,14 @@ async fn send_transaction(
         }).into_response(),
     };
 
-    let fee: u64 = req.fee.parse().unwrap_or(1000);
+    let fee: u64 = match req.fee.parse() {
+        Ok(f) => f,
+        Err(_) => return Json(SendTransactionResponse {
+            tx_hash: String::new(),
+            status: "error".to_string(),
+            message: "Invalid fee format (must be a positive integer)".to_string(),
+        }).into_response(),
+    };
 
     // Check for private key
     let private_key = match &req.private_key {

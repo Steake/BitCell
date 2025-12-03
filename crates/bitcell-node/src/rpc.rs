@@ -11,6 +11,9 @@ use serde_json::{Value, json};
 use crate::{Blockchain, NetworkManager, TransactionPool, NodeConfig};
 use crate::tournament::TournamentManager;
 
+/// Empty bloom filter (256 bytes of zeros) for blocks without logs
+static EMPTY_BLOOM_FILTER: [u8; 256] = [0u8; 256];
+
 /// RPC Server State
 #[derive(Clone)]
 pub struct RpcState {
@@ -235,7 +238,7 @@ async fn eth_get_block_by_number(state: &RpcState, params: Option<Value>) -> Res
             "parentHash": format!("0x{}", hex::encode(block.header.prev_hash.as_bytes())),
             "nonce": format!("0x{:016x}", block.header.work),
             "sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347", // Empty uncle hash
-            "logsBloom": format!("0x{}", hex::encode([0u8; 256])), // Empty bloom filter
+            "logsBloom": format!("0x{}", hex::encode(&EMPTY_BLOOM_FILTER)),
             "transactionsRoot": format!("0x{}", hex::encode(block.header.tx_root.as_bytes())),
             "stateRoot": format!("0x{}", hex::encode(block.header.state_root.as_bytes())),
             "receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421", // Empty receipts root
@@ -453,12 +456,19 @@ async fn eth_get_transaction_count(state: &RpcState, params: Option<Value>) -> R
     Ok(json!(format!("0x{:x}", nonce)))
 }
 
+/// Default gas price in wei (1 Gwei)
+const DEFAULT_GAS_PRICE: u64 = 1_000_000_000;
+
 /// Get current gas price
+/// 
+/// Returns the current gas price. In production, this should be
+/// dynamically calculated based on network congestion and mempool state.
 async fn eth_gas_price(_state: &RpcState) -> Result<Value, JsonRpcError> {
-    // Return a reasonable default gas price (1 Gwei = 1e9 wei)
-    // In production, this should be dynamically calculated based on network congestion
-    let gas_price: u64 = 1_000_000_000; // 1 Gwei
-    Ok(json!(format!("0x{:x}", gas_price)))
+    // TODO: Calculate dynamic gas price based on:
+    // - Transaction pool congestion
+    // - Recent block gas usage
+    // - Priority fee market
+    Ok(json!(format!("0x{:x}", DEFAULT_GAS_PRICE)))
 }
 
 async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Result<Value, JsonRpcError> {

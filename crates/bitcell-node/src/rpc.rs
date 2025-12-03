@@ -566,11 +566,31 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
                 });
             }
             
-            // Validate that the transaction has non-zero gas to prevent free spam
+            // Validate gas parameters to prevent spam and overflow attacks
+            // Gas price and limit must be non-zero and within reasonable bounds
+            const MAX_GAS_PRICE: u64 = 10_000_000_000_000; // 10,000 Gwei max
+            const MAX_GAS_LIMIT: u64 = 30_000_000; // 30M gas max (similar to Ethereum block limit)
+            
             if tx.gas_price == 0 || tx.gas_limit == 0 {
                 return Err(JsonRpcError {
                     code: -32602,
                     message: "Transactions from new accounts require non-zero gas price and limit to prevent DoS attacks".to_string(),
+                    data: None,
+                });
+            }
+            
+            if tx.gas_price > MAX_GAS_PRICE {
+                return Err(JsonRpcError {
+                    code: -32602,
+                    message: format!("Gas price {} exceeds maximum allowed {}", tx.gas_price, MAX_GAS_PRICE),
+                    data: None,
+                });
+            }
+            
+            if tx.gas_limit > MAX_GAS_LIMIT {
+                return Err(JsonRpcError {
+                    code: -32602,
+                    message: format!("Gas limit {} exceeds maximum allowed {}", tx.gas_limit, MAX_GAS_LIMIT),
                     data: None,
                 });
             }

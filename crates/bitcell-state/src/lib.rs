@@ -121,9 +121,9 @@ impl StateManager {
         if let Some(storage) = &self.storage {
             if let Err(e) = storage.store_account(&pubkey, &account) {
                 tracing::error!(
-                    "Failed to persist account {:?} to storage: {}. State may be inconsistent on restart.",
-                    hex::encode(&pubkey[..8]),
-                    e
+                    pubkey = %hex::encode(&pubkey),
+                    error = %e,
+                    "Failed to persist account to storage. State may be inconsistent on restart."
                 );
             }
         }
@@ -165,9 +165,9 @@ impl StateManager {
         if let Some(storage) = &self.storage {
             if let Err(e) = storage.store_bond(&pubkey, &bond) {
                 tracing::error!(
-                    "Failed to persist bond {:?} to storage: {}. State may be inconsistent on restart.",
-                    hex::encode(&pubkey[..8]),
-                    e
+                    pubkey = %hex::encode(&pubkey),
+                    error = %e,
+                    "Failed to persist bond to storage. State may be inconsistent on restart."
                 );
             }
         }
@@ -252,10 +252,10 @@ impl StateManager {
             .ok_or(Error::BalanceOverflow)?;
         
         tracing::debug!(
-            "Credited account {:?} with {} units (new balance: {})",
-            hex::encode(&pubkey[..8]), // Log first 8 bytes of pubkey
-            amount,
-            account.balance
+            pubkey = %hex::encode(&pubkey),
+            amount = amount,
+            new_balance = account.balance,
+            "Credited account"
         );
         
         self.accounts.insert(pubkey, account);

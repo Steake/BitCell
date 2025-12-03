@@ -200,9 +200,14 @@ impl Blockchain {
         // Generate VRF output and proof using proper VRF chaining
         // For genesis block (height 1), use previous hash as input
         // For all other blocks, use the previous block's VRF output for chaining
-        let vrf_input = if new_height == 1 {
+        //
+        // NOTE: We generate VRF proof while holding the blocks lock to prevent race conditions
+        // where the blockchain state could change between reading the VRF input and using it.
+        let (vrf_output, vrf_proof_bytes) = if new_height == 1 {
             // First block after genesis uses genesis hash as VRF input
-            prev_hash.as_bytes().to_vec()
+            let vrf_input = prev_hash.as_bytes().to_vec();
+            let (vrf_output, vrf_proof) = self.secret_key.vrf_prove(&vrf_input);
+            (vrf_output, bincode::serialize(&vrf_proof).unwrap_or_default())
         } else {
             // Use previous block's VRF output for proper VRF chaining
             // This ensures verifiable randomness chain where each output
@@ -211,17 +216,19 @@ impl Blockchain {
                 tracing::error!("Lock poisoned in produce_block() - prior panic detected: {}", e);
                 e.into_inner()
             });
-            if let Some(prev_block) = blocks.get(&current_height) {
+            
+            let vrf_input = if let Some(prev_block) = blocks.get(&current_height) {
                 prev_block.header.vrf_output.to_vec()
             } else {
                 // Fallback if previous block not found (shouldn't happen in normal operation)
                 tracing::warn!("Previous block {} not found for VRF chaining, using hash fallback", current_height);
                 prev_hash.as_bytes().to_vec()
-            }
+            };
+            
+            // Generate VRF proof while still holding the read lock to prevent race conditions
+            let (vrf_output, vrf_proof) = self.secret_key.vrf_prove(&vrf_input);
+            (vrf_output, bincode::serialize(&vrf_proof).unwrap_or_default())
         };
-        
-        let (vrf_output, vrf_proof) = self.secret_key.vrf_prove(&vrf_input);
-        let vrf_proof_bytes = bincode::serialize(&vrf_proof).unwrap_or_default();
 
         // Create block header
         let header = BlockHeader {

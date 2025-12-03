@@ -13,6 +13,12 @@ use bitcell_wallet::{Chain, Transaction as WalletTx};
 use bitcell_crypto::SecretKey;
 
 /// Wallet API Router
+/// 
+/// # Security Note
+/// The `/send` endpoint accepts private keys via request body, which is inherently insecure.
+/// This functionality is gated behind the `insecure-tx-signing` cargo feature and should
+/// ONLY be used in development/testing environments. Production deployments should use
+/// hardware wallets, HSMs, or secure key management services.
 pub fn router() -> Router<Arc<ConfigManager>> {
     Router::new()
         .route("/balance/:address", get(get_balance))
@@ -152,22 +158,45 @@ async fn get_nonce(
 /// 
 /// This endpoint builds, signs, and broadcasts a transaction.
 /// 
-/// **Security Warning**: Providing a private key via API is insecure.
+/// # Security Warning
+/// 
+/// **This endpoint is gated behind the `insecure-tx-signing` feature flag.**
+/// 
+/// Providing a private key via API is inherently insecure because:
+/// - Network traffic may be intercepted
+/// - Server logs may capture the key
+/// - Memory may be inspected by malicious processes
+/// 
 /// This is intended for testing purposes only. Production systems should use:
 /// - Hardware wallets (Ledger, Trezor)
 /// - HSM (Hardware Security Module)
-/// - Secure key management services
+/// - Secure key management services (AWS KMS, HashiCorp Vault)
 /// - Multi-sig setups
+#[cfg(feature = "insecure-tx-signing")]
 async fn send_transaction(
     State(config_manager): State<Arc<ConfigManager>>,
     Json(req): Json<SendTransactionRequest>,
 ) -> impl IntoResponse {
-    // Validate request
-    if req.from.is_empty() || req.to.is_empty() {
+    // Log security warning
+    tracing::warn!(
+        "SECURITY: Insecure transaction signing endpoint called. \
+         This should NEVER be used in production environments."
+    );
+    
+    // Validate request fields
+    if req.from.is_empty() {
         return Json(SendTransactionResponse {
             tx_hash: String::new(),
             status: "error".to_string(),
-            message: "Missing from or to address".to_string(),
+            message: "Missing 'from' address".to_string(),
+        }).into_response();
+    }
+    
+    if req.to.is_empty() {
+        return Json(SendTransactionResponse {
+            tx_hash: String::new(),
+            status: "error".to_string(),
+            message: "Missing 'to' address".to_string(),
         }).into_response();
     }
 
@@ -176,7 +205,7 @@ async fn send_transaction(
         Err(_) => return Json(SendTransactionResponse {
             tx_hash: String::new(),
             status: "error".to_string(),
-            message: "Invalid amount format".to_string(),
+            message: "Invalid amount format (must be a positive integer string)".to_string(),
         }).into_response(),
     };
 
@@ -185,7 +214,7 @@ async fn send_transaction(
         Err(_) => return Json(SendTransactionResponse {
             tx_hash: String::new(),
             status: "error".to_string(),
-            message: "Invalid fee format (must be a positive integer)".to_string(),
+            message: "Invalid fee format (must be a positive integer string)".to_string(),
         }).into_response(),
     };
 
@@ -322,4 +351,28 @@ async fn send_transaction(
         status: "submitted".to_string(),
         message: "Transaction built and signed, broadcast may be pending".to_string(),
     }).into_response()
+}
+
+/// Fallback when insecure-tx-signing feature is disabled.
+/// Returns NOT_IMPLEMENTED status to inform users this endpoint is disabled for security.
+#[cfg(not(feature = "insecure-tx-signing"))]
+async fn send_transaction(
+    State(_config_manager): State<Arc<ConfigManager>>,
+    Json(_req): Json<SendTransactionRequest>,
+) -> impl IntoResponse {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(json!({
+            "error": "Transaction signing via API is disabled for security",
+            "message": "The 'insecure-tx-signing' feature is not enabled. \
+                       This endpoint accepts private keys over HTTP which is inherently insecure. \
+                       For production use, integrate with a hardware wallet, HSM, or secure key management service.",
+            "alternatives": [
+                "Use a hardware wallet (Ledger, Trezor)",
+                "Use an HSM (Hardware Security Module)",
+                "Use a secure key management service (AWS KMS, HashiCorp Vault)",
+                "Build and sign transactions client-side, then submit via eth_sendRawTransaction"
+            ]
+        }))
+    )
 }

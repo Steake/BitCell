@@ -5,6 +5,12 @@ edition = "2021"
 authors = ["BitCell Contributors"]
 description = "Administrative console and dashboard for BitCell blockchain"
 
+[features]
+default = []
+# Enable insecure transaction signing endpoint that accepts private keys via HTTP.
+# WARNING: This should NEVER be enabled in production environments.
+insecure-tx-signing = []
+
 [dependencies]
 # Web framework
 axum = "0.7"

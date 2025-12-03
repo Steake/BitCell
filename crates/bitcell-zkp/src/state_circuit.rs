@@ -119,11 +119,12 @@ impl ConstraintSynthesizer<Fr> for StateCircuit {
             let new = self.new_state_root.ok_or(SynthesisError::AssignmentMissing)?;
             let diff_val = new - old;
             if diff_val.is_zero() {
-                // If diff is zero, no valid inverse exists
-                // This will cause the constraint to fail
-                return Err(SynthesisError::AssignmentMissing);
+                // If diff is zero (old_root == new_root), no valid inverse exists.
+                // This violates the non-equality constraint - state must change.
+                // We return Unsatisfiable since the constraint cannot be satisfied.
+                return Err(SynthesisError::Unsatisfiable);
             }
-            diff_val.inverse().ok_or(SynthesisError::AssignmentMissing)
+            diff_val.inverse().ok_or(SynthesisError::Unsatisfiable)
         })?;
         
         // Step 3: Enforce diff * inv = 1 (proves diff != 0)

@@ -180,7 +180,7 @@ mod tests {
                 200,
             );
             
-            let proof = circuit.prove(&pk).expect(&format!("Proof should succeed for winner_id {}", winner_id));
+            let proof = circuit.prove(&pk).unwrap_or_else(|_| panic!("Proof should succeed for winner_id {}", winner_id));
             
             let public_inputs = vec![
                 Fr::one(),

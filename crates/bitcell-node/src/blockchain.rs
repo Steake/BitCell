@@ -190,7 +190,10 @@ impl Blockchain {
         
         // Get current state root
         let state_root = {
-            let state = self.state.read().unwrap();
+            let state = self.state.read().unwrap_or_else(|e| {
+                tracing::error!("Lock poisoned in produce_block() while reading state - prior panic detected: {}", e);
+                e.into_inner()
+            });
             state.state_root
         };
         
@@ -204,7 +207,10 @@ impl Blockchain {
             // Use previous block's VRF output for proper VRF chaining
             // This ensures verifiable randomness chain where each output
             // deterministically derives from the previous output
-            let blocks = self.blocks.read().unwrap();
+            let blocks = self.blocks.read().unwrap_or_else(|e| {
+                tracing::error!("Lock poisoned in produce_block() - prior panic detected: {}", e);
+                e.into_inner()
+            });
             if let Some(prev_block) = blocks.get(&current_height) {
                 prev_block.header.vrf_output.to_vec()
             } else {
@@ -280,7 +286,10 @@ impl Blockchain {
             block.header.prev_hash.as_bytes().to_vec()
         } else {
             // Use previous block's VRF output for proper VRF chaining
-            let blocks = self.blocks.read().unwrap();
+            let blocks = self.blocks.read().unwrap_or_else(|e| {
+                tracing::error!("Lock poisoned in validate_block() - prior panic detected: {}", e);
+                e.into_inner()
+            });
             if let Some(prev_block) = blocks.get(&(block.header.height - 1)) {
                 prev_block.header.vrf_output.to_vec()
             } else {
@@ -321,7 +330,10 @@ impl Blockchain {
         
         // Apply transactions to state
         {
-            let mut state = self.state.write().unwrap();
+            let mut state = self.state.write().unwrap_or_else(|e| {
+                tracing::error!("Lock poisoned in add_block() while writing state - prior panic detected: {}", e);
+                e.into_inner()
+            });
             
             // Apply block reward to proposer
             let reward = Self::calculate_block_reward(block_height);
@@ -360,7 +372,10 @@ impl Blockchain {
         
         // Index transactions for O(1) lookup
         {
-            let mut tx_index = self.tx_index.write().unwrap();
+            let mut tx_index = self.tx_index.write().unwrap_or_else(|e| {
+                tracing::error!("Lock poisoned in add_block() while indexing transactions - prior panic detected: {}", e);
+                e.into_inner()
+            });
             for (idx, tx) in block.transactions.iter().enumerate() {
                 tx_index.insert(tx.hash(), TxLocation {
                     block_height,
@@ -372,17 +387,26 @@ impl Blockchain {
         
         // Store block
         {
-            let mut blocks = self.blocks.write().unwrap();
+            let mut blocks = self.blocks.write().unwrap_or_else(|e| {
+                tracing::error!("Lock poisoned in add_block() while storing block - prior panic detected: {}", e);
+                e.into_inner()
+            });
             blocks.insert(block_height, block);
         }
         
         // Update chain tip
         {
-            let mut height = self.height.write().unwrap();
+            let mut height = self.height.write().unwrap_or_else(|e| {
+                tracing::error!("Lock poisoned in add_block() while updating height - prior panic detected: {}", e);
+                e.into_inner()
+            });
             *height = block_height;
         }
         {
-            let mut latest_hash = self.latest_hash.write().unwrap();
+            let mut latest_hash = self.latest_hash.write().unwrap_or_else(|e| {
+                tracing::error!("Lock poisoned in add_block() while updating latest hash - prior panic detected: {}", e);
+                e.into_inner()
+            });
             *latest_hash = block_hash;
         }
         
@@ -415,7 +439,10 @@ impl Blockchain {
         }
         
         // Check nonce and balance
-        let state = self.state.read().unwrap();
+        let state = self.state.read().unwrap_or_else(|e| {
+            tracing::error!("Lock poisoned in validate_transaction() - prior panic detected: {}", e);
+            e.into_inner()
+        });
         if let Some(account) = state.get_account(tx.from.as_bytes()) {
             if tx.nonce != account.nonce {
                 return Err(crate::Error::Node(format!(

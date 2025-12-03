@@ -76,15 +76,34 @@ impl RpcClient {
             .ok_or_else(|| "Invalid balance format".to_string())
     }
 
-    /// Send a raw transaction
-    pub async fn send_raw_transaction(&self, tx_data: &str) -> Result<String, String> {
-        let params = json!([tx_data]);
+    /// Get transaction count (nonce) for an address
+    pub async fn get_transaction_count(&self, address: &str) -> Result<u64, String> {
+        let params = json!([address, "latest"]);
+        let result = self.call("eth_getTransactionCount", params).await?;
+        
+        let hex_str = result
+            .as_str()
+            .ok_or_else(|| "Invalid nonce format".to_string())?;
+        
+        u64::from_str_radix(hex_str.trim_start_matches("0x"), 16)
+            .map_err(|e| format!("Failed to parse nonce: {}", e))
+    }
+
+    /// Send a raw transaction (hex-encoded signed transaction)
+    pub async fn send_raw_transaction(&self, tx_hex: &str) -> Result<String, String> {
+        let params = json!([tx_hex]);
         let result = self.call("eth_sendRawTransaction", params).await?;
         
         result
             .as_str()
             .map(|s| s.to_string())
             .ok_or_else(|| "Invalid transaction hash format".to_string())
+    }
+
+    /// Send a raw transaction (bytes)
+    pub async fn send_raw_transaction_bytes(&self, tx_bytes: &[u8]) -> Result<String, String> {
+        let tx_hex = format!("0x{}", hex::encode(tx_bytes));
+        self.send_raw_transaction(&tx_hex).await
     }
 
     /// Get current block number
@@ -116,6 +135,19 @@ impl RpcClient {
     pub async fn get_battle_replay(&self, block_height: u64) -> Result<Value, String> {
         let params = json!([block_height]);
         self.call("bitcell_getBattleReplay", params).await
+    }
+
+    /// Get gas price
+    pub async fn get_gas_price(&self) -> Result<u64, String> {
+        let params = json!([]);
+        let result = self.call("eth_gasPrice", params).await?;
+        
+        let hex_str = result
+            .as_str()
+            .ok_or_else(|| "Invalid gas price format".to_string())?;
+        
+        u64::from_str_radix(hex_str.trim_start_matches("0x"), 16)
+            .map_err(|e| format!("Failed to parse gas price: {}", e))
     }
 }
 

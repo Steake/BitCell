@@ -122,10 +122,13 @@ async fn main() {
             // Or we can modify NodeConfig to hold the secret key? No, NodeConfig is serializable.
             
             // Let's update ValidatorNode::new to take the secret key as an argument.
-            let mut node = ValidatorNode::with_key(config, secret_key);
+            let mut node = ValidatorNode::with_key(config, secret_key.clone());
             
             // Start metrics server on port + 2 to avoid conflict with P2P port (30333) and RPC port (30334)
             let metrics_port = port + 2;
+            
+            // Generate node_id from public key
+            let node_id = hex::encode(secret_key.public_key().as_bytes());
             
             // Start RPC server
             let rpc_state = bitcell_node::rpc::RpcState {
@@ -135,6 +138,7 @@ async fn main() {
                 tournament_manager: Some(node.tournament_manager.clone()),
                 config: node.config.clone(),
                 node_type: "validator".to_string(),
+                node_id,
             };
             
             tokio::spawn(async move {
@@ -186,9 +190,12 @@ async fn main() {
             
             println!("Miner Public Key: {:?}", secret_key.public_key());
             
-            let mut node = MinerNode::with_key(config, secret_key);
+            let mut node = MinerNode::with_key(config, secret_key.clone());
             
             let metrics_port = port + 2;
+
+            // Generate node_id from public key
+            let node_id = hex::encode(secret_key.public_key().as_bytes());
 
             // Start RPC server
             let rpc_state = bitcell_node::rpc::RpcState {
@@ -198,6 +205,7 @@ async fn main() {
                 tournament_manager: None, // Miner doesn't have tournament manager yet
                 config: node.config.clone(),
                 node_type: "miner".to_string(),
+                node_id,
             };
             
             tokio::spawn(async move {
@@ -249,9 +257,12 @@ async fn main() {
             println!("Full Node Public Key: {:?}", secret_key.public_key());
 
             // Reuse ValidatorNode for now as FullNode logic is similar (just no voting)
-            let mut node = ValidatorNode::with_key(config, secret_key);
+            let mut node = ValidatorNode::with_key(config, secret_key.clone());
             
             let metrics_port = port + 2;
+
+            // Generate node_id from public key
+            let node_id = hex::encode(secret_key.public_key().as_bytes());
 
             // Start RPC server
             let rpc_state = bitcell_node::rpc::RpcState {
@@ -261,6 +272,7 @@ async fn main() {
                 tournament_manager: Some(node.tournament_manager.clone()),
                 config: node.config.clone(),
                 node_type: "full_node".to_string(),
+                node_id,
             };
             
             tokio::spawn(async move {

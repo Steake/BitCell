@@ -20,6 +20,7 @@ pub struct RpcState {
     pub tournament_manager: Option<Arc<TournamentManager>>,
     pub config: NodeConfig,
     pub node_type: String, // "validator", "miner", "full"
+    pub node_id: String,   // Unique node identifier (public key hex)
 }
 
 /// Start the RPC server
@@ -471,15 +472,18 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
     Ok(json!(format!("0x{}", hex::encode(tx_hash.as_bytes()))))
 }
 
+/// Get node information including ID, version, and capabilities
 async fn bitcell_get_node_info(state: &RpcState) -> Result<Value, JsonRpcError> {
     Ok(json!({
-        "node_id": "TODO_NODE_ID", // TODO: Expose node ID from NetworkManager
+        "node_id": state.node_id,
         "version": "0.1.0",
         "protocol_version": "1",
         "network_id": "bitcell-testnet",
         "api_version": "0.1-alpha",
         "capabilities": ["bitcell/1"],
         "node_type": state.node_type,
+        "chain_height": state.blockchain.height(),
+        "peer_count": state.network.peer_count(),
     }))
 }
 

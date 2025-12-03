@@ -1,4 +1,10 @@
 ///! Blockchain manager for block production and validation
+///!
+///! Provides functionality for:
+///! - Block production with VRF-based proposer selection
+///! - Block validation including signature, VRF, and transaction verification
+///! - Transaction indexing for efficient lookups
+///! - State management with Merkle tree root computation
 
 use crate::{Result, MetricsRegistry};
 use bitcell_consensus::{Block, BlockHeader, Transaction, BattleProof};
@@ -11,7 +17,17 @@ use std::collections::HashMap;
 /// Genesis block height
 pub const GENESIS_HEIGHT: u64 = 0;
 
+/// Transaction location in blockchain (block height and index within block)
+#[derive(Clone, Debug)]
+pub struct TxLocation {
+    pub block_height: u64,
+    pub tx_index: usize,
+}
+
 /// Blockchain manager
+/// 
+/// Maintains the blockchain state including blocks, transactions, and state root.
+/// Provides O(1) transaction lookup via hash index.
 #[derive(Clone)]
 pub struct Blockchain {
     /// Current chain height
@@ -22,6 +38,9 @@ pub struct Blockchain {
     
     /// Block storage (height -> block)
     blocks: Arc<RwLock<HashMap<u64, Block>>>,
+    
+    /// Transaction hash index for O(1) lookups (tx_hash -> location)
+    tx_index: Arc<RwLock<HashMap<Hash256, TxLocation>>>,
     
     /// State manager
     state: Arc<RwLock<StateManager>>,
@@ -46,6 +65,7 @@ impl Blockchain {
             height: Arc::new(RwLock::new(GENESIS_HEIGHT)),
             latest_hash: Arc::new(RwLock::new(genesis_hash)),
             blocks: Arc::new(RwLock::new(blocks)),
+            tx_index: Arc::new(RwLock::new(HashMap::new())),
             state: Arc::new(RwLock::new(StateManager::new())),
             metrics,
             secret_key,
@@ -81,27 +101,62 @@ impl Blockchain {
     }
     
     /// Get current chain height
+    /// 
+    /// Returns the current blockchain height. If the lock is poisoned (indicating
+    /// a prior panic while holding the lock), logs an error and recovers the guard.
     pub fn height(&self) -> u64 {
         *self.height.read().unwrap_or_else(|e| {
-            eprintln!("Lock poisoned in height(): {}", e);
+            tracing::error!("Lock poisoned in height() - prior panic detected: {}", e);
             e.into_inner()
         })
     }
     
     /// Get latest block hash
+    ///
+    /// Returns the hash of the latest block. If the lock is poisoned (indicating
+    /// a prior panic while holding the lock), logs an error and recovers the guard.
     pub fn latest_hash(&self) -> Hash256 {
         *self.latest_hash.read().unwrap_or_else(|e| {
-            eprintln!("Lock poisoned in latest_hash(): {}", e);
+            tracing::error!("Lock poisoned in latest_hash() - prior panic detected: {}", e);
             e.into_inner()
         })
     }
     
     /// Get block by height
+    ///
+    /// Returns the block at the specified height, or None if not found.
+    /// If the lock is poisoned, logs an error and recovers the guard.
     pub fn get_block(&self, height: u64) -> Option<Block> {
         self.blocks.read().unwrap_or_else(|e| {
-            eprintln!("Lock poisoned in get_block(): {}", e);
+            tracing::error!("Lock poisoned in get_block() - prior panic detected: {}", e);
             e.into_inner()
         }).get(&height).cloned()
+    }
+    
+    /// Get transaction by hash using the O(1) hash index
+    ///
+    /// Returns the transaction and its location (block height, index) if found.
+    /// This is significantly more efficient than linear scan for large blockchains.
+    pub fn get_transaction_by_hash(&self, tx_hash: &Hash256) -> Option<(Transaction, TxLocation)> {
+        // First, look up the location in the index
+        let location = {
+            let index = self.tx_index.read().unwrap_or_else(|e| {
+                tracing::error!("Lock poisoned in get_transaction_by_hash() - prior panic detected: {}", e);
+                e.into_inner()
+            });
+            index.get(tx_hash).cloned()
+        };
+        
+        // Then retrieve the actual transaction from the block
+        if let Some(loc) = location {
+            if let Some(block) = self.get_block(loc.block_height) {
+                if loc.tx_index < block.transactions.len() {
+                    return Some((block.transactions[loc.tx_index].clone(), loc));
+                }
+            }
+        }
+        
+        None
     }
     
     /// Get state manager (read-only access)
@@ -139,16 +194,24 @@ impl Blockchain {
             state.state_root
         };
         
-        // Generate VRF output and proof
-        // Input is previous block's VRF output (or hash if genesis)
+        // Generate VRF output and proof using proper VRF chaining
+        // For genesis block (height 1), use previous hash as input
+        // For all other blocks, use the previous block's VRF output for chaining
         let vrf_input = if new_height == 1 {
+            // First block after genesis uses genesis hash as VRF input
             prev_hash.as_bytes().to_vec()
         } else {
-            // In a real implementation, we'd get the previous block's VRF output
-            // For now, we mix the prev_hash with the height to ensure uniqueness
-            let mut input = prev_hash.as_bytes().to_vec();
-            input.extend_from_slice(&new_height.to_le_bytes());
-            input
+            // Use previous block's VRF output for proper VRF chaining
+            // This ensures verifiable randomness chain where each output
+            // deterministically derives from the previous output
+            let blocks = self.blocks.read().unwrap();
+            if let Some(prev_block) = blocks.get(&current_height) {
+                prev_block.header.vrf_output.to_vec()
+            } else {
+                // Fallback if previous block not found (shouldn't happen in normal operation)
+                tracing::warn!("Previous block {} not found for VRF chaining, using hash fallback", current_height);
+                prev_hash.as_bytes().to_vec()
+            }
         };
         
         let (vrf_output, vrf_proof) = self.secret_key.vrf_prove(&vrf_input);
@@ -207,16 +270,24 @@ impl Blockchain {
             return Err(crate::Error::Node("Invalid block signature".to_string()));
         }
         
-        // Verify VRF
+        // Verify VRF proof using proper VRF chaining
         let vrf_proof: bitcell_crypto::VrfProof = bincode::deserialize(&block.header.vrf_proof)
             .map_err(|_| crate::Error::Node("Invalid VRF proof format".to_string()))?;
             
+        // Reconstruct VRF input using the same chaining logic as produce_block
         let vrf_input = if block.header.height == 1 {
+            // First block after genesis uses genesis hash as VRF input
             block.header.prev_hash.as_bytes().to_vec()
         } else {
-            let mut input = block.header.prev_hash.as_bytes().to_vec();
-            input.extend_from_slice(&block.header.height.to_le_bytes());
-            input
+            // Use previous block's VRF output for proper VRF chaining
+            let blocks = self.blocks.read().unwrap();
+            if let Some(prev_block) = blocks.get(&(block.header.height - 1)) {
+                prev_block.header.vrf_output.to_vec()
+            } else {
+                return Err(crate::Error::Node(
+                    format!("Previous block {} not found for VRF verification", block.header.height - 1)
+                ));
+            }
         };
         
         let vrf_output = vrf_proof.verify(&block.header.proposer, &vrf_input)
@@ -285,6 +356,18 @@ impl Blockchain {
                     }
                 }
             }
+        }
+        
+        // Index transactions for O(1) lookup
+        {
+            let mut tx_index = self.tx_index.write().unwrap();
+            for (idx, tx) in block.transactions.iter().enumerate() {
+                tx_index.insert(tx.hash(), TxLocation {
+                    block_height,
+                    tx_index: idx,
+                });
+            }
+            tracing::debug!("Indexed {} transactions in block {}", block.transactions.len(), block_height);
         }
         
         // Store block

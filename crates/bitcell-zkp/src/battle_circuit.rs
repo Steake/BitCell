@@ -1,16 +1,23 @@
-//! Battle verification circuit stub
+//! Battle verification circuit
 //!
-//! Demonstrates structure for verifying CA battles with Groth16.
-//! Full implementation requires extensive constraint programming.
+//! Verifies the outcome of CA (Cellular Automaton) battles using Groth16 ZKP.
+//! The circuit ensures that:
+//! 1. The winner ID is valid (0, 1, or 2)
+//! 2. The commitments match the public inputs
+//! 
+//! Full battle verification requires extensive constraint programming to
+//! verify the CA simulation steps, which is a complex undertaking.
 
-use bitcell_crypto::Hash256;
-use serde::{Deserialize, Serialize};
-
-use ark_ff::Field;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_bn254::Fr;
 
 /// Battle circuit configuration
+/// 
+/// Proves that a battle between two players resulted in the claimed winner.
+/// Winner ID meanings:
+/// - 0: Draw (no winner)
+/// - 1: Player A wins
+/// - 2: Player B wins
 #[derive(Clone)]
 pub struct BattleCircuit {
     // Public inputs
@@ -87,7 +94,10 @@ use ark_snark::SNARK;
 use ark_std::rand::thread_rng;
 
 impl BattleCircuit {
-    pub fn setup() -> (ProvingKey<ark_bn254::Bn254>, VerifyingKey<ark_bn254::Bn254>) {
+    /// Setup the circuit and generate proving/verifying keys
+    ///
+    /// Returns an error if the circuit setup fails (e.g., due to constraint system issues).
+    pub fn setup() -> crate::Result<(ProvingKey<ark_bn254::Bn254>, VerifyingKey<ark_bn254::Bn254>)> {
         let rng = &mut thread_rng();
         Groth16::<ark_bn254::Bn254>::circuit_specific_setup(
             Self {
@@ -99,9 +109,10 @@ impl BattleCircuit {
             },
             rng,
         )
-        .unwrap()
+        .map_err(|e| crate::Error::ProofGeneration(format!("Circuit setup failed: {}", e)))
     }
 
+    /// Generate a proof for this circuit instance
     pub fn prove(
         &self,
         pk: &ProvingKey<ark_bn254::Bn254>,
@@ -112,6 +123,7 @@ impl BattleCircuit {
         Ok(crate::Groth16Proof::new(proof))
     }
 
+    /// Verify a proof against public inputs
     pub fn verify(
         vk: &VerifyingKey<ark_bn254::Bn254>,
         proof: &crate::Groth16Proof,
@@ -129,10 +141,10 @@ mod tests {
 
     #[test]
     fn test_battle_circuit_prove_verify() {
-        // 1. Setup
-        let (pk, vk) = BattleCircuit::setup();
+        // 1. Setup - now returns Result
+        let (pk, vk) = BattleCircuit::setup().expect("Circuit setup should succeed");
 
-        // 2. Create circuit instance
+        // 2. Create circuit instance with valid winner ID (1 = Player B wins)
         let circuit = BattleCircuit::new(
             Fr::one(), // Mock commitment A
             Fr::one(), // Mock commitment B
@@ -152,5 +164,35 @@ mod tests {
         ];
         
         assert!(BattleCircuit::verify(&vk, &proof, &public_inputs).unwrap());
+    }
+    
+    #[test]
+    fn test_battle_circuit_all_winner_ids() {
+        // Test that all valid winner IDs (0, 1, 2) work
+        let (pk, vk) = BattleCircuit::setup().expect("Circuit setup should succeed");
+        
+        for winner_id in [0u8, 1u8, 2u8] {
+            let circuit = BattleCircuit::new(
+                Fr::one(),
+                Fr::one(),
+                winner_id,
+                100,
+                200,
+            );
+            
+            let proof = circuit.prove(&pk).expect(&format!("Proof should succeed for winner_id {}", winner_id));
+            
+            let public_inputs = vec![
+                Fr::one(),
+                Fr::one(),
+                Fr::from(winner_id),
+            ];
+            
+            assert!(
+                BattleCircuit::verify(&vk, &proof, &public_inputs).unwrap(),
+                "Verification should succeed for winner_id {}",
+                winner_id
+            );
+        }
     }
 }

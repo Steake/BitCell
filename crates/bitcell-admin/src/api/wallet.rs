@@ -86,50 +86,25 @@ async fn get_balance(
 }
 
 /// Send transaction
+///
+/// This endpoint is currently not implemented. A full implementation requires:
+/// 1. Private key management in the admin console
+/// 2. Transaction building with proper gas estimation
+/// 3. Transaction signing with the managed key
+/// 4. RLP encoding of the signed transaction
+/// 5. Submission via eth_sendRawTransaction RPC
+///
+/// For now, returns NOT_IMPLEMENTED status code.
 async fn send_transaction(
-    State(config_manager): State<Arc<ConfigManager>>,
-    Json(req): Json<SendTransactionRequest>,
+    State(_config_manager): State<Arc<ConfigManager>>,
+    Json(_req): Json<SendTransactionRequest>,
 ) -> impl IntoResponse {
-    // Get config
-    let config = match config_manager.get_config() {
-        Ok(c) => c,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get config").into_response(),
-    };
-
-    // In a real implementation, we would:
-    // 1. Create a transaction object
-    // 2. Sign it with a key managed by admin console (or passed in)
-    // 3. Encode it
-    // 4. Send via eth_sendRawTransaction
-    
-    // For now, we'll just mock the RPC call with a dummy raw tx
-    let rpc_url = format!("http://{}:{}/rpc", config.wallet.node_rpc_host, config.wallet.node_rpc_port);
-    let client = reqwest::Client::new();
-    
-    let dummy_signed_tx = "0x1234..."; // Placeholder
-    
-    let rpc_req = json!({
-        "jsonrpc": "2.0",
-        "method": "eth_sendRawTransaction",
-        "params": [dummy_signed_tx],
-        "id": 1
-    });
-
-    match client.post(&rpc_url).json(&rpc_req).send().await {
-        Ok(resp) => {
-            if let Ok(json) = resp.json::<Value>().await {
-                if let Some(result) = json.get("result").and_then(|v| v.as_str()) {
-                    return Json(SendTransactionResponse {
-                        tx_hash: result.to_string(),
-                        status: "pending".to_string(),
-                    }).into_response();
-                }
-            }
-        }
-        Err(e) => {
-            tracing::error!("Failed to call RPC: {}", e);
-        }
-    }
-
-    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to send transaction").into_response()
+    // Transaction sending requires proper implementation of:
+    // - Private key management (secure storage, HSM integration)
+    // - Transaction building (nonce fetching, gas estimation)
+    // - Transaction signing (ECDSA with secp256k1)
+    // - RLP encoding for broadcast
+    //
+    // Until these are implemented, return NOT_IMPLEMENTED
+    (StatusCode::NOT_IMPLEMENTED, "Transaction sending not yet implemented. Requires: key management, tx building, signing, and RLP encoding.").into_response()
 }

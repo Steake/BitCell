@@ -50,7 +50,7 @@ impl DhtManager {
         // 1. Create libp2p keypair
         let keypair = Self::bitcell_to_libp2p_keypair(secret_key)?;
         let local_peer_id = PeerId::from(keypair.public());
-        println!("Local Peer ID: {}", local_peer_id);
+        tracing::info!("Local Peer ID: {}", local_peer_id);
 
         // 2. Create transport
         let mut swarm = SwarmBuilder::with_existing_identity(keypair.clone())
@@ -136,18 +136,18 @@ impl DhtManager {
                         })) => {
                             if message.topic == block_topic.hash() {
                                 if let Ok(block) = bincode::deserialize::<Block>(&message.data) {
-                                    println!("Received block via Gossipsub from {}", peer_id);
+                                    tracing::info!("Received block via Gossipsub from {}", peer_id);
                                     let _ = block_tx.send(block).await;
                                 }
                             } else if message.topic == tx_topic.hash() {
                                 if let Ok(tx) = bincode::deserialize::<Transaction>(&message.data) {
-                                    println!("Received tx via Gossipsub from {}", peer_id);
+                                    tracing::info!("Received tx via Gossipsub from {}", peer_id);
                                     let _ = tx_tx.send(tx).await;
                                 }
                             }
                         }
                         SwarmEvent::NewListenAddr { address, .. } => {
-                            println!("DHT listening on {:?}", address);
+                            tracing::info!("DHT listening on {:?}", address);
                         }
                         _ => {}
                     },
@@ -157,12 +157,12 @@ impl DhtManager {
                         }
                         Some(DhtCommand::BroadcastBlock(data)) => {
                             if let Err(e) = swarm.behaviour_mut().gossipsub.publish(block_topic.clone(), data) {
-                                eprintln!("Failed to publish block: {:?}", e);
+                                tracing::error!("Failed to publish block via Gossipsub: {:?}", e);
                             }
                         }
                         Some(DhtCommand::BroadcastTransaction(data)) => {
                             if let Err(e) = swarm.behaviour_mut().gossipsub.publish(tx_topic.clone(), data) {
-                                eprintln!("Failed to publish tx: {:?}", e);
+                                tracing::error!("Failed to publish transaction via Gossipsub: {:?}", e);
                             }
                         }
                         None => break,

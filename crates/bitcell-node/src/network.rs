@@ -99,13 +99,14 @@ impl NetworkManager {
         let dht_manager = crate::dht::DhtManager::new(secret_key, bootstrap, block_tx, tx_tx)?;
         let mut dht = self.dht.write();
         *dht = Some(dht_manager);
-        println!("DHT enabled");
+        tracing::info!("DHT enabled");
         Ok(())
     }
-
-
     
     /// Start the network listener
+    ///
+    /// Binds to the specified port and starts accepting connections.
+    /// Also initiates DHT discovery if bootstrap nodes are provided.
     pub async fn start(&self, port: u16, bootstrap_nodes: Vec<String>) -> Result<()> {
         let addr = format!("0.0.0.0:{}", port);
         
@@ -119,7 +120,7 @@ impl NetworkManager {
         let listener = TcpListener::bind(&addr).await
             .map_err(|e| format!("Failed to bind to {}: {}", addr, e))?;
         
-        println!("Network listening on {}", addr);
+        tracing::info!("Network listening on {}", addr);
         
         // Spawn listener task
         let network = self.clone();
@@ -142,12 +143,12 @@ impl NetworkManager {
             };
             
             if let Some(mut dht) = dht_manager {
-                println!("Starting DHT discovery...");
+                tracing::info!("Starting DHT discovery...");
                 
                 // 1. Connect to explicit bootstrap nodes from config
                 // This is necessary because DhtManager might reject addresses without Peer IDs
                 if !bootstrap_nodes_clone.is_empty() {
-                    println!("Connecting to {} bootstrap nodes...", bootstrap_nodes_clone.len());
+                    tracing::info!("Connecting to {} bootstrap nodes...", bootstrap_nodes_clone.len());
                     for addr_str in bootstrap_nodes_clone {
                         // Extract IP and port from multiaddr string /ip4/x.x.x.x/tcp/yyyy
                         // Also handle /p2p/Qm... suffix if present
@@ -166,7 +167,7 @@ impl NetworkManager {
                                 };
                                 
                                 let connect_addr = format!("{}:{}", ip, port);
-                                println!("Connecting to bootstrap node: {}", connect_addr);
+                                tracing::info!("Connecting to bootstrap node: {}", connect_addr);
                                 let _ = network_clone.connect_to_peer(&connect_addr).await;
                             }
                         }
@@ -174,7 +175,7 @@ impl NetworkManager {
                 }
 
                 if let Ok(peers) = dht.start_discovery().await {
-                    println!("DHT discovery found {} peers", peers.len());
+                    tracing::info!("DHT discovery found {} peers", peers.len());
                     for peer in peers {
                         for addr in peer.addresses {
                             // Convert multiaddr to string address if possible
@@ -197,7 +198,7 @@ impl NetworkManager {
                                     };
                                     
                                     let connect_addr = format!("{}:{}", ip, port);
-                                    println!("DHT discovered peer: {}", connect_addr);
+                                    tracing::info!("DHT discovered peer: {}", connect_addr);
                                     let _ = network_clone.connect_to_peer(&connect_addr).await;
                                 }
                             }
@@ -227,16 +228,16 @@ impl NetworkManager {
         loop {
             match listener.accept().await {
                 Ok((socket, addr)) => {
-                    println!("Accepted connection from {}", addr);
+                    tracing::info!("Accepted connection from {}", addr);
                     let network = self.clone();
                     tokio::spawn(async move {
                         if let Err(e) = network.handle_connection(socket).await {
-                            eprintln!("Connection error: {}", e);
+                            tracing::error!("Connection error: {}", e);
                         }
                     });
                 }
                 Err(e) => {
-                    eprintln!("Failed to accept connection: {}", e);
+                    tracing::error!("Failed to accept connection: {}", e);
                 }
             }
         }
@@ -244,22 +245,22 @@ impl NetworkManager {
     
     /// Handle a peer connection
     async fn handle_connection(&self, mut socket: TcpStream) -> Result<()> {
-        println!("Accepted connection");
+        tracing::info!("Accepted connection");
         
         // Send handshake
         self.send_message(&mut socket, &NetworkMessage::Handshake { peer_id: self.local_peer }).await?;
-        println!("Sent handshake to incoming peer");
+        tracing::info!("Sent handshake to incoming peer");
         
         // Read handshake response
         let msg = self.receive_message(&mut socket).await?;
-        println!("Received handshake response");
+        tracing::info!("Received handshake response");
         
         let peer_id = match msg {
             NetworkMessage::Handshake { peer_id } => peer_id,
             _ => return Err("Expected handshake".into()),
         };
         
-        println!("Handshake complete with peer: {:?}", peer_id);
+        tracing::info!("Handshake complete with peer: {:?}", peer_id);
         
         // Split socket for concurrent read/write
         let (reader, writer) = tokio::io::split(socket);
@@ -302,11 +303,11 @@ impl NetworkManager {
                             
                         }
                         NetworkMessage::Block(block) => {
-                            println!("Received block {} from peer", block.header.height);
+                            tracing::info!("Received block {} from peer", block.header.height);
                             self.handle_incoming_block(block).await?;
                         }
                         NetworkMessage::Transaction(tx) => {
-                            println!("Received transaction from peer");
+                            tracing::info!("Received transaction from peer");
                             self.handle_incoming_transaction(tx).await?;
                         }
                         NetworkMessage::GetPeers => {
@@ -327,7 +328,7 @@ impl NetworkManager {
                     }
                 }
                 Err(e) => {
-                    println!("Peer {:?} disconnected: {}", peer_id, e);
+                    tracing::info!("Peer {:?} disconnected: {}", peer_id, e);
                     break;
                 }
             }
@@ -448,27 +449,27 @@ impl NetworkManager {
         }
         
         // Only print if we're actually attempting a new connection
-        println!("Connecting to peer at {}", address);
+        tracing::info!("Connecting to peer at {}", address);
         
         match TcpStream::connect(address).await {
             Ok(mut socket) => {
-                println!("Connected to {}, sending handshake", address);
+                tracing::info!("Connected to {}, sending handshake", address);
                 // Send handshake
                 self.send_message(&mut socket, &NetworkMessage::Handshake {
                     peer_id: self.local_peer,
                 }).await?;
-                println!("Sent handshake to {}", address);
+                tracing::info!("Sent handshake to {}", address);
                 
                 // Receive handshake
                 let msg = self.receive_message(&mut socket).await?;
-                println!("Received handshake response from {}", address);
+                tracing::info!("Received handshake response from {}", address);
                 
                 let peer_id = match msg {
                     NetworkMessage::Handshake { peer_id } => peer_id,
                     _ => return Err("Expected handshake".into()),
                 };
                 
-                println!("Connected to peer: {:?}", peer_id);
+                tracing::info!("Connected to peer: {:?}", peer_id);
                 
                 // Split socket
                 let (reader, writer) = tokio::io::split(socket);
@@ -550,7 +551,7 @@ impl NetworkManager {
     /// Connect to a peer by PublicKey (legacy compatibility)
     pub fn connect_peer(&self, peer_id: PublicKey) -> Result<()> {
         // This is now handled by connect_to_peer with actual addresses
-        println!("Legacy connect_peer called for: {:?}", peer_id);
+        tracing::info!("Legacy connect_peer called for: {:?}", peer_id);
         Ok(())
     }
     
@@ -559,7 +560,7 @@ impl NetworkManager {
         let mut peers = self.peers.write();
         peers.remove(peer_id);
         self.metrics.set_peer_count(peers.len());
-        println!("Disconnected from peer: {:?}", peer_id);
+        tracing::info!("Disconnected from peer: {:?}", peer_id);
         Ok(())
     }
     
@@ -568,7 +569,7 @@ impl NetworkManager {
         // Broadcast via TCP
         let peer_ids: Vec<PublicKey> = {
             let peers = self.peers.read();
-            println!("Broadcasting block {} to {} peers", block.header.height, peers.len());
+            tracing::info!("Broadcasting block {} to {} peers", block.header.height, peers.len());
             peers.keys().copied().collect()
         };
         
@@ -590,7 +591,7 @@ impl NetworkManager {
         
         if let Some(dht) = dht_opt {
             if let Err(e) = dht.broadcast_block(block).await {
-                eprintln!("Failed to broadcast block via DHT: {}", e);
+                tracing::error!("Failed to broadcast block via DHT: {}", e);
             }
         }
         
@@ -602,7 +603,7 @@ impl NetworkManager {
         // Broadcast via TCP
         let peer_ids: Vec<PublicKey> = {
             let peers = self.peers.read();
-            println!("Broadcasting transaction to {} peers", peers.len());
+            tracing::info!("Broadcasting transaction to {} peers", peers.len());
             peers.keys().copied().collect()
         };
         
@@ -624,7 +625,7 @@ impl NetworkManager {
         
         if let Some(dht) = dht_opt {
             if let Err(e) = dht.broadcast_transaction(tx).await {
-                eprintln!("Failed to broadcast transaction via DHT: {}", e);
+                tracing::error!("Failed to broadcast transaction via DHT: {}", e);
             }
         }
         
@@ -699,16 +700,16 @@ pub async fn discover_peers(
     network: Arc<NetworkManager>,
     bootstrap_addresses: Vec<String>,
 ) -> Result<()> {
-    println!("Starting peer discovery with {} bootstrap addresses...", bootstrap_addresses.len());
+    tracing::info!("Starting peer discovery with {} bootstrap addresses...", bootstrap_addresses.len());
     
     for addr in bootstrap_addresses {
         network.add_bootstrap_peer(addr.clone());
         if let Err(e) = network.connect_to_peer(&addr).await {
-            eprintln!("Failed to connect to bootstrap peer {}: {}", addr, e);
+            tracing::error!("Failed to connect to bootstrap peer {}: {}", addr, e);
         }
     }
     
-    println!("Peer discovery complete: {} peers connected", network.peer_count());
+    tracing::info!("Peer discovery complete: {} peers connected", network.peer_count());
     Ok(())
 }
 

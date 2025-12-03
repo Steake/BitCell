@@ -109,12 +109,22 @@ impl StateManager {
     }
 
     /// Create or update account
+    /// 
+    /// Updates the in-memory cache and persists to storage if available.
+    /// Storage errors are logged but do not prevent the operation from succeeding
+    /// in memory (eventual consistency model).
     pub fn update_account(&mut self, pubkey: [u8; 33], account: Account) {
         self.accounts.insert(pubkey, account.clone());
         
         // Persist to storage if available
         if let Some(storage) = &self.storage {
-            let _ = storage.store_account(&pubkey, &account);
+            if let Err(e) = storage.store_account(&pubkey, &account) {
+                tracing::error!(
+                    "Failed to persist account {:?} to storage: {}. State may be inconsistent on restart.",
+                    hex::encode(&pubkey[..8]),
+                    e
+                );
+            }
         }
         
         self.recompute_root();
@@ -143,12 +153,22 @@ impl StateManager {
     }
 
     /// Update bond state
+    ///
+    /// Updates the in-memory cache and persists to storage if available.
+    /// Storage errors are logged but do not prevent the operation from succeeding
+    /// in memory (eventual consistency model).
     pub fn update_bond(&mut self, pubkey: [u8; 33], bond: BondState) {
         self.bonds.insert(pubkey, bond.clone());
         
         // Persist to storage if available
         if let Some(storage) = &self.storage {
-            let _ = storage.store_bond(&pubkey, &bond);
+            if let Err(e) = storage.store_bond(&pubkey, &bond) {
+                tracing::error!(
+                    "Failed to persist bond {:?} to storage: {}. State may be inconsistent on restart.",
+                    hex::encode(&pubkey[..8]),
+                    e
+                );
+            }
         }
         
         self.recompute_root();

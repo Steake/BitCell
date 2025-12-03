@@ -31,7 +31,7 @@ pub async fn run_server(state: RpcState, port: u16) -> Result<(), Box<dyn std::e
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", port);
-    println!("RPC server listening on {}", addr);
+    tracing::info!("RPC server listening on {}", addr);
     
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(listener, app).await?;
@@ -278,30 +278,23 @@ async fn eth_get_transaction_by_hash(state: &RpcState, params: Option<Value>) ->
     hash.copy_from_slice(&tx_hash_bytes);
     let target_hash = bitcell_crypto::Hash256::from(hash);
     
-    // Search in blockchain (inefficient linear scan for now, need index later)
-    let height = state.blockchain.height();
-    // Scan last 100 blocks for efficiency in this demo
-    let start_height = if height > 100 { height - 100 } else { 0 };
-    
-    for h in (start_height..=height).rev() {
-        if let Some(block) = state.blockchain.get_block(h) {
-            for (i, tx) in block.transactions.iter().enumerate() {
-                if tx.hash() == target_hash {
-                    return Ok(json!({
-                        "hash": format!("0x{}", hex::encode(tx.hash().as_bytes())),
-                        "nonce": format!("0x{:x}", tx.nonce),
-                        "blockHash": format!("0x{}", hex::encode(block.hash().as_bytes())),
-                        "blockNumber": format!("0x{:x}", block.header.height),
-                        "transactionIndex": format!("0x{:x}", i),
-                        "from": format!("0x{}", hex::encode(tx.from.as_bytes())),
-                        "to": format!("0x{}", hex::encode(tx.to.as_bytes())),
-                        "value": format!("0x{:x}", tx.amount),
-                        "gas": format!("0x{:x}", tx.gas_limit),
-                        "gasPrice": format!("0x{:x}", tx.gas_price),
-                        "input": format!("0x{}", hex::encode(&tx.data)),
-                    }));
-                }
-            }
+    // Use efficient O(1) lookup via transaction hash index
+    if let Some((tx, location)) = state.blockchain.get_transaction_by_hash(&target_hash) {
+        // Get the block to include block hash in response
+        if let Some(block) = state.blockchain.get_block(location.block_height) {
+            return Ok(json!({
+                "hash": format!("0x{}", hex::encode(tx.hash().as_bytes())),
+                "nonce": format!("0x{:x}", tx.nonce),
+                "blockHash": format!("0x{}", hex::encode(block.hash().as_bytes())),
+                "blockNumber": format!("0x{:x}", location.block_height),
+                "transactionIndex": format!("0x{:x}", location.tx_index),
+                "from": format!("0x{}", hex::encode(tx.from.as_bytes())),
+                "to": format!("0x{}", hex::encode(tx.to.as_bytes())),
+                "value": format!("0x{:x}", tx.amount),
+                "gas": format!("0x{:x}", tx.gas_limit),
+                "gasPrice": format!("0x{:x}", tx.gas_price),
+                "input": format!("0x{}", hex::encode(&tx.data)),
+            }));
         }
     }
     
@@ -449,11 +442,19 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
                 });
             }
         } else {
-            return Err(JsonRpcError {
-                code: -32602,
-                message: "Account not found".to_string(),
-                data: None,
-            });
+            // Account doesn't exist - allow transactions with nonce 0
+            // This supports sending to/from new accounts that haven't been
+            // credited yet (e.g., funding transactions from coinbase rewards)
+            if tx.nonce != 0 {
+                return Err(JsonRpcError {
+                    code: -32602,
+                    message: format!("Account not found and nonce is not zero (got nonce {}). New accounts must start with nonce 0.", tx.nonce),
+                    data: None,
+                });
+            }
+            // Note: For new accounts, we can't verify balance since account doesn't exist
+            // The transaction will fail during state application if funds are insufficient
+            tracing::debug!("Allowing transaction from new account with nonce 0");
         }
     }
     

@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-latest-xl
             target: x86_64-unknown-linux-gnu
             artifact_name: bitcell-linux-x86_64
           - os: macos-latest
@@ -115,7 +115,7 @@ jobs:
   release:
     name: Upload Release Assets
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-xl
     if: github.event_name == 'release'
     permissions:
       contents: write

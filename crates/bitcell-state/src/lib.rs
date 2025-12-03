@@ -5,6 +5,7 @@
 //! - Bond management
 //! - State Merkle tree
 //! - Nullifier set
+//! - Persistent storage with RocksDB
 
 pub mod account;
 pub mod bonds;
@@ -12,9 +13,11 @@ pub mod storage;
 
 pub use account::{Account, AccountState};
 pub use bonds::{BondState, BondStatus};
+pub use storage::{StorageManager, PruningStats};
 
 use bitcell_crypto::Hash256;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -31,18 +34,24 @@ pub enum Error {
     
     #[error("Balance overflow")]
     BalanceOverflow,
+    
+    #[error("Storage error: {0}")]
+    StorageError(String),
 }
 
 /// Global state manager
 pub struct StateManager {
-    /// Account states
+    /// Account states (in-memory cache)
     pub accounts: HashMap<[u8; 33], Account>,
     
-    /// Bond states
+    /// Bond states (in-memory cache)
     pub bonds: HashMap<[u8; 33], BondState>,
     
     /// State root
     pub state_root: Hash256,
+    
+    /// Optional persistent storage backend
+    storage: Option<Arc<StorageManager>>,
 }
 
 impl StateManager {
@@ -51,17 +60,74 @@ impl StateManager {
             accounts: HashMap::new(),
             bonds: HashMap::new(),
             state_root: Hash256::zero(),
+            storage: None,
         }
+    }
+    
+    /// Create StateManager with persistent storage
+    pub fn with_storage(storage: Arc<StorageManager>) -> Result<Self> {
+        let mut manager = Self {
+            accounts: HashMap::new(),
+            bonds: HashMap::new(),
+            state_root: Hash256::zero(),
+            storage: Some(storage),
+        };
+        
+        // Load existing state from storage if available
+        // This is a simplified version - production would iterate all accounts
+        manager.recompute_root();
+        Ok(manager)
     }
 
     /// Get account
     pub fn get_account(&self, pubkey: &[u8; 33]) -> Option<&Account> {
-        self.accounts.get(pubkey)
+        // Check in-memory cache first
+        if let Some(account) = self.accounts.get(pubkey) {
+            return Some(account);
+        }
+        
+        // If we have storage, try loading from disk
+        // Note: This returns None because we can't return a reference to a temporary
+        // In production, we'd need to update the cache or use a different pattern
+        None
+    }
+    
+    /// Get account (with storage fallback, returns owned value)
+    pub fn get_account_owned(&self, pubkey: &[u8; 33]) -> Option<Account> {
+        // Check in-memory cache first
+        if let Some(account) = self.accounts.get(pubkey) {
+            return Some(account.clone());
+        }
+        
+        // Fallback to storage if available
+        if let Some(storage) = &self.storage {
+            if let Ok(Some(account)) = storage.get_account(pubkey) {
+                return Some(account);
+            }
+        }
+        
+        None
     }
 
     /// Create or update account
+    /// 
+    /// Updates the in-memory cache and persists to storage if available.
+    /// Storage errors are logged but do not prevent the operation from succeeding
+    /// in memory (eventual consistency model).
     pub fn update_account(&mut self, pubkey: [u8; 33], account: Account) {
-        self.accounts.insert(pubkey, account);
+        self.accounts.insert(pubkey, account.clone());
+        
+        // Persist to storage if available
+        if let Some(storage) = &self.storage {
+            if let Err(e) = storage.store_account(&pubkey, &account) {
+                tracing::error!(
+                    pubkey = %hex::encode(&pubkey),
+                    error = %e,
+                    "Failed to persist account to storage. State may be inconsistent on restart."
+                );
+            }
+        }
+        
         self.recompute_root();
     }
 
@@ -69,10 +135,43 @@ impl StateManager {
     pub fn get_bond(&self, pubkey: &[u8; 33]) -> Option<&BondState> {
         self.bonds.get(pubkey)
     }
+    
+    /// Get bond state (with storage fallback, returns owned value)
+    pub fn get_bond_owned(&self, pubkey: &[u8; 33]) -> Option<BondState> {
+        // Check in-memory cache first
+        if let Some(bond) = self.bonds.get(pubkey) {
+            return Some(bond.clone());
+        }
+        
+        // Fallback to storage if available
+        if let Some(storage) = &self.storage {
+            if let Ok(Some(bond)) = storage.get_bond(pubkey) {
+                return Some(bond);
+            }
+        }
+        
+        None
+    }
 
     /// Update bond state
+    ///
+    /// Updates the in-memory cache and persists to storage if available.
+    /// Storage errors are logged but do not prevent the operation from succeeding
+    /// in memory (eventual consistency model).
     pub fn update_bond(&mut self, pubkey: [u8; 33], bond: BondState) {
-        self.bonds.insert(pubkey, bond);
+        self.bonds.insert(pubkey, bond.clone());
+        
+        // Persist to storage if available
+        if let Some(storage) = &self.storage {
+            if let Err(e) = storage.store_bond(&pubkey, &bond) {
+                tracing::error!(
+                    pubkey = %hex::encode(&pubkey),
+                    error = %e,
+                    "Failed to persist bond to storage. State may be inconsistent on restart."
+                );
+            }
+        }
+        
         self.recompute_root();
     }
 
@@ -148,15 +247,15 @@ impl StateManager {
         let mut account = self.accounts.get(&pubkey)
             .cloned()
             .unwrap_or(Account { balance: 0, nonce: 0 });
-        
+            
         account.balance = account.balance.checked_add(amount)
             .ok_or(Error::BalanceOverflow)?;
         
         tracing::debug!(
-            "Credited account {:?} with {} units (new balance: {})",
-            hex::encode(&pubkey[..8]), // Log first 8 bytes of pubkey
-            amount,
-            account.balance
+            pubkey = %hex::encode(&pubkey),
+            amount = amount,
+            new_balance = account.balance,
+            "Credited account"
         );
         
         self.accounts.insert(pubkey, account);

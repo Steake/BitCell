@@ -87,13 +87,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let window_weak = main_window_weak.clone();
         
         tokio::spawn(async move {
-            let connected = client.get_node_info().await.is_ok();
-            
-            let _ = slint::invoke_from_event_loop(move || {
-                if let Some(window) = window_weak.upgrade() {
-                    window.global::<WalletState>().set_rpc_connected(connected);
+            match client.get_node_info().await {
+                Ok(_) => {
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(window) = window_weak.upgrade() {
+                            window.global::<WalletState>().set_rpc_connected(true);
+                        }
+                    });
                 }
-            });
+                Err(e) => {
+                    tracing::debug!("RPC connection check failed: {}", e);
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(window) = window_weak.upgrade() {
+                            window.global::<WalletState>().set_rpc_connected(false);
+                        }
+                    });
+                }
+            }
         });
     });
     
@@ -367,13 +377,14 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
     
     // Send transaction callback
     {
+        let _state = state.clone();
         let window_weak = window.as_weak();
         
         wallet_state.on_send_transaction(move |to_address, amount, _chain_str| {
             let window = window_weak.unwrap();
             let wallet_state = window.global::<WalletState>();
             
-            // Parse amount for validation
+            // Parse amount
             let amount: f64 = amount.parse().unwrap_or(0.0);
             if amount <= 0.0 {
                 wallet_state.set_status_message("Invalid amount".into());

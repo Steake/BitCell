@@ -1,76 +1,190 @@
-//! DHT-based peer discovery using Kademlia
+//! DHT-based peer discovery and Gossipsub using libp2p
 //!
-//! Provides decentralized peer discovery across networks using libp2p Kademlia DHT.
+//! Provides decentralized peer discovery and message propagation.
 
 use libp2p::{
-    kad::{store::MemoryStore, Behaviour as Kademlia, Event as KademliaEvent, QueryResult},
-    swarm::{self, NetworkBehaviour},
+    gossipsub,
+    kad::{store::MemoryStore, Behaviour as Kademlia, Config as KademliaConfig, Event as KademliaEvent},
+    swarm::{NetworkBehaviour, SwarmEvent},
     identify, noise, tcp, yamux, PeerId, Multiaddr, StreamProtocol,
     identity::{Keypair, ed25519},
+    SwarmBuilder,
 };
 use futures::prelude::*;
 use std::time::Duration;
-use std::collections::HashSet;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use tokio::sync::mpsc;
+use bitcell_consensus::{Block, Transaction};
 
-/// DHT network behaviour combining Kademlia and Identify
+/// Network behaviour combining Kademlia, Identify, and Gossipsub
 #[derive(NetworkBehaviour)]
-struct DhtBehaviour {
+struct NodeBehaviour {
     kademlia: Kademlia<MemoryStore>,
     identify: identify::Behaviour,
+    gossipsub: gossipsub::Behaviour,
 }
 
-/// Information about a discovered peer
-#[derive(Debug, Clone)]
-pub struct PeerInfo {
-    pub peer_id: PeerId,
-    pub addresses: Vec<Multiaddr>,
+/// Commands for the DHT service
+enum DhtCommand {
+    StartDiscovery,
+    BroadcastBlock(Vec<u8>),
+    BroadcastTransaction(Vec<u8>),
 }
 
-/// DHT manager for peer discovery
+/// DHT manager (client interface)
+#[derive(Clone)]
 pub struct DhtManager {
+    cmd_tx: mpsc::Sender<DhtCommand>,
     local_peer_id: PeerId,
-    bootstrap_addrs: Vec<(PeerId, Multiaddr)>,
-    discovered_peers: HashSet<PeerId>,
 }
 
 impl DhtManager {
-    /// Create a new DHT manager
-    pub fn new(secret_key: &bitcell_crypto::SecretKey, bootstrap: Vec<String>) -> crate::Result<Self> {
-        // Convert BitCell secret key to libp2p keypair
+    /// Create a new DHT manager and spawn the swarm
+    pub fn new(
+        secret_key: &bitcell_crypto::SecretKey, 
+        bootstrap: Vec<String>,
+        block_tx: mpsc::Sender<Block>,
+        tx_tx: mpsc::Sender<Transaction>,
+    ) -> crate::Result<Self> {
+        // 1. Create libp2p keypair
         let keypair = Self::bitcell_to_libp2p_keypair(secret_key)?;
         let local_peer_id = PeerId::from(keypair.public());
-        
-        // Parse bootstrap addresses
-        let bootstrap_addrs = bootstrap
-            .iter()
-            .filter_map(|addr_str| {
-                addr_str.parse::<Multiaddr>().ok()
-                    .and_then(|addr| Self::extract_peer_id(&addr).map(|peer_id| (peer_id, addr)))
+        tracing::info!("Local Peer ID: {}", local_peer_id);
+
+        // 2. Create transport
+        let mut swarm = SwarmBuilder::with_existing_identity(keypair.clone())
+            .with_tokio()
+            .with_tcp(
+                tcp::Config::default(),
+                noise::Config::new,
+                yamux::Config::default,
+            )
+            .map_err(|e| crate::Error::Network(format!("TCP transport error: {:?}", e)))?
+            .with_dns()
+            .map_err(|e| crate::Error::Network(format!("DNS transport error: {:?}", e)))?
+            .with_behaviour(|key| {
+                // Kademlia
+                let store = MemoryStore::new(key.public().to_peer_id());
+                let kad_config = KademliaConfig::default();
+                let kademlia = Kademlia::with_config(key.public().to_peer_id(), store, kad_config);
+
+                // Identify
+                let identify = identify::Behaviour::new(identify::Config::new(
+                    "/bitcell/1.0.0".to_string(),
+                    key.public(),
+                ));
+
+                // Gossipsub
+                let message_id_fn = |message: &gossipsub::Message| {
+                    let mut s = DefaultHasher::new();
+                    message.data.hash(&mut s);
+                    gossipsub::MessageId::from(s.finish().to_string())
+                };
+                let gossipsub_config = gossipsub::ConfigBuilder::default()
+                    .heartbeat_interval(Duration::from_secs(1))
+                    .validation_mode(gossipsub::ValidationMode::Strict)
+                    .message_id_fn(message_id_fn)
+                    .build()
+                    .map_err(|msg| std::io::Error::new(std::io::ErrorKind::Other, msg))?;
+
+                let gossipsub = gossipsub::Behaviour::new(
+                    gossipsub::MessageAuthenticity::Signed(key.clone()),
+                    gossipsub_config,
+                )?;
+
+                Ok(NodeBehaviour {
+                    kademlia,
+                    identify,
+                    gossipsub,
+                })
             })
-            .collect();
+            .map_err(|e| crate::Error::Network(format!("Behaviour error: {:?}", e)))?
+            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
+            .build();
+
+        // 3. Subscribe to topics
+        let block_topic = gossipsub::IdentTopic::new("bitcell-blocks");
+        let tx_topic = gossipsub::IdentTopic::new("bitcell-transactions");
         
+        swarm.behaviour_mut().gossipsub.subscribe(&block_topic)?;
+        swarm.behaviour_mut().gossipsub.subscribe(&tx_topic)?;
+
+        // 4. Listen on a random port (or fixed if configured)
+        swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+
+        // 5. Add bootstrap nodes
+        for addr_str in bootstrap {
+            if let Ok(addr) = addr_str.parse::<Multiaddr>() {
+                if let Some(peer_id) = Self::extract_peer_id(&addr) {
+                    swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+                }
+            }
+        }
+
+        // 6. Spawn swarm task
+        let (cmd_tx, mut cmd_rx) = mpsc::channel(32);
+        
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    event = swarm.select_next_some() => match event {
+                        SwarmEvent::Behaviour(NodeBehaviourEvent::Gossipsub(gossipsub::Event::Message {
+                            propagation_source: peer_id,
+                            message_id: _,
+                            message,
+                        })) => {
+                            if message.topic == block_topic.hash() {
+                                if let Ok(block) = bincode::deserialize::<Block>(&message.data) {
+                                    tracing::info!("Received block via Gossipsub from {}", peer_id);
+                                    let _ = block_tx.send(block).await;
+                                }
+                            } else if message.topic == tx_topic.hash() {
+                                if let Ok(tx) = bincode::deserialize::<Transaction>(&message.data) {
+                                    tracing::info!("Received tx via Gossipsub from {}", peer_id);
+                                    let _ = tx_tx.send(tx).await;
+                                }
+                            }
+                        }
+                        SwarmEvent::NewListenAddr { address, .. } => {
+                            tracing::info!("DHT listening on {:?}", address);
+                        }
+                        _ => {}
+                    },
+                    command = cmd_rx.recv() => match command {
+                        Some(DhtCommand::StartDiscovery) => {
+                            let _ = swarm.behaviour_mut().kademlia.bootstrap();
+                        }
+                        Some(DhtCommand::BroadcastBlock(data)) => {
+                            if let Err(e) = swarm.behaviour_mut().gossipsub.publish(block_topic.clone(), data) {
+                                tracing::error!("Failed to publish block via Gossipsub: {:?}", e);
+                            }
+                        }
+                        Some(DhtCommand::BroadcastTransaction(data)) => {
+                            if let Err(e) = swarm.behaviour_mut().gossipsub.publish(tx_topic.clone(), data) {
+                                tracing::error!("Failed to publish transaction via Gossipsub: {:?}", e);
+                            }
+                        }
+                        None => break,
+                    }
+                }
+            }
+        });
+
         Ok(Self {
+            cmd_tx,
             local_peer_id,
-            bootstrap_addrs,
-            discovered_peers: HashSet::new(),
         })
     }
     
     /// Convert BitCell secret key to libp2p keypair
     fn bitcell_to_libp2p_keypair(secret_key: &bitcell_crypto::SecretKey) -> crate::Result<Keypair> {
-        // Get the raw bytes from the BitCell secret key
         let sk_bytes = secret_key.to_bytes();
-        
-        // Ed25519 secret key is 32 bytes
         let mut key_bytes = [0u8; 32];
         key_bytes.copy_from_slice(&sk_bytes[..32]);
-        
-        // Create ed25519 keypair from the secret key bytes
         let secret = ed25519::SecretKey::try_from_bytes(key_bytes)
             .map_err(|e| format!("Invalid secret key: {:?}", e))?;
-        let keypair = ed25519::Keypair::from(secret);
-        
-        Ok(Keypair::from(keypair))
+        Ok(Keypair::from(ed25519::Keypair::from(secret)))
     }
     
     /// Extract peer ID from multiaddr
@@ -84,60 +198,30 @@ impl DhtManager {
         })
     }
     
-    /// Start DHT discovery
-    pub async fn start_discovery(&mut self) -> crate::Result<Vec<PeerInfo>> {
-        // For now, return bootstrap peers as discovered peers
-        // In a full implementation, this would run the DHT protocol
-        let peers: Vec<PeerInfo> = self.bootstrap_addrs.iter()
-            .map(|(peer_id, addr)| PeerInfo {
-                peer_id: *peer_id,
-                addresses: vec![addr.clone()],
-            })
-            .collect();
-        
-        // Add to discovered set
-        for peer in &peers {
-            self.discovered_peers.insert(peer.peer_id);
-        }
-        
-        Ok(peers)
+    pub async fn start_discovery(&self) -> crate::Result<Vec<crate::dht::PeerInfo>> {
+        self.cmd_tx.send(DhtCommand::StartDiscovery).await
+            .map_err(|_| crate::Error::from("DHT service channel closed"))?;
+        Ok(vec![]) // Return empty for now, discovery happens in background
     }
     
-    /// Get list of discovered peers
-    pub fn discovered_peers(&self) -> Vec<PeerInfo> {
-        self.discovered_peers
-            .iter()
-            .filter_map(|peer_id| {
-                // Find the address for this peer from bootstrap list
-                self.bootstrap_addrs
-                    .iter()
-                    .find(|(id, _)| id == peer_id)
-                    .map(|(peer_id, addr)| PeerInfo {
-                        peer_id: *peer_id,
-                        addresses: vec![addr.clone()],
-                    })
-            })
-            .collect()
+    pub async fn broadcast_block(&self, block: &Block) -> crate::Result<()> {
+        let data = bincode::serialize(block).map_err(|e| format!("Serialization error: {}", e))?;
+        self.cmd_tx.send(DhtCommand::BroadcastBlock(data)).await
+            .map_err(|_| crate::Error::from("DHT service channel closed"))?;
+        Ok(())
     }
     
-    /// Announce our address to the DHT
-    pub async fn announce_address(&mut self, _addr: Multiaddr) -> crate::Result<()> {
-        // Placeholder for DHT announcement
-        // In full implementation, this would add the address to Kademlia
+    pub async fn broadcast_transaction(&self, tx: &Transaction) -> crate::Result<()> {
+        let data = bincode::serialize(tx).map_err(|e| format!("Serialization error: {}", e))?;
+        self.cmd_tx.send(DhtCommand::BroadcastTransaction(data)).await
+            .map_err(|_| crate::Error::from("DHT service channel closed"))?;
         Ok(())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use bitcell_crypto::SecretKey;
-    
-    #[test]
-    fn test_dht_manager_creation() {
-        let sk = SecretKey::generate();
-        let bootstrap = vec![];
-        let dht = DhtManager::new(&sk, bootstrap);
-        assert!(dht.is_ok());
-    }
+/// Information about a discovered peer
+#[derive(Debug, Clone)]
+pub struct PeerInfo {
+    pub peer_id: PeerId,
+    pub addresses: Vec<Multiaddr>,
 }

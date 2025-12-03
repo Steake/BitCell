@@ -674,14 +674,14 @@ pub struct PruningStats {
 - [x] 1.2 Wallet GUI Transaction Sending
 
 ### Phase 2 (High - 1 week):
-- [ ] 2.1 System Metrics Collection
-- [ ] 3.1 Node ID Exposure
+- [x] 2.1 System Metrics Collection
+- [x] 3.1 Node ID Exposure
 
 ### Phase 3 (Medium - 2 weeks):
-- [ ] 2.2 Network Message Tracking
-- [ ] 2.3 EBSL Trust Scores
-- [ ] 3.2 Block Metrics
-- [ ] 3.3 Pending Block Support
+- [x] 2.2 Network Message Tracking
+- [x] 2.3 EBSL Trust Scores
+- [x] 3.2 Block Metrics
+- [x] 3.3 Pending Block Support
 - [ ] 4.1 Merkle Tree Verification
 
 ### Phase 4 (Low - ongoing):
@@ -694,17 +694,17 @@ pub struct PruningStats {
 
 | File | Changes Required | Priority | Status |
 |------|------------------|----------|--------|
-| `crates/bitcell-admin/src/api/wallet.rs` | Full tx sending | Critical | Pending |
-| `crates/bitcell-admin/src/tx_builder.rs` | NEW FILE | Critical | Pending |
-| `crates/bitcell-admin/src/signer.rs` | NEW FILE | Critical | Pending |
-| `crates/bitcell-wallet-gui/src/main.rs` | Integrate tx sending | Critical | Pending |
-| `crates/bitcell-wallet-gui/src/rpc_client.rs` | Add tx methods | Critical | Pending |
-| `crates/bitcell-admin/src/system_metrics.rs` | NEW FILE | High | Pending |
-| `crates/bitcell-admin/Cargo.toml` | Add sysinfo dep | High | Pending |
-| `crates/bitcell-admin/src/api/metrics.rs` | Real metrics | High | Pending |
-| `crates/bitcell-node/src/rpc.rs` | Multiple TODOs | Medium | Pending |
-| `crates/bitcell-node/src/network.rs` | Message counters | Medium | Pending |
-| `crates/bitcell-node/src/tournament.rs` | Trust/slashing | Medium | Pending |
+| `crates/bitcell-admin/src/api/wallet.rs` | Full tx sending | Critical | **DONE** |
+| `crates/bitcell-admin/src/tx_builder.rs` | NEW FILE | Critical | N/A (used bitcell-wallet) |
+| `crates/bitcell-admin/src/signer.rs` | NEW FILE | Critical | N/A (used bitcell-wallet) |
+| `crates/bitcell-wallet-gui/src/main.rs` | Integrate tx sending | Critical | **DONE** |
+| `crates/bitcell-wallet-gui/src/rpc_client.rs` | Add tx methods | Critical | **DONE** |
+| `crates/bitcell-admin/src/system_metrics.rs` | NEW FILE | High | **DONE** |
+| `crates/bitcell-admin/Cargo.toml` | Add sysinfo dep | High | **DONE** |
+| `crates/bitcell-admin/src/api/metrics.rs` | Real metrics | High | **DONE** |
+| `crates/bitcell-node/src/rpc.rs` | Multiple TODOs | Medium | **DONE** |
+| `crates/bitcell-node/src/network.rs` | Message counters | Medium | Deferred |
+| `crates/bitcell-node/src/tournament.rs` | Trust/slashing | Medium | Deferred |
 | `crates/bitcell-zkp/src/merkle_gadget.rs` | NEW FILE | Medium | Pending |
 | `crates/bitcell-zkp/src/state_circuit.rs` | Merkle verification | Medium | Pending |
 | `crates/bitcell-state/src/storage.rs` | Production pruning | Low | Pending |

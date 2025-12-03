@@ -91,6 +91,8 @@ async fn handle_json_rpc(
         "eth_getTransactionByHash" => eth_get_transaction_by_hash(&state, req.params).await,
         "eth_getBalance" => eth_get_balance(&state, req.params).await,
         "eth_sendRawTransaction" => eth_send_raw_transaction(&state, req.params).await,
+        "eth_getTransactionCount" => eth_get_transaction_count(&state, req.params).await,
+        "eth_gasPrice" => eth_gas_price(&state).await,
         
         // BitCell Namespace
         "bitcell_getNodeInfo" => bitcell_get_node_info(&state).await,
@@ -102,6 +104,7 @@ async fn handle_json_rpc(
         "bitcell_getBattleReplay" => bitcell_get_battle_replay(&state, req.params).await,
         "bitcell_getReputation" => bitcell_get_reputation(&state, req.params).await,
         "bitcell_getMinerStats" => bitcell_get_miner_stats(&state, req.params).await,
+        "bitcell_getPendingBlockInfo" => eth_pending_block_number(&state).await,
         
         // Default
         _ => Err(JsonRpcError {
@@ -129,9 +132,25 @@ async fn handle_json_rpc(
 
 // --- JSON-RPC Methods ---
 
+/// Get current block number
+/// 
+/// Returns the highest confirmed block number.
+/// If pending transactions exist, a "pending" query will return height + 1.
 async fn eth_block_number(state: &RpcState) -> Result<Value, JsonRpcError> {
     let height = state.blockchain.height();
     Ok(json!(format!("0x{:x}", height)))
+}
+
+/// Get pending block number (height + 1 if pending transactions exist)
+async fn eth_pending_block_number(state: &RpcState) -> Result<Value, JsonRpcError> {
+    let height = state.blockchain.height();
+    let pending_count = state.tx_pool.pending_count();
+    let pending_height = if pending_count > 0 { height + 1 } else { height };
+    Ok(json!({
+        "confirmed": format!("0x{:x}", height),
+        "pending": format!("0x{:x}", pending_height),
+        "pendingTransactions": pending_count
+    }))
 }
 
 async fn eth_get_block_by_number(state: &RpcState, params: Option<Value>) -> Result<Value, JsonRpcError> {
@@ -207,13 +226,16 @@ async fn eth_get_block_by_number(state: &RpcState, params: Option<Value>) -> Res
             json!(tx_hashes)
         };
         
+        // Calculate actual block size
+        let block_size = bincode::serialized_size(&block).unwrap_or(0);
+        
         Ok(json!({
             "number": format!("0x{:x}", block.header.height),
             "hash": format!("0x{}", hex::encode(block.hash().as_bytes())),
             "parentHash": format!("0x{}", hex::encode(block.header.prev_hash.as_bytes())),
-            "nonce": "0x0000000000000000", // TODO: Use work/nonce
+            "nonce": format!("0x{:016x}", block.header.work),
             "sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347", // Empty uncle hash
-            "logsBloom": "0x00", // TODO: Bloom filter
+            "logsBloom": format!("0x{}", hex::encode([0u8; 256])), // Empty bloom filter
             "transactionsRoot": format!("0x{}", hex::encode(block.header.tx_root.as_bytes())),
             "stateRoot": format!("0x{}", hex::encode(block.header.state_root.as_bytes())),
             "receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421", // Empty receipts root
@@ -221,12 +243,14 @@ async fn eth_get_block_by_number(state: &RpcState, params: Option<Value>) -> Res
             "difficulty": "0x1",
             "totalDifficulty": format!("0x{:x}", block.header.height), // Simplified
             "extraData": "0x",
-            "size": format!("0x{:x}", 1000), // TODO: Real size
+            "size": format!("0x{:x}", block_size),
             "gasLimit": "0x1fffffffffffff",
             "gasUsed": "0x0",
             "timestamp": format!("0x{:x}", block.header.timestamp),
             "transactions": transactions,
-            "uncles": []
+            "uncles": [],
+            "vrfOutput": format!("0x{}", hex::encode(block.header.vrf_output)),
+            "battleProofsCount": block.battle_proofs.len()
         }))
     } else {
         Ok(Value::Null)
@@ -363,6 +387,78 @@ async fn eth_get_balance(state: &RpcState, params: Option<Value>) -> Result<Valu
     
     // Return balance as hex string
     Ok(json!(format!("0x{:x}", balance)))
+}
+
+/// Get transaction count (nonce) for an address
+async fn eth_get_transaction_count(state: &RpcState, params: Option<Value>) -> Result<Value, JsonRpcError> {
+    let params = params.ok_or(JsonRpcError {
+        code: -32602,
+        message: "Invalid params".to_string(),
+        data: None,
+    })?;
+
+    let args = params.as_array().ok_or(JsonRpcError {
+        code: -32602,
+        message: "Params must be an array".to_string(),
+        data: None,
+    })?;
+    
+    if args.is_empty() {
+        return Err(JsonRpcError {
+            code: -32602,
+            message: "Missing address".to_string(),
+            data: None,
+        });
+    }
+
+    let address_str = args[0].as_str().ok_or(JsonRpcError {
+        code: -32602,
+        message: "Address must be a string".to_string(),
+        data: None,
+    })?;
+
+    // Parse address (hex string to PublicKey)
+    let address_hex = address_str.strip_prefix("0x").unwrap_or(address_str);
+    let address_bytes = hex::decode(address_hex).map_err(|_| JsonRpcError {
+        code: -32602,
+        message: "Invalid address format".to_string(),
+        data: None,
+    })?;
+    
+    if address_bytes.len() != 33 {
+        return Err(JsonRpcError {
+            code: -32602,
+            message: "Address must be 33 bytes (compressed public key)".to_string(),
+            data: None,
+        });
+    }
+    
+    let mut address = [0u8; 33];
+    address.copy_from_slice(&address_bytes);
+    
+    // Fetch nonce from blockchain state
+    let nonce = {
+        let state_lock = state.blockchain.state();
+        let state = state_lock.read().map_err(|_| JsonRpcError {
+            code: -32603,
+            message: "Failed to acquire state lock".to_string(),
+            data: None,
+        })?;
+        state.get_account(&address)
+            .map(|account| account.nonce)
+            .unwrap_or(0)
+    };
+    
+    // Return nonce as hex string
+    Ok(json!(format!("0x{:x}", nonce)))
+}
+
+/// Get current gas price
+async fn eth_gas_price(_state: &RpcState) -> Result<Value, JsonRpcError> {
+    // Return a reasonable default gas price (1 Gwei = 1e9 wei)
+    // In production, this should be dynamically calculated based on network congestion
+    let gas_price: u64 = 1_000_000_000; // 1 Gwei
+    Ok(json!(format!("0x{:x}", gas_price)))
 }
 
 async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Result<Value, JsonRpcError> {

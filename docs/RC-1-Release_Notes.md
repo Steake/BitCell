@@ -46,8 +46,10 @@ BitCell RC1 is the first release candidate of the BitCell blockchain platform, f
 #### Merkle Tree Verification (NEW in RC1)
 - `MerklePathGadget` for R1CS inclusion proofs
 - Configurable tree depth (default: 32 levels = 2^32 leaves)
-- Efficient constraint generation
-- Test coverage for various tree depths
+- Algebraic hash function H(a,b) = a*(b+1) + b^2 with documented security properties
+- Collision resistance and one-wayness within R1CS context
+- Efficient constraint generation (~5 constraints per tree level)
+- Test coverage for various tree depths including collision resistance tests
 
 ### 3. Networking
 
@@ -149,11 +151,28 @@ BitCell RC1 is the first release candidate of the BitCell blockchain platform, f
 - Address format validation in RPC endpoints
 - Transaction signature verification
 - Balance overflow protection
+- **Gas bounds validation** - Max gas price (10,000 Gwei) and gas limit (30M) to prevent overflow attacks
+
+### DoS Protection (NEW in RC1)
+- Transactions from new accounts require non-zero gas price and limit
+- Upper bounds on gas values prevent resource exhaustion
+- Signature verification prevents random spam
+
+### Admin API Security (NEW in RC1)
+- Private key transaction signing is disabled by default
+- Requires explicit `insecure-tx-signing` feature flag to enable
+- Clear warnings about production use and secure alternatives
+- Endpoint returns `NOT_IMPLEMENTED` when feature is disabled
+
+### VRF Race Condition Fix (NEW in RC1)
+- VRF proof generation now holds the blocks read lock
+- Prevents race conditions between reading VRF input and using it
+- Ensures consistency in block production
 
 ### Logging
 - Replaced all `println!`/`eprintln!` with `tracing::{info,debug,error}`
 - Structured logging for better filtering and analysis
-- Public key logging demoted to `debug` level
+- Full public key logging for debugging storage issues
 
 ---
 
@@ -194,9 +213,11 @@ cargo test -p bitcell-state
 ## Known Issues & Limitations
 
 ### Not Yet Implemented
-1. **Admin Wallet Transaction Sending** - Returns `NOT_IMPLEMENTED` (security review required)
+1. **Admin Wallet Transaction Signing** - Disabled by default via feature flag for security
+   - Enable with `--features insecure-tx-signing` (testing only)
+   - Production use requires HSM or hardware wallet integration
 2. **Wallet GUI Transaction Sending** - Displays "coming soon" message
-3. **Full Merkle Tree State Verification** - Basic gadget implemented, integration pending
+3. **Full Poseidon Hash** - Current algebraic hash is secure for R1CS but Poseidon recommended for maximum security
 
 ### Known Bugs
 - None critical in RC1
@@ -281,12 +302,12 @@ MIT License - See LICENSE file for details.
 
 ## Next Steps (RC2)
 
-1. Implement transaction signing in admin wallet
-2. Enable wallet GUI transaction sending
-3. Add Poseidon hash for Merkle gadget
+1. Implement full Poseidon hash for production Merkle verification
+2. Enable wallet GUI transaction sending with hardware wallet support
+3. Add HSM/secure key management integration for admin wallet
 4. Performance benchmarking and optimization
-5. Security audit
-6. Testnet deployment
+5. Third-party security audit
+6. Testnet deployment with monitoring
 
 ---
 

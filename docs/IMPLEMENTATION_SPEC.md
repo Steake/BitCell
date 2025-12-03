@@ -682,11 +682,11 @@ pub struct PruningStats {
 - [x] 2.3 EBSL Trust Scores
 - [x] 3.2 Block Metrics
 - [x] 3.3 Pending Block Support
-- [ ] 4.1 Merkle Tree Verification
+- [x] 4.1 Merkle Tree Verification
 
 ### Phase 4 (Low - ongoing):
-- [ ] 5.1 Review bitcell-network usage
-- [ ] 6.1 Block Pruning optimization
+- [x] 5.1 Review bitcell-network usage (deprecated, documentation added)
+- [x] 6.1 Block Pruning optimization
 
 ---
 
@@ -703,11 +703,12 @@ pub struct PruningStats {
 | `crates/bitcell-admin/Cargo.toml` | Add sysinfo dep | High | **DONE** |
 | `crates/bitcell-admin/src/api/metrics.rs` | Real metrics | High | **DONE** |
 | `crates/bitcell-node/src/rpc.rs` | Multiple TODOs | Medium | **DONE** |
-| `crates/bitcell-node/src/network.rs` | Message counters | Medium | Deferred |
-| `crates/bitcell-node/src/tournament.rs` | Trust/slashing | Medium | Deferred |
-| `crates/bitcell-zkp/src/merkle_gadget.rs` | NEW FILE | Medium | Pending |
-| `crates/bitcell-zkp/src/state_circuit.rs` | Merkle verification | Medium | Pending |
-| `crates/bitcell-state/src/storage.rs` | Production pruning | Low | Pending |
+| `crates/bitcell-node/src/network.rs` | Message counters | Medium | **DONE** (via metrics_client) |
+| `crates/bitcell-node/src/tournament.rs` | Trust/slashing | Medium | **DONE** (via metrics_client) |
+| `crates/bitcell-zkp/src/merkle_gadget.rs` | NEW FILE | Medium | **DONE** |
+| `crates/bitcell-zkp/src/state_circuit.rs` | Merkle verification | Medium | **DONE** (gadget created) |
+| `crates/bitcell-state/src/storage.rs` | Production pruning | Low | **DONE** |
+| `crates/bitcell-network/src/lib.rs` | Deprecation notice | Low | **DONE** |
 
 ---
 

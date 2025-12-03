@@ -1,11 +1,27 @@
-//! P2P networking layer
+//! P2P networking layer (Legacy - see deprecation notice)
 //!
-//! Handles peer discovery, message propagation, and block relay using libp2p.
+//! # Deprecation Notice
+//! 
+//! This crate (`bitcell-network`) provides a simplified/stub networking interface.
+//! The actual production networking implementation is in:
+//! - `bitcell-node/src/network.rs` - TCP-based P2P with real connections
+//! - `bitcell-node/src/dht.rs` - libp2p Gossipsub integration
+//!
+//! This crate is maintained for:
+//! 1. Type definitions used across the codebase (Message, PeerInfo, etc.)
+//! 2. Trait definitions for network abstractions
+//! 3. Testing and mock implementations
+//!
+//! For production networking, use the implementations in `bitcell-node`.
+//!
+//! # Future Plans
+//! This crate may be refactored to provide only interfaces/traits, with the
+//! actual implementations living in `bitcell-node`.
 
 pub mod messages;
 pub mod peer;
 
-// Full libp2p transport integration
+// Full libp2p transport integration (stub - see deprecation notice above)
 pub mod transport;
 
 pub use messages::{Message, MessageType};

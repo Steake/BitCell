@@ -5,6 +5,7 @@
 //! - Bond management
 //! - State Merkle tree
 //! - Nullifier set
+//! - Persistent storage with RocksDB
 
 pub mod account;
 pub mod bonds;
@@ -12,11 +13,11 @@ pub mod storage;
 
 pub use account::{Account, AccountState};
 pub use bonds::{BondState, BondStatus};
+pub use storage::{StorageManager, PruningStats};
 
 use bitcell_crypto::Hash256;
 use std::collections::HashMap;
 use std::sync::Arc;
-use storage::StorageManager;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

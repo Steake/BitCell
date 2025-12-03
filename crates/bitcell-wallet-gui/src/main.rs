@@ -377,10 +377,10 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
     
     // Send transaction callback
     {
-        let state = state.clone();
+        let _state = state.clone();
         let window_weak = window.as_weak();
         
-        wallet_state.on_send_transaction(move |to_address, amount, chain_str| {
+        wallet_state.on_send_transaction(move |to_address, amount, _chain_str| {
             let window = window_weak.unwrap();
             let wallet_state = window.global::<WalletState>();
             

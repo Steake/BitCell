@@ -7,6 +7,7 @@ pub mod config;
 pub mod test;
 pub mod setup;
 pub mod blocks;
+pub mod wallet;
 
 use std::collections::HashMap;
 use std::sync::RwLock;

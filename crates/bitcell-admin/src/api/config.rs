@@ -16,6 +16,7 @@ pub struct Config {
     pub consensus: ConsensusConfig,
     pub ebsl: EbslConfig,
     pub economics: EconomicsConfig,
+    pub wallet: WalletConfig,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -44,6 +45,12 @@ pub struct EconomicsConfig {
     pub initial_reward: u64,
     pub halving_interval: u64,
     pub base_gas_price: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WalletConfig {
+    pub node_rpc_host: String,
+    pub node_rpc_port: u16,
 }
 
 /// Get current configuration

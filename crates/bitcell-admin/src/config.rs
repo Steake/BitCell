@@ -57,6 +57,10 @@ impl ConfigManager {
                 halving_interval: 210_000,
                 base_gas_price: 1000,
             },
+            wallet: WalletConfig {
+                node_rpc_host: "127.0.0.1".to_string(),
+                node_rpc_port: 30334,
+            },
         }
     }
 

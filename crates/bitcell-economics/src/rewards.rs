@@ -1,6 +1,6 @@
 //! Reward Distribution System
 
-use crate::params::*;
+use crate::constants::*;
 use serde::{Deserialize, Serialize};
 
 /// Calculate block reward based on height
@@ -9,7 +9,7 @@ pub fn calculate_block_reward(height: u64) -> u64 {
     if halvings >= 64 {
         return 0; // No more rewards after 64 halvings
     }
-    INITIAL_SUBSIDY >> halvings
+    INITIAL_BLOCK_REWARD >> halvings
 }
 
 /// Reward distribution for a block
@@ -25,9 +25,9 @@ pub struct RewardDistribution {
 impl RewardDistribution {
     /// Create new reward distribution
     pub fn new(total_reward: u64, num_participants: usize) -> Self {
-        let winner_amount = (total_reward * WINNER_SHARE) / 100;
-        let participant_pool = (total_reward * PARTICIPANT_SHARE) / 100;
-        let treasury_amount = (total_reward * TREASURY_SHARE) / 100;
+        let winner_amount = (total_reward * WINNER_SHARE_PCT) / 100;
+        let participant_pool = (total_reward * PARTICIPANT_SHARE_PCT) / 100;
+        let treasury_amount = (total_reward * TREASURY_SHARE_PCT) / 100;
         
         Self {
             total_reward,
@@ -99,10 +99,10 @@ mod tests {
 
     #[test]
     fn test_halving_schedule() {
-        assert_eq!(calculate_block_reward(0), INITIAL_SUBSIDY);
-        assert_eq!(calculate_block_reward(HALVING_INTERVAL - 1), INITIAL_SUBSIDY);
-        assert_eq!(calculate_block_reward(HALVING_INTERVAL), INITIAL_SUBSIDY / 2);
-        assert_eq!(calculate_block_reward(HALVING_INTERVAL * 2), INITIAL_SUBSIDY / 4);
+        assert_eq!(calculate_block_reward(0), INITIAL_BLOCK_REWARD);
+        assert_eq!(calculate_block_reward(HALVING_INTERVAL - 1), INITIAL_BLOCK_REWARD);
+        assert_eq!(calculate_block_reward(HALVING_INTERVAL), INITIAL_BLOCK_REWARD / 2);
+        assert_eq!(calculate_block_reward(HALVING_INTERVAL * 2), INITIAL_BLOCK_REWARD / 4);
     }
 
     #[test]
@@ -118,10 +118,10 @@ mod tests {
     fn test_reward_schedule() {
         let mut schedule = RewardSchedule::new();
         
-        assert_eq!(schedule.current_reward(), INITIAL_SUBSIDY);
+        assert_eq!(schedule.current_reward(), INITIAL_BLOCK_REWARD);
         assert_eq!(schedule.next_halving_height(), HALVING_INTERVAL);
         
         schedule.current_height = HALVING_INTERVAL;
-        assert_eq!(schedule.current_reward(), INITIAL_SUBSIDY / 2);
+        assert_eq!(schedule.current_reward(), INITIAL_BLOCK_REWARD / 2);
     }
 }

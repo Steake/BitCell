@@ -31,10 +31,10 @@ pub enum Error {
     
     #[error("Invalid bond")]
     InvalidBond,
-    
+
     #[error("Balance overflow")]
     BalanceOverflow,
-    
+
     #[error("Storage error: {0}")]
     StorageError(String),
 }
@@ -116,7 +116,8 @@ impl StateManager {
     /// in memory (eventual consistency model).
     pub fn update_account(&mut self, pubkey: [u8; 33], account: Account) {
         self.accounts.insert(pubkey, account.clone());
-        
+
+
         // Persist to storage if available
         if let Some(storage) = &self.storage {
             if let Err(e) = storage.store_account(&pubkey, &account) {
@@ -160,7 +161,8 @@ impl StateManager {
     /// in memory (eventual consistency model).
     pub fn update_bond(&mut self, pubkey: [u8; 33], bond: BondState) {
         self.bonds.insert(pubkey, bond.clone());
-        
+
+
         // Persist to storage if available
         if let Some(storage) = &self.storage {
             if let Err(e) = storage.store_bond(&pubkey, &bond) {

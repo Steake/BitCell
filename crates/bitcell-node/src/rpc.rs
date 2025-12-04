@@ -228,10 +228,10 @@ async fn eth_get_block_by_number(state: &RpcState, params: Option<Value>) -> Res
                 .collect();
             json!(tx_hashes)
         };
-        
+
         // Calculate actual block size
         let block_size = bincode::serialized_size(&block).unwrap_or(0);
-        
+
         Ok(json!({
             "number": format!("0x{:x}", block.header.height),
             "hash": format!("0x{}", hex::encode(block.hash().as_bytes())),
@@ -305,7 +305,7 @@ async fn eth_get_transaction_by_hash(state: &RpcState, params: Option<Value>) ->
     let mut hash = [0u8; 32];
     hash.copy_from_slice(&tx_hash_bytes);
     let target_hash = bitcell_crypto::Hash256::from(hash);
-    
+
     // Use efficient O(1) lookup via transaction hash index
     if let Some((tx, location)) = state.blockchain.get_transaction_by_hash(&target_hash) {
         // Get the block to include block hash in response
@@ -325,7 +325,7 @@ async fn eth_get_transaction_by_hash(state: &RpcState, params: Option<Value>) ->
             }));
         }
     }
-    
+
     Ok(Value::Null)
 }
 
@@ -387,7 +387,8 @@ async fn eth_get_balance(state: &RpcState, params: Option<Value>) -> Result<Valu
             .map(|account| account.balance)
             .unwrap_or(0)
     };
-    
+
+
     // Return balance as hex string
     Ok(json!(format!("0x{:x}", balance)))
 }
@@ -405,7 +406,7 @@ async fn eth_get_transaction_count(state: &RpcState, params: Option<Value>) -> R
         message: "Params must be an array".to_string(),
         data: None,
     })?;
-    
+
     if args.is_empty() {
         return Err(JsonRpcError {
             code: -32602,
@@ -427,7 +428,7 @@ async fn eth_get_transaction_count(state: &RpcState, params: Option<Value>) -> R
         message: "Invalid address format".to_string(),
         data: None,
     })?;
-    
+
     if address_bytes.len() != 33 {
         return Err(JsonRpcError {
             code: -32602,
@@ -435,10 +436,10 @@ async fn eth_get_transaction_count(state: &RpcState, params: Option<Value>) -> R
             data: None,
         });
     }
-    
+
     let mut address = [0u8; 33];
     address.copy_from_slice(&address_bytes);
-    
+
     // Fetch nonce from blockchain state
     let nonce = {
         let state_lock = state.blockchain.state();
@@ -451,7 +452,7 @@ async fn eth_get_transaction_count(state: &RpcState, params: Option<Value>) -> R
             .map(|account| account.nonce)
             .unwrap_or(0)
     };
-    
+
     // Return nonce as hex string
     Ok(json!(format!("0x{:x}", nonce)))
 }
@@ -460,7 +461,7 @@ async fn eth_get_transaction_count(state: &RpcState, params: Option<Value>) -> R
 const DEFAULT_GAS_PRICE: u64 = 1_000_000_000;
 
 /// Get current gas price
-/// 
+///
 /// Returns the current gas price. In production, this should be
 /// dynamically calculated based on network congestion and mempool state.
 async fn eth_gas_price(_state: &RpcState) -> Result<Value, JsonRpcError> {
@@ -565,12 +566,12 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
                     data: None,
                 });
             }
-            
+
             // Validate gas parameters to prevent spam and overflow attacks
             // Gas price and limit must be non-zero and within reasonable bounds
             const MAX_GAS_PRICE: u64 = 10_000_000_000_000; // 10,000 Gwei max
             const MAX_GAS_LIMIT: u64 = 30_000_000; // 30M gas max (similar to Ethereum block limit)
-            
+
             if tx.gas_price == 0 || tx.gas_limit == 0 {
                 return Err(JsonRpcError {
                     code: -32602,
@@ -578,7 +579,7 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
                     data: None,
                 });
             }
-            
+
             if tx.gas_price > MAX_GAS_PRICE {
                 return Err(JsonRpcError {
                     code: -32602,
@@ -586,7 +587,7 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
                     data: None,
                 });
             }
-            
+
             if tx.gas_limit > MAX_GAS_LIMIT {
                 return Err(JsonRpcError {
                     code: -32602,
@@ -594,7 +595,7 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
                     data: None,
                 });
             }
-            
+
             tracing::debug!(
                 from = %hex::encode(tx.from.as_bytes()),
                 "Allowing transaction from new account with nonce 0"

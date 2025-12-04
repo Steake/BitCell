@@ -132,7 +132,7 @@ impl Blockchain {
             e.into_inner()
         }).get(&height).cloned()
     }
-    
+
     /// Get transaction by hash using the O(1) hash index
     ///
     /// Returns the transaction and its location (block height, index) if found.
@@ -146,7 +146,7 @@ impl Blockchain {
             });
             index.get(tx_hash).cloned()
         };
-        
+
         // Then retrieve the actual transaction from the block
         if let Some(loc) = location {
             if let Some(block) = self.get_block(loc.block_height) {
@@ -155,10 +155,10 @@ impl Blockchain {
                 }
             }
         }
-        
+
         None
     }
-    
+
     /// Get state manager (read-only access)
     pub fn state(&self) -> Arc<RwLock<StateManager>> {
         Arc::clone(&self.state)
@@ -196,7 +196,7 @@ impl Blockchain {
             });
             state.state_root
         };
-        
+
         // Generate VRF output and proof using proper VRF chaining
         // For genesis block (height 1), use previous hash as input
         // For all other blocks, use the previous block's VRF output for chaining
@@ -216,7 +216,7 @@ impl Blockchain {
                 tracing::error!("Lock poisoned in produce_block() - prior panic detected: {}", e);
                 e.into_inner()
             });
-            
+
             let vrf_input = if let Some(prev_block) = blocks.get(&current_height) {
                 prev_block.header.vrf_output.to_vec()
             } else {
@@ -224,7 +224,7 @@ impl Blockchain {
                 tracing::warn!("Previous block {} not found for VRF chaining, using hash fallback", current_height);
                 prev_hash.as_bytes().to_vec()
             };
-            
+
             // Generate VRF proof while still holding the read lock to prevent race conditions
             let (vrf_output, vrf_proof) = self.secret_key.vrf_prove(&vrf_input);
             (vrf_output, bincode::serialize(&vrf_proof).unwrap_or_default())
@@ -282,11 +282,11 @@ impl Blockchain {
         if block.signature.verify(&block.header.proposer, header_hash.as_bytes()).is_err() {
             return Err(crate::Error::Node("Invalid block signature".to_string()));
         }
-        
+
         // Verify VRF proof using proper VRF chaining
         let vrf_proof: bitcell_crypto::VrfProof = bincode::deserialize(&block.header.vrf_proof)
             .map_err(|_| crate::Error::Node("Invalid VRF proof format".to_string()))?;
-            
+
         // Reconstruct VRF input using the same chaining logic as produce_block
         let vrf_input = if block.header.height == 1 {
             // First block after genesis uses genesis hash as VRF input

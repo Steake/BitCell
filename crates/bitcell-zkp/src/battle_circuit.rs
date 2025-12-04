@@ -11,8 +11,12 @@
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_bn254::Fr;
 
+use ark_ff::Field;
+use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
+use ark_bn254::Fr;
+
 /// Battle circuit configuration
-/// 
+///
 /// Proves that a battle between two players resulted in the claimed winner.
 /// Winner ID meanings:
 /// - 0: Draw (no winner)
@@ -162,15 +166,15 @@ mod tests {
             Fr::one(), // commitment B
             Fr::from(1u8), // winner ID
         ];
-        
+
         assert!(BattleCircuit::verify(&vk, &proof, &public_inputs).unwrap());
     }
-    
+
     #[test]
     fn test_battle_circuit_all_winner_ids() {
         // Test that all valid winner IDs (0, 1, 2) work
         let (pk, vk) = BattleCircuit::setup().expect("Circuit setup should succeed");
-        
+
         for winner_id in [0u8, 1u8, 2u8] {
             let circuit = BattleCircuit::new(
                 Fr::one(),
@@ -179,15 +183,15 @@ mod tests {
                 100,
                 200,
             );
-            
+
             let proof = circuit.prove(&pk).unwrap_or_else(|_| panic!("Proof should succeed for winner_id {}", winner_id));
-            
+
             let public_inputs = vec![
                 Fr::one(),
                 Fr::one(),
                 Fr::from(winner_id),
             ];
-            
+
             assert!(
                 BattleCircuit::verify(&vk, &proof, &public_inputs).unwrap(),
                 "Verification should succeed for winner_id {}",

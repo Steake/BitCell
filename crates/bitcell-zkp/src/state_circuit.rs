@@ -12,7 +12,7 @@ use ark_std::rand::thread_rng;
 use ark_std::Zero;
 
 /// State transition circuit configuration
-/// 
+///
 /// This circuit proves that a state transition occurred correctly by verifying:
 /// 1. The old and new state roots are different (state changed)
 /// 2. The nullifier is properly computed to prevent double-spending
@@ -42,7 +42,7 @@ impl StateCircuit {
             leaf_index: Some(Fr::from(leaf_index)),
         }
     }
-    
+
     /// Setup the circuit and generate proving/verifying keys
     ///
     /// Returns an error if the circuit setup fails (e.g., due to constraint system issues).
@@ -91,28 +91,29 @@ impl ConstraintSynthesizer<Fr> for StateCircuit {
         
         // Allocate private witness
         let _leaf_index = cs.new_witness_variable(|| self.leaf_index.ok_or(SynthesisError::AssignmentMissing))?;
-        
+
+
         // Constraint: old_root != new_root (state must change)
         // To prove non-equality, we use the following approach:
         // 1. Compute diff = new_root - old_root
         // 2. Compute inv = inverse(diff) as a witness
         // 3. Enforce: diff * inv = 1
         // This proves diff != 0, which proves new_root != old_root
-        
+
         // Step 1: Compute diff = new_root - old_root
         let diff = cs.new_witness_variable(|| {
             let old = self.old_state_root.ok_or(SynthesisError::AssignmentMissing)?;
             let new = self.new_state_root.ok_or(SynthesisError::AssignmentMissing)?;
             Ok(new - old)
         })?;
-        
+
         // Enforce: diff = new_root - old_root
         cs.enforce_constraint(
             ark_relations::lc!() + new_root - old_root,
             ark_relations::lc!() + ark_relations::r1cs::Variable::One,
             ark_relations::lc!() + diff,
         )?;
-        
+
         // Step 2: Allocate inverse of diff as witness
         let inv = cs.new_witness_variable(|| {
             let old = self.old_state_root.ok_or(SynthesisError::AssignmentMissing)?;
@@ -126,20 +127,20 @@ impl ConstraintSynthesizer<Fr> for StateCircuit {
             }
             diff_val.inverse().ok_or(SynthesisError::Unsatisfiable)
         })?;
-        
+
         // Step 3: Enforce diff * inv = 1 (proves diff != 0)
         cs.enforce_constraint(
             ark_relations::lc!() + diff,
             ark_relations::lc!() + inv,
             ark_relations::lc!() + ark_relations::r1cs::Variable::One,
         )?;
-        
+
         // TODO: Add full Merkle tree verification constraints
         // This would include:
         // - Verifying the old leaf at leaf_index against old_state_root
         // - Verifying the new leaf at leaf_index against new_state_root
         // - Ensuring the nullifier is derived from the old leaf
-        
+
         Ok(())
     }
 }
@@ -171,10 +172,10 @@ mod tests {
             Fr::from(200u64),
             Fr::one(),
         ];
-        
+
         assert!(StateCircuit::verify(&vk, &proof, &public_inputs).unwrap());
     }
-    
+
     #[test]
     fn test_state_circuit_rejects_same_roots() {
         // Setup

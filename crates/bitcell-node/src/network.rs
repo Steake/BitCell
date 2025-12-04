@@ -102,6 +102,8 @@ impl NetworkManager {
         tracing::info!("DHT enabled");
         Ok(())
     }
+
+
     
     /// Start the network listener
     ///
@@ -588,7 +590,7 @@ impl NetworkManager {
             let guard = self.dht.read();
             guard.clone()
         };
-        
+
         if let Some(dht) = dht_opt {
             if let Err(e) = dht.broadcast_block(block).await {
                 tracing::error!("Failed to broadcast block via DHT: {}", e);
@@ -622,7 +624,7 @@ impl NetworkManager {
             let guard = self.dht.read();
             guard.clone()
         };
-        
+
         if let Some(dht) = dht_opt {
             if let Err(e) = dht.broadcast_transaction(tx).await {
                 tracing::error!("Failed to broadcast transaction via DHT: {}", e);

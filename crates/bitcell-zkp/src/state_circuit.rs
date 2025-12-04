@@ -92,7 +92,6 @@ impl ConstraintSynthesizer<Fr> for StateCircuit {
         // Allocate private witness
         let _leaf_index = cs.new_witness_variable(|| self.leaf_index.ok_or(SynthesisError::AssignmentMissing))?;
 
-
         // Constraint: old_root != new_root (state must change)
         // To prove non-equality, we use the following approach:
         // 1. Compute diff = new_root - old_root

@@ -388,7 +388,6 @@ async fn eth_get_balance(state: &RpcState, params: Option<Value>) -> Result<Valu
             .unwrap_or(0)
     };
 
-
     // Return balance as hex string
     Ok(json!(format!("0x{:x}", balance)))
 }

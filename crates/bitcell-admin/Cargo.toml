@@ -5,12 +5,6 @@ edition = "2021"
 authors = ["BitCell Contributors"]
 description = "Administrative console and dashboard for BitCell blockchain"
 
-[features]
-default = []
-# Enable insecure transaction signing endpoint that accepts private keys via HTTP.
-# WARNING: This should NEVER be enabled in production environments.
-insecure-tx-signing = []
-
 [dependencies]
 # Web framework
 axum = "0.7"
@@ -36,15 +30,6 @@ prometheus-client = "0.22"
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# System metrics
-sysinfo = "0.30"
-
-# Hex encoding
-hex = "0.4"
-
-# Wallet support
-bitcell-wallet = { path = "../bitcell-wallet" }
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }

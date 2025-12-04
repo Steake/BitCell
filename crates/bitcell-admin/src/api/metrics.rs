@@ -1,6 +1,4 @@
 //! Metrics API endpoints
-//!
-//! Provides real-time system and network metrics for monitoring.
 
 use axum::{
     extract::State,
@@ -49,23 +47,18 @@ pub struct EbslMetrics {
     pub total_slashing_events: u64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct SystemMetrics {
     pub uptime_seconds: u64,
     pub cpu_usage: f64,
     pub memory_usage_mb: u64,
-    pub total_memory_mb: u64,
     pub disk_usage_mb: u64,
-    pub total_disk_mb: u64,
 }
 
 /// Get all metrics from running nodes
 pub async fn get_metrics(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<MetricsResponse>, (StatusCode, Json<String>)> {
-    // Collect real system metrics
-    let sys_metrics = state.system_metrics.collect();
-    
     // Get all registered nodes from ProcessManager (which has status info)
     let all_nodes = state.process.list_nodes();
     tracing::info!("get_metrics: Found {} nodes", all_nodes.len());
@@ -99,6 +92,10 @@ pub async fn get_metrics(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(e)))?;
 
+    // Calculate system metrics
+    // TODO: Track actual node start times to compute real uptime
+    let uptime_seconds = 0u64; // Placeholder - requires node start time tracking
+
     let response = MetricsResponse {
         chain: ChainMetrics {
             height: aggregated.chain_height,
@@ -106,29 +103,27 @@ pub async fn get_metrics(
             latest_block_time: chrono::Utc::now(),
             total_transactions: aggregated.total_txs_processed,
             pending_transactions: aggregated.pending_txs as u64,
-            average_block_time: 6.0, // Block time target
+            average_block_time: 6.0, // TODO: Calculate from actual block times
         },
         network: NetworkMetrics {
             connected_peers: aggregated.total_peers,
             total_peers: aggregated.total_nodes * 10, // Estimate
             bytes_sent: aggregated.bytes_sent,
             bytes_received: aggregated.bytes_received,
-            messages_sent: aggregated.messages_sent,
-            messages_received: aggregated.messages_received,
+            messages_sent: 0, // TODO: Requires adding message_sent to node metrics
+            messages_received: 0, // TODO: Requires adding message_received to node metrics
         },
         ebsl: EbslMetrics {
             active_miners: aggregated.active_miners,
             banned_miners: aggregated.banned_miners,
-            average_trust_score: aggregated.average_trust_score,
-            total_slashing_events: aggregated.total_slashing_events,
+            average_trust_score: 0.85, // TODO: Requires adding trust scores to node metrics
+            total_slashing_events: 0, // TODO: Requires adding slashing events to node metrics
         },
         system: SystemMetrics {
-            uptime_seconds: sys_metrics.uptime_seconds,
-            cpu_usage: sys_metrics.cpu_usage,
-            memory_usage_mb: sys_metrics.memory_usage_mb,
-            total_memory_mb: sys_metrics.total_memory_mb,
-            disk_usage_mb: sys_metrics.disk_usage_mb,
-            total_disk_mb: sys_metrics.total_disk_mb,
+            uptime_seconds,
+            cpu_usage: 0.0, // TODO: Requires system metrics collection (e.g., sysinfo crate)
+            memory_usage_mb: 0, // TODO: Requires system metrics collection
+            disk_usage_mb: 0, // TODO: Requires system metrics collection
         },
         node_metrics: Some(aggregated.node_metrics),
     };
@@ -152,19 +147,4 @@ pub async fn network_metrics(
     // Reuse get_metrics logic and extract network metrics
     let full_metrics = get_metrics(State(state)).await?;
     Ok(Json(full_metrics.network.clone()))
-}
-
-/// Get system-specific metrics (CPU, memory, disk, uptime)
-pub async fn system_metrics(
-    State(state): State<Arc<AppState>>,
-) -> Json<SystemMetrics> {
-    let sys = state.system_metrics.collect();
-    Json(SystemMetrics {
-        uptime_seconds: sys.uptime_seconds,
-        cpu_usage: sys.cpu_usage,
-        memory_usage_mb: sys.memory_usage_mb,
-        total_memory_mb: sys.total_memory_mb,
-        disk_usage_mb: sys.disk_usage_mb,
-        total_disk_mb: sys.total_disk_mb,
-    })
 }

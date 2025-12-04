@@ -14,16 +14,12 @@ pub struct NodeMetrics {
     pub dht_peer_count: usize,
     pub bytes_sent: u64,
     pub bytes_received: u64,
-    pub messages_sent: u64,
-    pub messages_received: u64,
     pub pending_txs: usize,
     pub total_txs_processed: u64,
     pub proofs_generated: u64,
     pub proofs_verified: u64,
     pub active_miners: usize,
     pub banned_miners: usize,
-    pub average_trust_score: f64,
-    pub total_slashing_events: u64,
     pub last_updated: chrono::DateTime<chrono::Utc>,
 }
 
@@ -96,16 +92,12 @@ impl MetricsClient {
             dht_peer_count: metrics.get("bitcell_dht_peer_count").copied().unwrap_or(0.0) as usize,
             bytes_sent: metrics.get("bitcell_bytes_sent_total").copied().unwrap_or(0.0) as u64,
             bytes_received: metrics.get("bitcell_bytes_received_total").copied().unwrap_or(0.0) as u64,
-            messages_sent: metrics.get("bitcell_messages_sent_total").copied().unwrap_or(0.0) as u64,
-            messages_received: metrics.get("bitcell_messages_received_total").copied().unwrap_or(0.0) as u64,
             pending_txs: metrics.get("bitcell_pending_txs").copied().unwrap_or(0.0) as usize,
             total_txs_processed: metrics.get("bitcell_txs_processed_total").copied().unwrap_or(0.0) as u64,
             proofs_generated: metrics.get("bitcell_proofs_generated_total").copied().unwrap_or(0.0) as u64,
             proofs_verified: metrics.get("bitcell_proofs_verified_total").copied().unwrap_or(0.0) as u64,
             active_miners: metrics.get("bitcell_active_miners").copied().unwrap_or(0.0) as usize,
             banned_miners: metrics.get("bitcell_banned_miners").copied().unwrap_or(0.0) as usize,
-            average_trust_score: metrics.get("bitcell_average_trust_score").copied().unwrap_or(0.85),
-            total_slashing_events: metrics.get("bitcell_slashing_events_total").copied().unwrap_or(0.0) as u64,
             last_updated: chrono::Utc::now(),
         })
     }
@@ -145,22 +137,10 @@ impl MetricsClient {
         let total_peer_count: usize = node_metrics.iter().map(|m| m.peer_count).sum();
         let total_bytes_sent: u64 = node_metrics.iter().map(|m| m.bytes_sent).sum();
         let total_bytes_received: u64 = node_metrics.iter().map(|m| m.bytes_received).sum();
-        let total_messages_sent: u64 = node_metrics.iter().map(|m| m.messages_sent).sum();
-        let total_messages_received: u64 = node_metrics.iter().map(|m| m.messages_received).sum();
         let total_pending_txs: usize = node_metrics.iter().map(|m| m.pending_txs).sum();
         let total_txs_processed: u64 = node_metrics.iter().map(|m| m.total_txs_processed).sum();
         let total_active_miners: usize = node_metrics.iter().map(|m| m.active_miners).max().unwrap_or(0);
         let total_banned_miners: usize = node_metrics.iter().map(|m| m.banned_miners).max().unwrap_or(0);
-        
-        // Calculate average trust score across all nodes
-        let avg_trust_score = if node_metrics.is_empty() {
-            0.85
-        } else {
-            node_metrics.iter().map(|m| m.average_trust_score).sum::<f64>() / node_metrics.len() as f64
-        };
-        
-        // Sum slashing events
-        let total_slashing: u64 = node_metrics.iter().map(|m| m.total_slashing_events).sum();
 
         Ok(AggregatedMetrics {
             chain_height,
@@ -169,14 +149,10 @@ impl MetricsClient {
             total_peers: total_peer_count,
             bytes_sent: total_bytes_sent,
             bytes_received: total_bytes_received,
-            messages_sent: total_messages_sent,
-            messages_received: total_messages_received,
             pending_txs: total_pending_txs,
             total_txs_processed,
             active_miners: total_active_miners,
             banned_miners: total_banned_miners,
-            average_trust_score: avg_trust_score,
-            total_slashing_events: total_slashing,
             node_metrics,
             errors,
         })
@@ -197,14 +173,10 @@ pub struct AggregatedMetrics {
     pub total_peers: usize,
     pub bytes_sent: u64,
     pub bytes_received: u64,
-    pub messages_sent: u64,
-    pub messages_received: u64,
     pub pending_txs: usize,
     pub total_txs_processed: u64,
     pub active_miners: usize,
     pub banned_miners: usize,
-    pub average_trust_score: f64,
-    pub total_slashing_events: u64,
     pub node_metrics: Vec<NodeMetrics>,
     pub errors: Vec<String>,
 }

@@ -36,17 +36,8 @@ pub fn render_grid(grid: &[Vec<u8>], width: u32, height: u32) -> Image {
         }
     }
     
-    // Convert Vec<Rgba8Pixel> to Vec<u8> safely
-    let mut pixel_bytes = Vec::with_capacity(pixels.len() * 4);
-    for pixel in &pixels {
-        pixel_bytes.push(pixel.r);
-        pixel_bytes.push(pixel.g);
-        pixel_bytes.push(pixel.b);
-        pixel_bytes.push(pixel.a);
-    }
-    
     let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
-        &pixel_bytes,
+        unsafe { std::slice::from_raw_parts(pixels.as_ptr() as *const u8, pixels.len() * 4) },
         img_width,
         img_height,
     );

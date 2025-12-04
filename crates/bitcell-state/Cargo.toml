@@ -13,8 +13,6 @@ serde.workspace = true
 thiserror.workspace = true
 rocksdb = "0.22"
 bincode.workspace = true
-tracing.workspace = true
-hex.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

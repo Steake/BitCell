@@ -9,7 +9,7 @@ on:
 jobs:
   benchmark:
     name: Run Benchmarks
-    runs-on: ubuntu-latest-xl
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       

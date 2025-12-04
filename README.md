@@ -4,7 +4,7 @@
 
 [![Rust](https://img.shields.io/badge/rust-1.82%2B-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-RC1-green.svg)](https://github.com/Steake/BitCell)
+[![Status](https://img.shields.io/badge/status-alpha-yellow.svg)](https://github.com/Steake/BitCell)
 
 > _"We don't mine blocks. We cultivate them in a Conway garden where only the fittest gliders survive."_
 
@@ -174,14 +174,9 @@ Three independent circuits:
 **v0.1**: Individual Groth16 proofs  
 **Future**: Recursive aggregation via Plonk/STARK
 
-## Economics (Bitcoin-Style Halving)
+## Economics (Deterministic Payouts)
 
 ```
-Initial block reward: 50 CELL
-Halving interval: 210,000 blocks (~4 years)
-Maximum halvings: 64 (subsidy reaches 0)
-Total supply: ~21 million CELL
-
 block_reward = base_subsidy(h) + tx_fees + contract_fees
 
 Distribution:
@@ -257,17 +252,13 @@ BitCell/
 │   ├── bitcell-ebsl/       # Evidence tracking, trust scores, slashing
 │   ├── bitcell-zkp/        # Groth16 circuits (battle, exec, state)
 │   ├── bitcell-consensus/  # Blocks, tournament protocol, fork choice
-│   ├── bitcell-state/      # State management, bonds, accounts (RocksDB)
+│   ├── bitcell-state/      # State management, bonds, accounts
 │   ├── bitcell-zkvm/       # Private smart contract execution
-│   ├── bitcell-economics/  # Rewards, fees, treasury, halving
-│   ├── bitcell-network/    # libp2p, gossip, DHT, compact blocks
-│   ├── bitcell-node/       # Miner/validator nodes, JSON-RPC, WebSocket
-│   ├── bitcell-wallet/     # CLI wallet
-│   ├── bitcell-wallet-gui/ # GUI wallet with tournament visualization
-│   ├── bitcell-admin/      # Admin console with metrics
-│   └── bitcell-simulation/ # Network simulation and testing
-├── docs/                   # Architecture, specs, release notes
-├── scripts/                # Development and testing scripts
+│   ├── bitcell-economics/  # Rewards, fees, treasury
+│   ├── bitcell-network/    # P2P, gossip, compact blocks
+│   └── bitcell-node/       # Miner/validator/light client nodes
+├── docs/                   # Architecture, specs, tutorials
+├── benches/                # Performance benchmarks
 └── tests/                  # Integration tests
 ```
 
@@ -311,38 +302,33 @@ We're in alpha. Things break. PRs welcome.
 
 ## Roadmap
 
-### v0.1 ✅ (Alpha)
+### v0.1 (Current: Alpha)
 - [x] Core crypto primitives (ECDSA, VRF, ring sigs, commitments)
 - [x] CA engine with battles (1024×1024 grid, Conway rules, energy)
 - [x] EBSL trust scores (evidence tracking, decay, slashing)
-- [x] ZK circuits (battle verification, execution, state constraints)
-- [x] Consensus structures (blocks, tournament, fork choice)
-- [x] P2P networking (libp2p-based gossip, DHT)
-- [x] Local testnet
+- [ ] ZK circuits (battle verification, execution, state)
+- [ ] Consensus structures (blocks, tournament, fork choice)
+- [ ] P2P networking (gossip, compact blocks)
+- [ ] Local testnet
 
-### v0.2 ✅ (Beta)
-- [x] ZKVM execution framework
-- [x] Smart contract deployment (basic)
-- [x] State management with RocksDB persistence
-- [x] Full validator implementation
-- [x] GUI Wallet with tournament visualization
-- [x] Admin console with metrics
+### v0.2 (Beta)
+- [ ] ZKVM execution
+- [ ] Smart contract deployment
+- [ ] State management
+- [ ] Full validator implementation
+- [ ] Public testnet
+- [ ] Explorer
 
-### v0.3 (Current: Release Candidate 1)
-- [x] JSON-RPC and WebSocket APIs
-- [x] Block reward halving mechanism (Bitcoin-style economics)
-- [x] Transaction processing and mempool
-- [x] Comprehensive economic parameters
-- [x] Security improvements (DoS protection, gas limits)
+### v0.3 (Candidate)
 - [ ] Light clients
 - [ ] Bridge to Ethereum
 - [ ] DeFi primitives
-
-### v1.0 (Mainnet)
-- [ ] Production-ready zkSNARKs (recursive aggregation)
 - [ ] Governance system
 - [ ] Security audit
-- [ ] Optimized CA performance (SIMD/GPU)
+
+### v1.0 (Mainnet)
+- [ ] Production-ready zkSNARKs
+- [ ] Optimized CA performance
 - [ ] Mobile wallets
 - [ ] Full documentation
 - [ ] 🚀 Launch

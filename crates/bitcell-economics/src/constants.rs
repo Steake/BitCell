@@ -17,10 +17,6 @@ pub const HALVING_INTERVAL: u64 = 210_000;
 /// Sum of geometric series: 50 * 210000 * (1 + 1/2 + 1/4 + ... + 1/2^63)
 pub const MAX_SUPPLY: u64 = 21_000_000 * COIN;
 
-/// Maximum number of halvings before reward becomes 0
-/// After 64 halvings, the reward would be less than 1 satoshi
-pub const MAX_HALVINGS: u64 = 64;
-
 /// ===== REWARD DISTRIBUTION =====
 
 /// Percentage of block reward to tournament winner

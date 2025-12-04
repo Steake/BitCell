@@ -15,7 +15,6 @@ pub mod metrics;
 pub mod process;
 pub mod metrics_client;
 pub mod setup;
-pub mod system_metrics;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -42,7 +41,6 @@ pub struct AdminConsole {
     process: Arc<ProcessManager>,
     metrics_client: Arc<metrics_client::MetricsClient>,
     setup: Arc<setup::SetupManager>,
-    system_metrics: Arc<system_metrics::SystemMetricsCollector>,
 }
 
 impl AdminConsole {
@@ -51,7 +49,6 @@ impl AdminConsole {
         let process = Arc::new(ProcessManager::new());
         let setup = Arc::new(setup::SetupManager::new());
         let deployment = Arc::new(DeploymentManager::new(process.clone(), setup.clone()));
-        let system_metrics = Arc::new(system_metrics::SystemMetricsCollector::new());
 
         // Try to load setup state from default location
         let setup_path = std::path::PathBuf::from(SETUP_FILE_PATH);
@@ -67,7 +64,6 @@ impl AdminConsole {
             process,
             metrics_client: Arc::new(metrics_client::MetricsClient::new()),
             setup,
-            system_metrics,
         }
     }
 
@@ -99,7 +95,6 @@ impl AdminConsole {
             .route("/api/metrics", get(api::metrics::get_metrics))
             .route("/api/metrics/chain", get(api::metrics::chain_metrics))
             .route("/api/metrics/network", get(api::metrics::network_metrics))
-            .route("/api/metrics/system", get(api::metrics::system_metrics))
 
             .route("/api/deployment/deploy", post(api::deployment::deploy_node))
             .route("/api/deployment/status", get(api::deployment::deployment_status))
@@ -118,6 +113,7 @@ impl AdminConsole {
             .route("/api/setup/complete", post(api::setup::complete_setup))
 
             .route("/api/blocks", get(api::blocks::list_blocks))
+            .route("/api/blocks/:height", get(api::blocks::get_block))
             .route("/api/blocks/:height", get(api::blocks::get_block))
             .route("/api/blocks/:height/battles", get(api::blocks::get_block_battles))
 
@@ -140,7 +136,6 @@ impl AdminConsole {
                 process: self.process.clone(),
                 metrics_client: self.metrics_client.clone(),
                 setup: self.setup.clone(),
-                system_metrics: self.system_metrics.clone(),
             }))
     }
 
@@ -166,7 +161,6 @@ pub struct AppState {
     pub process: Arc<ProcessManager>,
     pub metrics_client: Arc<metrics_client::MetricsClient>,
     pub setup: Arc<setup::SetupManager>,
-    pub system_metrics: Arc<system_metrics::SystemMetricsCollector>,
 }
 
 #[cfg(test)]

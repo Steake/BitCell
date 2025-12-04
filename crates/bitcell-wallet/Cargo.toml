@@ -46,6 +46,7 @@ clap = { version = "4", features = ["derive"] }
 # Utilities
 zeroize.workspace = true
 parking_lot.workspace = true
+slint-build = "1.12.1"
 
 [dev-dependencies]
 proptest.workspace = true

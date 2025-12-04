@@ -33,6 +33,9 @@ pub enum Error {
     
     #[error("Storage error: {0}")]
     StorageError(String),
+    
+    #[error("Balance overflow")]
+    BalanceOverflow,
 }
 
 /// Global state manager
@@ -217,16 +220,25 @@ impl StateManager {
     }
 
     /// Credit an account (minting/coinbase)
-    pub fn credit_account(&mut self, pubkey: [u8; 33], amount: u64) -> Hash256 {
+    pub fn credit_account(&mut self, pubkey: [u8; 33], amount: u64) -> Result<Hash256> {
         let mut account = self.accounts.get(&pubkey)
             .cloned()
             .unwrap_or(Account { balance: 0, nonce: 0 });
             
-        account.balance += amount;
+        account.balance = account.balance.checked_add(amount)
+            .ok_or(Error::BalanceOverflow)?;
+        
+        tracing::debug!(
+            pubkey = %hex::encode(&pubkey),
+            amount = amount,
+            new_balance = account.balance,
+            "Credited account"
+        );
+        
         self.accounts.insert(pubkey, account);
         
         self.recompute_root();
-        self.state_root
+        Ok(self.state_root)
     }
 }
 

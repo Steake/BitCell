@@ -36,7 +36,10 @@ impl StateCircuit {
         }
     }
     
-    pub fn setup() -> (ProvingKey<ark_bn254::Bn254>, VerifyingKey<ark_bn254::Bn254>) {
+    /// Setup the circuit and generate proving/verifying keys
+    ///
+    /// Returns an error if the circuit setup fails (e.g., due to constraint system issues).
+    pub fn setup() -> crate::Result<(ProvingKey<ark_bn254::Bn254>, VerifyingKey<ark_bn254::Bn254>)> {
         let rng = &mut thread_rng();
         Groth16::<ark_bn254::Bn254>::circuit_specific_setup(
             Self {
@@ -47,7 +50,7 @@ impl StateCircuit {
             },
             rng,
         )
-        .unwrap()
+        .map_err(|e| crate::Error::ProofGeneration(format!("Circuit setup failed: {}", e)))
     }
 
     pub fn prove(
@@ -109,8 +112,8 @@ mod tests {
 
     #[test]
     fn test_state_circuit_prove_verify() {
-        // 1. Setup
-        let (pk, vk) = StateCircuit::setup();
+        // 1. Setup - now returns Result
+        let (pk, vk) = StateCircuit::setup().expect("Circuit setup should succeed");
 
         // 2. Create circuit instance
         let circuit = StateCircuit::new(

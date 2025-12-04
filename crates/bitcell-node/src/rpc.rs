@@ -20,6 +20,7 @@ pub struct RpcState {
     pub tournament_manager: Option<Arc<TournamentManager>>,
     pub config: NodeConfig,
     pub node_type: String, // "validator", "miner", "full"
+    pub node_id: String,   // Hex-encoded public key
 }
 
 /// Start the RPC server
@@ -472,7 +473,7 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
 
 async fn bitcell_get_node_info(state: &RpcState) -> Result<Value, JsonRpcError> {
     Ok(json!({
-        "node_id": "TODO_NODE_ID", // TODO: Expose node ID from NetworkManager
+        "node_id": state.node_id,
         "version": "0.1.0",
         "protocol_version": "1",
         "network_id": "bitcell-testnet",

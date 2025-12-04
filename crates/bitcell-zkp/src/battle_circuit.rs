@@ -87,7 +87,10 @@ use ark_snark::SNARK;
 use ark_std::rand::thread_rng;
 
 impl BattleCircuit {
-    pub fn setup() -> (ProvingKey<ark_bn254::Bn254>, VerifyingKey<ark_bn254::Bn254>) {
+    /// Setup the circuit and generate proving/verifying keys
+    ///
+    /// Returns an error if the circuit setup fails (e.g., due to constraint system issues).
+    pub fn setup() -> crate::Result<(ProvingKey<ark_bn254::Bn254>, VerifyingKey<ark_bn254::Bn254>)> {
         let rng = &mut thread_rng();
         Groth16::<ark_bn254::Bn254>::circuit_specific_setup(
             Self {
@@ -99,7 +102,7 @@ impl BattleCircuit {
             },
             rng,
         )
-        .unwrap()
+        .map_err(|e| crate::Error::ProofGeneration(format!("Circuit setup failed: {}", e)))
     }
 
     pub fn prove(
@@ -129,10 +132,10 @@ mod tests {
 
     #[test]
     fn test_battle_circuit_prove_verify() {
-        // 1. Setup
-        let (pk, vk) = BattleCircuit::setup();
+        // 1. Setup - now returns Result
+        let (pk, vk) = BattleCircuit::setup().expect("Circuit setup should succeed");
 
-        // 2. Create circuit instance
+        // 2. Create circuit instance with valid winner ID (1 = Player B wins)
         let circuit = BattleCircuit::new(
             Fr::one(), // Mock commitment A
             Fr::one(), // Mock commitment B

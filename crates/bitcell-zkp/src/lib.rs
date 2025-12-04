@@ -3,6 +3,7 @@
 //! Implements modular Groth16 circuits for:
 //! - Battle verification (CA evolution + commitment consistency)
 //! - State transition verification (Merkle updates)
+//! - Merkle tree inclusion proofs
 //!
 //! Note: v0.1 provides circuit structure and basic constraints.
 //! Full CA evolution verification requires extensive constraint programming.
@@ -14,8 +15,12 @@ pub mod state_circuit;
 pub mod battle_constraints;
 pub mod state_constraints;
 
+// Merkle tree verification gadgets
+pub mod merkle_gadget;
+
 pub use battle_circuit::BattleCircuit;
 pub use state_circuit::StateCircuit;
+pub use merkle_gadget::{MerklePathGadget, MERKLE_DEPTH};
 
 use serde::{Deserialize, Serialize};
 

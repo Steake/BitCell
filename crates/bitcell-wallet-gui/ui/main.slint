@@ -837,6 +837,7 @@ component SendView inherits Rectangle {
             
             PrimaryButton {
                 text: "Send Transaction";
+                enabled: !WalletState.wallet-locked;
                 clicked => { 
                     WalletState.send-transaction(
                         WalletState.send-to-address,

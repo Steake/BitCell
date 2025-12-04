@@ -122,30 +122,30 @@ pub fn resolve_secret_key(
 ) -> Result<SecretKey> {
     // Priority 1: Direct hex private key
     if let Some(hex) = private_key_hex {
-        println!("🔑 Loading key from hex string");
+        tracing::info!("Loading key from hex string");
         return load_secret_key_from_hex(hex);
     }
     
     // Priority 2: Key file
     if let Some(path) = key_file_path {
-        println!("🔑 Loading key from file: {}", path.display());
+        tracing::info!("Loading key from file: {}", path.display());
         return load_secret_key_from_file(path);
     }
     
     // Priority 3: Mnemonic phrase
     if let Some(phrase) = mnemonic {
-        println!("🔑 Deriving key from mnemonic phrase");
+        tracing::info!("Deriving key from mnemonic phrase");
         return derive_secret_key_from_mnemonic(phrase);
     }
     
     // Priority 4: Simple seed
     if let Some(seed) = key_seed {
-        println!("🔑 Deriving key from seed: {}", seed);
+        tracing::info!("Deriving key from seed");
         return Ok(derive_secret_key_from_seed(seed));
     }
     
     // Priority 5: Generate random
-    println!("🔑 Generating random key (no key specified)");
+    tracing::info!("Generating random key (no key specified)");
     Ok(SecretKey::generate())
 }
 

@@ -103,8 +103,6 @@ impl NetworkManager {
         Ok(())
     }
 
-
-    
     /// Start the network listener
     ///
     /// Binds to the specified port and starts accepting connections.

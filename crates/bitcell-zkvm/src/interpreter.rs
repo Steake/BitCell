@@ -4,7 +4,6 @@
 
 use crate::{gas, Instruction, Memory, OpCode};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Execution trace for ZK proof generation
 #[derive(Debug, Clone, Serialize, Deserialize)]

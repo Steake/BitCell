@@ -61,6 +61,9 @@ pub enum Error {
     #[error("Chain not supported: {0}")]
     UnsupportedChain(String),
 
+    #[error("Hardware wallet error: {0}")]
+    HardwareWallet(String),
+
     #[error("Wallet locked")]
     WalletLocked,
 

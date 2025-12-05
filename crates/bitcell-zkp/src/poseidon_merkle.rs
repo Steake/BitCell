@@ -134,7 +134,10 @@ impl<F: PrimeField> PoseidonMerkleGadget<F> {
         for i in 0..t {
             for j in 0..t {
                 let sum = x[i] + y[j];
-                matrix[i][j] = sum.inverse().expect("x[i] + y[j] should be non-zero");
+                matrix[i][j] = sum.inverse().expect(
+                    "MDS matrix Cauchy construction guarantees non-zero inverse: \
+                     x[i] and y[j] are chosen as distinct elements so x[i] + y[j] != 0"
+                );
             }
         }
         
@@ -340,7 +343,9 @@ fn poseidon_hash_native<F: PrimeField>(left: F, right: F) -> F {
     for i in 0..t {
         for j in 0..t {
             let sum = x[i] + y[j];
-            mds_matrix[i][j] = sum.inverse().unwrap();
+            mds_matrix[i][j] = sum.inverse().expect(
+                "MDS matrix Cauchy construction guarantees non-zero inverse for distinct x_i, y_j"
+            );
         }
     }
     

@@ -391,7 +391,7 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
             let amount: f64 = match amount_str.parse() {
                 Ok(a) if a > 0.0 => a,
                 _ => {
-                    wallet_state.set_status_message("Invalid amount: must be a positive number".into());
+                    wallet_state.set_status_message("Invalid amount format: expected a positive number (e.g., 1.23)".into());
                     return;
                 }
             };
@@ -402,6 +402,16 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
             }
             
             let chain = parse_chain(&chain_str);
+            
+            // Validate amount before conversion to prevent overflow
+            // Max safe value: u64::MAX / 100_000_000 ≈ 184 billion
+            const MAX_AMOUNT: f64 = 184_467_440_737.0; // u64::MAX / 100_000_000
+            if amount > MAX_AMOUNT {
+                wallet_state.set_status_message(format!(
+                    "Amount too large. Maximum: {} CELL", MAX_AMOUNT
+                ).into());
+                return;
+            }
             
             // Convert to smallest units (1 CELL = 100_000_000 units)
             let amount_units = (amount * 100_000_000.0) as u64;

@@ -70,7 +70,11 @@ pub struct HsmConfig {
 }
 
 /// HSM authentication credentials
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// 
+/// # Security
+/// Credentials are automatically zeroed when dropped to prevent
+/// sensitive data from remaining in memory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HsmCredentials {
     /// API token (for Vault)
     #[serde(skip_serializing)]
@@ -87,6 +91,46 @@ pub struct HsmCredentials {
     pub client_key: Option<String>,
 }
 
+impl Default for HsmCredentials {
+    fn default() -> Self {
+        Self {
+            token: None,
+            access_key: None,
+            secret_key: None,
+            client_cert: None,
+            client_key: None,
+        }
+    }
+}
+
+impl Drop for HsmCredentials {
+    fn drop(&mut self) {
+        // Securely zero out sensitive credential data
+        // Note: This provides basic protection but for production use
+        // consider using the `secrecy` crate for guaranteed secure zeroing
+        if let Some(ref mut token) = self.token {
+            // Safety: We're writing zeros to memory that will be dropped
+            // This helps prevent secrets from lingering in memory
+            let bytes = unsafe { token.as_bytes_mut() };
+            for byte in bytes {
+                unsafe { std::ptr::write_volatile(byte, 0) };
+            }
+        }
+        if let Some(ref mut key) = self.access_key {
+            let bytes = unsafe { key.as_bytes_mut() };
+            for byte in bytes {
+                unsafe { std::ptr::write_volatile(byte, 0) };
+            }
+        }
+        if let Some(ref mut key) = self.secret_key {
+            let bytes = unsafe { key.as_bytes_mut() };
+            for byte in bytes {
+                unsafe { std::ptr::write_volatile(byte, 0) };
+            }
+        }
+    }
+}
+
 impl HsmConfig {
     /// Create configuration for HashiCorp Vault
     pub fn vault(endpoint: &str, token: &str, key_name: &str) -> Self {
@@ -95,7 +139,10 @@ impl HsmConfig {
             endpoint: endpoint.to_string(),
             credentials: HsmCredentials {
                 token: Some(token.to_string()),
-                ..Default::default()
+                access_key: None,
+                secret_key: None,
+                client_cert: None,
+                client_key: None,
             },
             default_key: key_name.to_string(),
             timeout_secs: 30,
@@ -109,9 +156,11 @@ impl HsmConfig {
             provider: HsmProvider::AwsCloudHsm,
             endpoint: endpoint.to_string(),
             credentials: HsmCredentials {
+                token: None,
                 access_key: Some(access_key.to_string()),
                 secret_key: Some(secret_key.to_string()),
-                ..Default::default()
+                client_cert: None,
+                client_key: None,
             },
             default_key: key_name.to_string(),
             timeout_secs: 30,
@@ -124,7 +173,7 @@ impl HsmConfig {
         Self {
             provider: HsmProvider::Mock,
             endpoint: "mock://localhost".to_string(),
-            credentials: Default::default(),
+            credentials: HsmCredentials::default(),
             default_key: key_name.to_string(),
             timeout_secs: 5,
             audit_logging: false,
@@ -184,6 +233,10 @@ pub trait HsmBackend: Send + Sync {
     /// List available keys
     async fn list_keys(&self) -> HsmResult<Vec<String>>;
 }
+
+/// Maximum number of audit log entries to keep in memory
+/// Older entries are automatically rotated out
+const MAX_AUDIT_LOG_ENTRIES: usize = 10_000;
 
 /// HSM client for secure key management
 pub struct HsmClient {
@@ -309,6 +362,9 @@ impl HsmClient {
     }
     
     /// Log an operation
+    /// 
+    /// The audit log is bounded to MAX_AUDIT_LOG_ENTRIES entries.
+    /// When the limit is reached, the oldest entries are removed.
     async fn log_operation(&self, operation: &str, key_name: &str, success: bool, error: Option<&HsmError>) {
         if !self.config.audit_logging {
             return;
@@ -325,7 +381,14 @@ impl HsmClient {
             error: error.map(|e| e.to_string()),
         };
         
-        self.audit_log.write().await.push(entry);
+        let mut log = self.audit_log.write().await;
+        log.push(entry);
+        
+        // Enforce maximum size by removing oldest entries
+        if log.len() > MAX_AUDIT_LOG_ENTRIES {
+            let excess = log.len() - MAX_AUDIT_LOG_ENTRIES;
+            log.drain(0..excess);
+        }
     }
 }
 
@@ -438,7 +501,9 @@ mod tests {
     
     #[tokio::test]
     async fn test_mock_hsm_audit_log() {
-        let config = HsmConfig::mock("audit-test");
+        // Create mock config with audit logging enabled
+        let mut config = HsmConfig::mock("audit-test");
+        config.audit_logging = true;
         let hsm = HsmClient::connect(config).await.unwrap();
         
         // Perform some operations

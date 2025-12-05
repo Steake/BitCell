@@ -84,39 +84,40 @@ pub struct HardwareWallet {
 
 impl HardwareWallet {
     /// Connect to a hardware wallet
-    #[allow(unreachable_code)]
     pub fn connect(wallet_type: HardwareWalletType) -> Result<Self> {
         let device: Arc<dyn HardwareWalletDevice> = match wallet_type {
             HardwareWalletType::Ledger => {
                 #[cfg(feature = "ledger")]
                 {
-                    Arc::new(LedgerDevice::connect()?)
+                    return Ok(Self {
+                        device: Arc::new(LedgerDevice::connect()?),
+                        derivation_path: "m/44'/60'/0'/0/0".to_string(),
+                    });
                 }
                 #[cfg(not(feature = "ledger"))]
                 {
-                    return Err(Error::UnsupportedChain("Ledger support not compiled in".into()));
+                    return Err(Error::HardwareWallet("Ledger support not compiled in. Enable the 'ledger' feature.".into()));
                 }
             }
             HardwareWalletType::Trezor => {
                 #[cfg(feature = "trezor")]
                 {
-                    Arc::new(TrezorDevice::connect()?)
+                    return Ok(Self {
+                        device: Arc::new(TrezorDevice::connect()?),
+                        derivation_path: "m/44'/60'/0'/0/0".to_string(),
+                    });
                 }
                 #[cfg(not(feature = "trezor"))]
                 {
-                    return Err(Error::UnsupportedChain("Trezor support not compiled in".into()));
+                    return Err(Error::HardwareWallet("Trezor support not compiled in. Enable the 'trezor' feature.".into()));
                 }
             }
             HardwareWalletType::Generic => {
-                return Err(Error::UnsupportedChain("Generic hardware wallet not implemented".into()));
+                return Err(Error::HardwareWallet("Generic hardware wallet is not yet implemented".into()));
             }
             #[cfg(test)]
             HardwareWalletType::Mock => {
                 Arc::new(MockHardwareWallet::new())
-            }
-            #[cfg(not(test))]
-            _ => {
-                return Err(Error::UnsupportedChain("Unknown hardware wallet type".into()));
             }
         };
         

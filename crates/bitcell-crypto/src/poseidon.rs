@@ -81,9 +81,20 @@ impl PoseidonParams<Fr> {
         let total_constants = t * (full_rounds + partial_rounds);
         let mut constants = Vec::with_capacity(total_constants);
         
+        // Maximum iterations to prevent theoretical infinite loop
+        const MAX_ITERATIONS: u64 = 1_000_000;
+        
         // Use domain-separated SHA-256 as PRF
         let mut counter = 0u64;
         while constants.len() < total_constants {
+            if counter >= MAX_ITERATIONS {
+                panic!(
+                    "Round constant generation exceeded {} iterations. \
+                     This should never happen with SHA-256 PRF - please report this bug.",
+                    MAX_ITERATIONS
+                );
+            }
+            
             let mut hasher = Sha256::new();
             hasher.update(b"BitCell_Poseidon_RC");
             hasher.update(&counter.to_le_bytes());
@@ -120,7 +131,10 @@ impl PoseidonParams<Fr> {
             for j in 0..t {
                 // M[i][j] = 1 / (x[i] + y[j])
                 let sum = x[i] + y[j];
-                matrix[i][j] = sum.inverse().expect("x[i] + y[j] should be non-zero");
+                matrix[i][j] = sum.inverse().expect(
+                    "Cauchy MDS construction: x[i] and y[j] are distinct elements, \
+                     so x[i] + y[j] != 0 and is always invertible in a prime field"
+                );
             }
         }
         

@@ -9,6 +9,7 @@
 //! - Transaction handling (signing, creation)
 //! - Balance display
 //! - Transaction history
+//! - Hardware wallet support (Ledger, Trezor)
 //!
 //! Supports:
 //! - BitCell native blockchain
@@ -18,6 +19,7 @@
 pub mod address;
 pub mod balance;
 pub mod chain;
+pub mod hardware;
 pub mod history;
 pub mod mnemonic;
 pub mod transaction;
@@ -26,6 +28,7 @@ pub mod wallet;
 pub use address::{Address, AddressType};
 pub use balance::Balance;
 pub use chain::{Chain, ChainConfig};
+pub use hardware::{HardwareWallet, HardwareWalletType, SigningMethod};
 pub use history::{TransactionRecord, TransactionHistory};
 pub use mnemonic::Mnemonic;
 pub use transaction::{Transaction, TransactionBuilder, SignedTransaction};

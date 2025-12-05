@@ -359,6 +359,32 @@ impl Wallet {
         
         Ok(signed)
     }
+    
+    /// Sign a transaction by looking up the sender address from the transaction
+    /// 
+    /// This is a convenience method that finds the wallet address matching
+    /// the transaction's `from` field and uses it for signing.
+    pub fn sign(&mut self, tx: &Transaction) -> Result<SignedTransaction> {
+        if !self.is_unlocked() {
+            return Err(Error::WalletLocked);
+        }
+        
+        // Find matching address in wallet
+        let from_address = self.addresses.all_addresses()
+            .iter()
+            .find(|addr| addr.to_string_formatted() == tx.from)
+            .cloned()
+            .ok_or_else(|| Error::InvalidAddress(
+                format!("Address {} not found in wallet", tx.from)
+            ))?;
+        
+        let path = DerivationPath::for_chain(from_address.chain(), from_address.index());
+        let key = self.derive_key(&path)?;
+        
+        let signed = tx.sign(&key.secret_key);
+        
+        Ok(signed)
+    }
 
     /// Create and sign a transaction in one step
     pub fn send(

@@ -16,6 +16,9 @@ use rpc_client::RpcClient;
 mod qrcode;
 mod game_viz;
 
+/// Default gas price when RPC call fails
+const DEFAULT_GAS_PRICE: u64 = 1000;
+
 /// Wallet application state
 struct AppState {
     wallet: Option<Wallet>,
@@ -385,11 +388,13 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
             let wallet_state = window.global::<WalletState>();
             
             // Parse amount (convert from human-readable to smallest units)
-            let amount: f64 = amount_str.parse().unwrap_or(0.0);
-            if amount <= 0.0 {
-                wallet_state.set_status_message("Invalid amount".into());
-                return;
-            }
+            let amount: f64 = match amount_str.parse() {
+                Ok(a) if a > 0.0 => a,
+                _ => {
+                    wallet_state.set_status_message("Invalid amount: must be a positive number".into());
+                    return;
+                }
+            };
             
             if to_address.is_empty() {
                 wallet_state.set_status_message("Invalid recipient address".into());
@@ -464,7 +469,7 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                 // Get gas price
                 let gas_price = match rpc_client.get_gas_price().await {
                     Ok(p) => p,
-                    Err(_) => 1000, // Default fee if gas price unavailable
+                    Err(_) => DEFAULT_GAS_PRICE, // Use default if unavailable
                 };
                 
                 // Calculate fee (simple estimate)

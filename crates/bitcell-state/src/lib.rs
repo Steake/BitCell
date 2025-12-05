@@ -5,6 +5,7 @@
 //! - Bond management
 //! - State Merkle tree
 //! - Nullifier set
+//! - Persistent storage with RocksDB
 
 pub mod account;
 pub mod bonds;
@@ -12,11 +13,11 @@ pub mod storage;
 
 pub use account::{Account, AccountState};
 pub use bonds::{BondState, BondStatus};
+pub use storage::{StorageManager, PruningStats};
 
 use bitcell_crypto::Hash256;
 use std::collections::HashMap;
 use std::sync::Arc;
-use storage::StorageManager;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -30,12 +31,12 @@ pub enum Error {
     
     #[error("Invalid bond")]
     InvalidBond,
-    
-    #[error("Storage error: {0}")]
-    StorageError(String),
-    
+
     #[error("Balance overflow")]
     BalanceOverflow,
+
+    #[error("Storage error: {0}")]
+    StorageError(String),
 }
 
 /// Global state manager
@@ -109,12 +110,23 @@ impl StateManager {
     }
 
     /// Create or update account
+    /// 
+    /// Updates the in-memory cache and persists to storage if available.
+    /// Storage errors are logged but do not prevent the operation from succeeding
+    /// in memory (eventual consistency model).
     pub fn update_account(&mut self, pubkey: [u8; 33], account: Account) {
         self.accounts.insert(pubkey, account.clone());
-        
+
+
         // Persist to storage if available
         if let Some(storage) = &self.storage {
-            let _ = storage.store_account(&pubkey, &account);
+            if let Err(e) = storage.store_account(&pubkey, &account) {
+                tracing::error!(
+                    pubkey = %hex::encode(&pubkey),
+                    error = %e,
+                    "Failed to persist account to storage. State may be inconsistent on restart."
+                );
+            }
         }
         
         self.recompute_root();
@@ -143,12 +155,23 @@ impl StateManager {
     }
 
     /// Update bond state
+    ///
+    /// Updates the in-memory cache and persists to storage if available.
+    /// Storage errors are logged but do not prevent the operation from succeeding
+    /// in memory (eventual consistency model).
     pub fn update_bond(&mut self, pubkey: [u8; 33], bond: BondState) {
         self.bonds.insert(pubkey, bond.clone());
-        
+
+
         // Persist to storage if available
         if let Some(storage) = &self.storage {
-            let _ = storage.store_bond(&pubkey, &bond);
+            if let Err(e) = storage.store_bond(&pubkey, &bond) {
+                tracing::error!(
+                    pubkey = %hex::encode(&pubkey),
+                    error = %e,
+                    "Failed to persist bond to storage. State may be inconsistent on restart."
+                );
+            }
         }
         
         self.recompute_root();
@@ -220,6 +243,8 @@ impl StateManager {
     }
 
     /// Credit an account (minting/coinbase)
+    /// Returns the new state root on success, or an error if overflow would occur.
+    /// Note: This method should only be called by blockchain core during block processing.
     pub fn credit_account(&mut self, pubkey: [u8; 33], amount: u64) -> Result<Hash256> {
         let mut account = self.accounts.get(&pubkey)
             .cloned()

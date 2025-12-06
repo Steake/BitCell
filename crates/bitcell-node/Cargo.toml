@@ -39,3 +39,4 @@ base64 = "0.21"
 
 [dev-dependencies]
 proptest.workspace = true
+tempfile = "3.23.0"

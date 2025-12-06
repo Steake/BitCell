@@ -566,4 +566,38 @@ mod tests {
         // Test reward becomes 0 after 64 halvings
         assert_eq!(Blockchain::calculate_block_reward(HALVING_INTERVAL * 64), 0);
     }
+
+    #[test]
+    fn test_blockchain_with_persistent_storage() {
+        use tempfile::TempDir;
+        
+        let temp_dir = TempDir::new().unwrap();
+        let data_path = temp_dir.path();
+        let sk = Arc::new(SecretKey::generate());
+        let pubkey = [1u8; 33];
+        
+        // Create blockchain with storage and modify state
+        {
+            let metrics = MetricsRegistry::new();
+            let blockchain = Blockchain::with_storage(sk.clone(), metrics, data_path).unwrap();
+            
+            // Add an account to state
+            let mut state = blockchain.state.write().unwrap();
+            state.update_account(pubkey, bitcell_state::Account {
+                balance: 1000,
+                nonce: 5,
+            });
+        }
+        
+        // Recreate blockchain from same storage and verify persistence
+        {
+            let metrics = MetricsRegistry::new();
+            let blockchain = Blockchain::with_storage(sk, metrics, data_path).unwrap();
+            
+            let state = blockchain.state.read().unwrap();
+            let account = state.get_account_owned(&pubkey).expect("Account should persist");
+            assert_eq!(account.balance, 1000);
+            assert_eq!(account.nonce, 5);
+        }
+    }
 }

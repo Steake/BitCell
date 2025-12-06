@@ -435,10 +435,10 @@ flowchart TD
         R --> OPINION
         S --> OPINION
         OPINION[Opinion Calculation]
-        OPINION --> |R = r_m + s_m| TOTAL
-        TOTAL --> |belief = r_m / R+K| B
-        TOTAL --> |disbelief = s_m / R+K| D
-        TOTAL --> |uncertainty = K / R+K| U
+        OPINION --> |W = r_m + s_m| TOTAL
+        TOTAL --> |belief = r_m / (W+K)| B
+        TOTAL --> |disbelief = s_m / (W+K)| D
+        TOTAL --> |uncertainty = K / (W+K)| U
         B[Belief b]
         D[Disbelief d]
         U[Uncertainty u]
@@ -448,8 +448,8 @@ flowchart TD
     end
     
     subgraph Decay per Epoch
-        R --> |×0.99| R
-        S --> |×0.999| S
+        r_m --> |×0.99| r_m
+        s_m --> |×0.999| s_m
     end
     
     subgraph Eligibility Check
@@ -567,7 +567,7 @@ graph LR
 | WP Requirement | Implementation | Status | Notes |
 |----------------|----------------|--------|-------|
 | Battle circuit structure | `BattleCircuit` | ✅ | |
-| Winner ID validation | Constraint: `w*(w-1)*(w-2)=0` | ✅ | |
+| Winner ID validation | Constraint: `w*(w-1)*(w-2)=0` | ✅ | 0 = Player A wins, 1 = Player B wins, 2 = Draw |
 | CA evolution verification | TODO | ⚠️ | Complex constraint programming needed |
 | State circuit structure | `StateCircuit` | ✅ | |
 | Non-equality constraint | `diff * inv = 1` | ✅ | Fixed in RC1 |
@@ -670,7 +670,7 @@ flowchart TD
         BASE --> |EIP-1559 style| ADJUST[Adjust per Block]
         
         CONTRACT[Private Contract]
-        CONTRACT --> |×2 multiplier| PRIVACY[Privacy Premium]
+        CONTRACT --> |×2 multiplier| PRIVACY[Privacy Premium: Ring Signature Privacy]
     end
     
     subgraph "Supply Schedule"
@@ -908,14 +908,14 @@ graph LR
 
 **Risk Level:** Low - core functionality present, advanced features deferred.
 
-### 4. Recursive SNARK Aggregation
+### 4. Recursive zkSNARK Aggregation
 
-**WP Spec:** Proof aggregation via recursive SNARKs for scalability.
+**WP Spec:** Proof aggregation via recursive zkSNARKs for scalability.
 
 **Implementation:** Individual Groth16 proofs per battle.
 
 **Rationale:**
-- Recursive SNARKs require significant R&D
+- Recursive zkSNARKs require significant R&D
 - Current approach functional for RC1 throughput
 - Planned for v1.0+
 
@@ -968,7 +968,7 @@ graph LR
 
 ### Priority 2: v1.0 Enhancements
 
-1. **Recursive SNARK Aggregation**
+1. **Recursive zkSNARK Aggregation**
    - Migrate to Plonk or STARK
    - Implement recursive verification
    - Reduce block verification time

@@ -16,15 +16,18 @@ pub struct MinerNode {
     pub metrics: MetricsRegistry,
     pub blockchain: Blockchain,
     pub tx_pool: TransactionPool,
-    pub network: NetworkManager,
+    pub network: Arc<NetworkManager>,
 }
 
 impl MinerNode {
     pub fn new(config: NodeConfig, secret_key: SecretKey) -> Self {
-        let secret_key = Arc::new(secret_key);
+        Self::with_key(config, Arc::new(secret_key))
+    }
+
+    pub fn with_key(config: NodeConfig, secret_key: Arc<SecretKey>) -> Self {
         let metrics = MetricsRegistry::new();
         let blockchain = Blockchain::new(secret_key.clone(), metrics.clone());
-        let network = NetworkManager::new(secret_key.public_key(), metrics.clone());
+        let network = Arc::new(NetworkManager::new(secret_key.public_key(), metrics.clone()));
         
         Self {
             config,

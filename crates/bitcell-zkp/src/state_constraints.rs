@@ -4,7 +4,6 @@
 use ark_ff::PrimeField;
 use ark_r1cs_std::prelude::*;
 use ark_r1cs_std::fields::fp::FpVar;
-use ark_r1cs_std::bits::ToBitsGadget;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 
 /// Merkle tree depth

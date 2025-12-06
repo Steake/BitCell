@@ -3,6 +3,7 @@
 //! Implements modular Groth16 circuits for:
 //! - Battle verification (CA evolution + commitment consistency)
 //! - State transition verification (Merkle updates)
+//! - Merkle tree inclusion proofs
 //!
 //! Note: v0.1 provides circuit structure and basic constraints.
 //! Full CA evolution verification requires extensive constraint programming.
@@ -14,8 +15,15 @@ pub mod state_circuit;
 pub mod battle_constraints;
 pub mod state_constraints;
 
+// Merkle tree verification gadgets
+pub mod merkle_gadget;
+// Production-ready Poseidon-based Merkle verification
+pub mod poseidon_merkle;
+
 pub use battle_circuit::BattleCircuit;
 pub use state_circuit::StateCircuit;
+pub use merkle_gadget::{MerklePathGadget, MERKLE_DEPTH};
+pub use poseidon_merkle::{PoseidonMerkleGadget, POSEIDON_MERKLE_DEPTH};
 
 use serde::{Deserialize, Serialize};
 
@@ -39,46 +47,58 @@ pub enum Error {
     Setup(String),
 }
 
-/// Simplified proof wrapper for v0.1
-#[derive(Clone, Serialize, Deserialize)]
+use ark_bn254::Bn254;
+use ark_groth16::Proof;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+
+/// Wrapper for Groth16 proof
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Groth16Proof {
-    pub proof_data: Vec<u8>,
+    #[serde(with = "ark_serialize_wrapper")]
+    pub proof: Proof<Bn254>,
+}
+
+mod ark_serialize_wrapper {
+    use super::*;
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S>(proof: &Proof<Bn254>, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut bytes = Vec::new();
+        proof.serialize_compressed(&mut bytes)
+            .map_err(serde::ser::Error::custom)?;
+        serializer.serialize_bytes(&bytes)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> std::result::Result<Proof<Bn254>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let bytes: Vec<u8> = Deserialize::deserialize(deserializer)?;
+        Proof::deserialize_compressed(&*bytes)
+            .map_err(serde::de::Error::custom)
+    }
 }
 
 impl Groth16Proof {
-    pub fn mock() -> Self {
-        Self {
-            proof_data: vec![0u8; 192], // Typical Groth16 proof size
-        }
+    pub fn new(proof: Proof<Bn254>) -> Self {
+        Self { proof }
     }
 
     pub fn serialize(&self) -> Result<Vec<u8>> {
-        Ok(self.proof_data.clone())
+        let mut bytes = Vec::new();
+        self.proof.serialize_compressed(&mut bytes)
+            .map_err(|e| Error::Serialization(e.to_string()))?;
+        Ok(bytes)
     }
 
     pub fn deserialize(bytes: &[u8]) -> Result<Self> {
-        Ok(Self {
-            proof_data: bytes.to_vec(),
-        })
-    }
-
-    pub fn verify(&self) -> bool {
-        // Simplified verification for v0.1
-        !self.proof_data.is_empty()
+        let proof = Proof::deserialize_compressed(bytes)
+            .map_err(|e| Error::Serialization(e.to_string()))?;
+        Ok(Self { proof })
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn test_basic_proof() {
-        let proof = Groth16Proof::mock();
-        assert!(proof.verify());
-        
-        let serialized = proof.serialize().unwrap();
-        let deserialized = Groth16Proof::deserialize(&serialized).unwrap();
-        assert_eq!(proof.proof_data.len(), deserialized.proof_data.len());
-    }
-}

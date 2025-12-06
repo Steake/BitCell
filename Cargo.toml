@@ -37,6 +37,7 @@ ark-groth16 = "0.4"
 ark-bn254 = "0.4"
 ark-bls12-381 = "0.4"
 ark-crypto-primitives = "0.4"
+ark-snark = "0.4"
 
 # Cryptography
 sha2 = "0.10"

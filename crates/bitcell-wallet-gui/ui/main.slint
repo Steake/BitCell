@@ -93,6 +93,16 @@ export global WalletState {
     // Status
     in-out property <string> status-message: "";
     in-out property <bool> is-loading: false;
+    in-out property <bool> rpc-connected: false;
+    
+    // Tournament State
+    in-out property <string> tournament-round: "Waiting...";
+    in-out property <string> tournament-phase: "Idle";
+    in-out property <string> last-winner: "None";
+    
+    // UI Images
+    in-out property <image> qr-code;
+    in-out property <image> game-grid;
     
     // Callbacks for Rust backend
     callback create-wallet();
@@ -717,6 +727,12 @@ component DashboardView inherits Rectangle {
                 horizontal-stretch: 1;
                 clicked => { WalletState.current-tab = 7; }
             }
+            
+            SecondaryButton {
+                text: "Tournament";
+                horizontal-stretch: 1;
+                clicked => { WalletState.current-tab = 8; }
+            }
         }
         
         // Recent transactions
@@ -820,7 +836,7 @@ component SendView inherits Rectangle {
             }
             
             PrimaryButton {
-                text: "Send";
+                text: "Send Transaction";
                 enabled: !WalletState.wallet-locked;
                 clicked => { 
                     WalletState.send-transaction(
@@ -1044,6 +1060,193 @@ component HistoryView inherits Rectangle {
     }
 }
 
+// Game Visualizer component
+component GameVisualizer inherits Rectangle {
+    in property <image> grid-image: WalletState.game-grid;
+    
+    width: 100%;
+    height: 300px;
+    background: Theme.surface-elevated;
+    border-radius: Theme.radius-md;
+    clip: true;
+    
+    if root.grid-image.width > 0 : Image {
+        width: 100%;
+        height: 100%;
+        source: root.grid-image;
+        image-fit: contain;
+    }
+    
+    if root.grid-image.width == 0 : VerticalLayout {
+        alignment: center;
+        
+        Text {
+            text: "No battle replay data available";
+            font-size: 14px;
+            color: Theme.text-muted;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// Tournament Outcome View
+component TournamentView inherits Rectangle {
+    background: Theme.background;
+    
+    VerticalLayout {
+        padding: Theme.spacing-lg;
+        spacing: Theme.spacing-lg;
+        
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.spacing-md;
+            
+            SecondaryButton {
+                text: "← Back";
+                width: 100px;
+                clicked => { WalletState.current-tab = 3; }
+            }
+            
+            Text {
+                text: "Tournament Monitor";
+                font-size: 28px;
+                font-weight: 700;
+                color: Theme.text-primary;
+                vertical-alignment: center;
+            }
+        }
+        
+        // Stats cards in a horizontal row
+        HorizontalLayout {
+            spacing: Theme.spacing-lg;
+            
+            Card {
+                horizontal-stretch: 1;
+                
+                VerticalLayout {
+                    padding: Theme.spacing-lg;
+                    spacing: Theme.spacing-sm;
+                    alignment: center;
+                    
+                    Text {
+                        text: "Current Phase";
+                        font-size: 12px;
+                        color: Theme.text-secondary;
+                        horizontal-alignment: center;
+                    }
+                    
+                    Text {
+                        text: WalletState.tournament-phase;
+                        font-size: 24px;
+                        font-weight: 700;
+                        color: Theme.accent;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+            
+            Card {
+                horizontal-stretch: 1;
+                
+                VerticalLayout {
+                    padding: Theme.spacing-lg;
+                    spacing: Theme.spacing-sm;
+                    alignment: center;
+                    
+                    Text {
+                        text: "Block Height";
+                        font-size: 12px;
+                        color: Theme.text-secondary;
+                        horizontal-alignment: center;
+                    }
+                    
+                    Text {
+                        text: WalletState.tournament-round;
+                        font-size: 24px;
+                        font-weight: 700;
+                        color: Theme.text-primary;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+        }
+        
+        // Last Winner Card
+        Card {
+            title: "Last Block Winner";
+            
+            VerticalLayout {
+                padding: Theme.spacing-lg;
+                spacing: Theme.spacing-md;
+                
+                if WalletState.last-winner != "None" : VerticalLayout {
+                    spacing: Theme.spacing-sm;
+                    
+                    Text {
+                        text: "Miner Public Key:";
+                        font-size: 12px;
+                        color: Theme.text-secondary;
+                    }
+                    
+                    Rectangle {
+                        background: Theme.surface-elevated;
+                        border-radius: Theme.radius-sm;
+                        height: 48px;
+                        
+                        HorizontalLayout {
+                            padding-left: Theme.spacing-md;
+                            padding-right: Theme.spacing-md;
+                            alignment: center;
+                            
+                            Text {
+                                text: WalletState.last-winner;
+                                font-size: 14px;
+                                font-family: "monospace";
+                                color: Theme.success;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+                
+                if WalletState.last-winner == "None" : VerticalLayout {
+                    alignment: center;
+                    height: 100px;
+                    
+                    Text {
+                        text: "No winner yet - waiting for first block";
+                        font-size: 14px;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+        }
+        
+        // Battle Visualization
+        VerticalLayout {
+            spacing: Theme.spacing-sm;
+            
+            Text {
+                text: "Live Battle Replay";
+                font-size: 14px;
+                font-weight: 600;
+                color: Theme.text-primary;
+            }
+            
+            GameVisualizer { }
+        }
+        
+        // Info text
+        Text {
+            text: "Tournament state updates every 2 seconds from the connected node";
+            font-size: 11px;
+            color: Theme.text-muted;
+            horizontal-alignment: center;
+        }
+    }
+}
+
 // Main application window
 export component MainWindow inherits Window {
     title: "BitCell Wallet";
@@ -1063,20 +1266,45 @@ export component MainWindow inherits Window {
     if WalletState.current-tab == 5 : UnlockView { }
     if WalletState.current-tab == 6 : ReceiveView { }
     if WalletState.current-tab == 7 : HistoryView { }
+    if WalletState.current-tab == 8 : TournamentView { }
     
-    // Status bar
-    if WalletState.status-message != "" : Rectangle {
-        y: parent.height - 40px;
+    // Status bar with RPC connection indicator
+    Rectangle {
+        y: parent.height - 32px;
         width: 100%;
-        height: 40px;
+        height: 32px;
         background: Theme.surface;
         
-        Text {
-            text: WalletState.status-message;
-            font-size: 14px;
-            color: Theme.text-secondary;
-            horizontal-alignment: center;
-            vertical-alignment: center;
+        HorizontalLayout {
+            padding-left: Theme.spacing-md;
+            padding-right: Theme.spacing-md;
+            alignment: space-between;
+            
+            Text {
+                text: WalletState.status-message;
+                font-size: 12px;
+                color: Theme.text-secondary;
+                vertical-alignment: center;
+            }
+            
+            HorizontalLayout {
+                spacing: Theme.spacing-sm;
+                
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: WalletState.rpc-connected ? Theme.success : Theme.error;
+                    y: 12px;
+                }
+                
+                Text {
+                    text: WalletState.rpc-connected ? "RPC Connected" : "RPC Disconnected";
+                    font-size: 12px;
+                    color: Theme.text-secondary;
+                    vertical-alignment: center;
+                }
+            }
         }
     }
     

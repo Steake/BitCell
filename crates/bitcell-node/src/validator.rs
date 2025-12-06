@@ -34,6 +34,10 @@ impl ValidatorNode {
         } else {
             Arc::new(SecretKey::generate())
         };
+        Self::with_key(config, secret_key)
+    }
+
+    pub fn with_key(config: NodeConfig, secret_key: Arc<SecretKey>) -> Self {
         let metrics = MetricsRegistry::new();
         let blockchain = Blockchain::new(secret_key.clone(), metrics.clone());
         let tournament_manager = Arc::new(crate::tournament::TournamentManager::new(metrics.clone()));

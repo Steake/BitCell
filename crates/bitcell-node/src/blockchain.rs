@@ -518,4 +518,60 @@ mod tests {
         // Test reward becomes 0 after 64 halvings
         assert_eq!(Blockchain::calculate_block_reward(HALVING_INTERVAL * 64), 0);
     }
+    
+    #[test]
+    fn test_vrf_block_production_and_validation() {
+        let sk = Arc::new(SecretKey::generate());
+        let metrics = MetricsRegistry::new();
+        let blockchain = Blockchain::new(sk.clone(), metrics);
+        
+        // Produce first block
+        let block1 = blockchain.produce_block(
+            vec![],
+            vec![],
+            sk.public_key(),
+        ).unwrap();
+        
+        // VRF output should not be all zeros (genesis uses zeros)
+        assert_ne!(block1.header.vrf_output, [0u8; 32]);
+        
+        // VRF proof should not be empty
+        assert!(!block1.header.vrf_proof.is_empty());
+        
+        // Validate the block (includes VRF verification)
+        blockchain.validate_block(&block1).expect("Block should be valid");
+        
+        // Add block to chain
+        blockchain.add_block(block1).expect("Should add block");
+        
+        // Produce second block
+        let block2 = blockchain.produce_block(
+            vec![],
+            vec![],
+            sk.public_key(),
+        ).unwrap();
+        
+        // VRF outputs should be different (demonstrates randomness)
+        assert_ne!(block2.header.vrf_output, blockchain.get_block(1).unwrap().header.vrf_output);
+        
+        // Validate second block
+        blockchain.validate_block(&block2).expect("Second block should be valid");
+    }
+    
+    #[test]
+    fn test_vrf_deterministic() {
+        // VRF should be deterministic - same input should produce same output
+        let sk = Arc::new(SecretKey::generate());
+        let metrics1 = MetricsRegistry::new();
+        let metrics2 = MetricsRegistry::new();
+        
+        let blockchain1 = Blockchain::new(sk.clone(), metrics1);
+        let blockchain2 = Blockchain::new(sk.clone(), metrics2);
+        
+        let block1 = blockchain1.produce_block(vec![], vec![], sk.public_key()).unwrap();
+        let block2 = blockchain2.produce_block(vec![], vec![], sk.public_key()).unwrap();
+        
+        // Same key, same previous state should produce same VRF output
+        assert_eq!(block1.header.vrf_output, block2.header.vrf_output);
+    }
 }

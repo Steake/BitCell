@@ -78,6 +78,54 @@ impl Blockchain {
         blockchain
     }
     
+    /// Create new blockchain with persistent storage
+    /// 
+    /// This method initializes the blockchain with RocksDB-backed state storage.
+    /// State will be persisted to disk and restored across node restarts.
+    /// 
+    /// # Arguments
+    /// * `secret_key` - Node's secret key for signing
+    /// * `metrics` - Metrics registry
+    /// * `data_path` - Path to the data directory for persistent storage
+    pub fn with_storage(
+        secret_key: Arc<SecretKey>, 
+        metrics: MetricsRegistry,
+        data_path: &std::path::Path,
+    ) -> std::result::Result<Self, String> {
+        // Create storage manager
+        let storage_path = data_path.join("state");
+        let storage = Arc::new(
+            bitcell_state::StorageManager::new(&storage_path)
+                .map_err(|e| format!("Failed to create storage: {}", e))?
+        );
+        
+        // Create state manager with storage
+        let state = StateManager::with_storage(storage)
+            .map_err(|e| format!("Failed to initialize state: {:?}", e))?;
+        
+        let genesis = Self::create_genesis_block(&secret_key);
+        let genesis_hash = genesis.hash();
+        
+        let mut blocks = HashMap::new();
+        blocks.insert(GENESIS_HEIGHT, genesis);
+        
+        let blockchain = Self {
+            height: Arc::new(RwLock::new(GENESIS_HEIGHT)),
+            latest_hash: Arc::new(RwLock::new(genesis_hash)),
+            blocks: Arc::new(RwLock::new(blocks)),
+            tx_index: Arc::new(RwLock::new(HashMap::new())),
+            state: Arc::new(RwLock::new(state)),
+            metrics: metrics.clone(),
+            secret_key,
+        };
+        
+        // Initialize metrics
+        blockchain.metrics.set_chain_height(GENESIS_HEIGHT);
+        blockchain.metrics.set_sync_progress(100);
+        
+        Ok(blockchain)
+    }
+    
     /// Create genesis block
     fn create_genesis_block(secret_key: &SecretKey) -> Block {
         let header = BlockHeader {

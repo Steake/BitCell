@@ -26,7 +26,21 @@ impl MinerNode {
 
     pub fn with_key(config: NodeConfig, secret_key: Arc<SecretKey>) -> Self {
         let metrics = MetricsRegistry::new();
-        let blockchain = Blockchain::new(secret_key.clone(), metrics.clone());
+        
+        // Create blockchain with or without persistent storage based on config
+        let blockchain = if let Some(ref data_path) = config.data_dir {
+            // Ensure data directory exists
+            std::fs::create_dir_all(data_path)
+                .expect("Failed to create data directory");
+            
+            println!("📦 Using persistent storage at: {}", data_path.display());
+            Blockchain::with_storage(secret_key.clone(), metrics.clone(), data_path)
+                .expect("Failed to initialize blockchain with storage")
+        } else {
+            println!("⚠️  Using in-memory storage (data will not persist)");
+            Blockchain::new(secret_key.clone(), metrics.clone())
+        };
+        
         let network = Arc::new(NetworkManager::new(secret_key.public_key(), metrics.clone()));
         
         Self {

@@ -81,7 +81,7 @@ async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Validator { port, rpc_port, data_dir: _, enable_dht, bootstrap, key_seed, key_file, private_key } => {
+        Commands::Validator { port, rpc_port, data_dir, enable_dht, bootstrap, key_seed, key_file, private_key } => {
             println!("🌌 BitCell Validator Node");
             println!("=========================");
             
@@ -89,10 +89,10 @@ async fn main() {
             config.network_port = port;
             config.enable_dht = enable_dht;
             config.key_seed = key_seed.clone();
+            config.data_dir = data_dir;
             if let Some(bootstrap_node) = bootstrap {
                 config.bootstrap_nodes.push(bootstrap_node);
             }
-            // TODO: Use data_dir
             
             // Resolve secret key
             let secret_key = match bitcell_node::keys::resolve_secret_key(
@@ -162,7 +162,7 @@ async fn main() {
             tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
             println!("\nShutting down...");
         }
-        Commands::Miner { port, rpc_port, data_dir: _, enable_dht, bootstrap, key_seed, key_file, private_key } => {
+        Commands::Miner { port, rpc_port, data_dir, enable_dht, bootstrap, key_seed, key_file, private_key } => {
             println!("⛏️  BitCell Miner Node");
             println!("======================");
             
@@ -170,6 +170,7 @@ async fn main() {
             config.network_port = port;
             config.enable_dht = enable_dht;
             config.key_seed = key_seed.clone();
+            config.data_dir = data_dir;
             if let Some(bootstrap_node) = bootstrap {
                 config.bootstrap_nodes.push(bootstrap_node);
             }
@@ -228,7 +229,7 @@ async fn main() {
             tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
             println!("\nShutting down...");
         }
-        Commands::FullNode { port, rpc_port, data_dir: _, enable_dht, bootstrap, key_seed, key_file, private_key } => {
+        Commands::FullNode { port, rpc_port, data_dir, enable_dht, bootstrap, key_seed, key_file, private_key } => {
             println!("🌍 BitCell Full Node");
             println!("====================");
             
@@ -236,6 +237,7 @@ async fn main() {
             config.network_port = port;
             config.enable_dht = enable_dht;
             config.key_seed = key_seed.clone();
+            config.data_dir = data_dir;
             if let Some(bootstrap_node) = bootstrap {
                 config.bootstrap_nodes.push(bootstrap_node);
             }

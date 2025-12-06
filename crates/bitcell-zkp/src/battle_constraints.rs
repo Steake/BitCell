@@ -163,7 +163,7 @@ fn allocate_grid<F: PrimeField>(
 
 /// Verify commitment: H(pattern || nonce) == commitment
 fn verify_commitment<F: PrimeField>(
-    cs: ConstraintSystemRef<F>,
+    _cs: ConstraintSystemRef<F>,
     pattern: &[Vec<UInt8<F>>],
     nonce: &FpVar<F>,
     commitment: &FpVar<F>,

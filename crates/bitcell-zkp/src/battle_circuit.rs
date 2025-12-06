@@ -11,10 +11,6 @@
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_bn254::Fr;
 
-use ark_ff::Field;
-use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
-use ark_bn254::Fr;
-
 /// Battle circuit configuration
 ///
 /// Proves that a battle between two players resulted in the claimed winner.

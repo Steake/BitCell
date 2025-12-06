@@ -6,6 +6,7 @@
 //! - Configuration management
 //! - Testing utilities
 //! - Log aggregation and viewing
+//! - HSM integration for secure key management
 
 pub mod api;
 pub mod web;
@@ -16,6 +17,7 @@ pub mod process;
 pub mod metrics_client;
 pub mod setup;
 pub mod system_metrics;
+pub mod hsm;
 
 use std::net::SocketAddr;
 use std::sync::Arc;

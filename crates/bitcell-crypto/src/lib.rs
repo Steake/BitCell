@@ -8,6 +8,7 @@
 //! - Merkle trees
 
 pub mod hash;
+pub mod poseidon;
 pub mod signature;
 pub mod vrf;
 pub mod ecvrf;
@@ -17,6 +18,10 @@ pub mod ring;
 pub mod clsag;
 
 pub use hash::{Hash256, Hashable};
+pub use poseidon::{
+    PoseidonParams, PoseidonHasher, poseidon_bn254,
+    poseidon_hash_two, poseidon_hash_one, poseidon_hash_many,
+};
 pub use signature::{PublicKey, SecretKey, Signature};
 pub use vrf::{VrfProof, VrfOutput};
 pub use ecvrf::{EcvrfSecretKey, EcvrfPublicKey, EcvrfProof, EcvrfOutput, combine_ecvrf_outputs};

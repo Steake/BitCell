@@ -16,6 +16,9 @@ use rpc_client::RpcClient;
 mod qrcode;
 mod game_viz;
 
+/// Default gas price when RPC call fails
+const DEFAULT_GAS_PRICE: u64 = 1000;
+
 /// Wallet application state
 struct AppState {
     wallet: Option<Wallet>,
@@ -377,28 +380,133 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
     
     // Send transaction callback
     {
-        let _state = state.clone();
+        let state = state.clone();
         let window_weak = window.as_weak();
         
-        wallet_state.on_send_transaction(move |to_address, amount, _chain_str| {
+        wallet_state.on_send_transaction(move |to_address, amount_str, chain_str| {
             let window = window_weak.unwrap();
             let wallet_state = window.global::<WalletState>();
             
-            // Parse amount
-            let amount: f64 = amount.parse().unwrap_or(0.0);
-            if amount <= 0.0 {
-                wallet_state.set_status_message("Invalid amount".into());
-                return;
-            }
+            // Parse amount (convert from human-readable to smallest units)
+            let amount: f64 = match amount_str.parse() {
+                Ok(a) if a > 0.0 => a,
+                _ => {
+                    wallet_state.set_status_message("Invalid amount format: expected a positive number (e.g., 1.23)".into());
+                    return;
+                }
+            };
             
             if to_address.is_empty() {
                 wallet_state.set_status_message("Invalid recipient address".into());
                 return;
             }
             
-            // Transaction sending is not yet implemented
-            // TODO: Build and sign a real transaction using the wallet's private key
-            wallet_state.set_status_message("Transaction sending is not yet implemented. This feature is coming soon.".into());
+            let chain = parse_chain(&chain_str);
+            
+            // Validate amount before conversion to prevent overflow
+            // Max safe value: u64::MAX / 100_000_000 ≈ 184 billion
+            const MAX_AMOUNT: f64 = 184_467_440_737.0; // u64::MAX / 100_000_000
+            if amount > MAX_AMOUNT {
+                wallet_state.set_status_message(format!(
+                    "Amount too large. Maximum: {} CELL", MAX_AMOUNT
+                ).into());
+                return;
+            }
+            
+            // Convert to smallest units (1 CELL = 100_000_000 units)
+            let amount_units = (amount * 100_000_000.0) as u64;
+            
+            // Get wallet and RPC client
+            let app_state = state.borrow();
+            
+            let (from_address, rpc_client) = {
+                let wallet = match &app_state.wallet {
+                    Some(w) => w,
+                    None => {
+                        wallet_state.set_status_message("No wallet loaded".into());
+                        return;
+                    }
+                };
+                
+                // Get the first address as sender
+                let addresses = wallet.all_addresses();
+                let from_addr = match addresses.iter().find(|a| a.chain() == chain) {
+                    Some(a) => a.to_string_formatted(),
+                    None => {
+                        wallet_state.set_status_message(format!("No {} address available", chain_display_name(chain)).into());
+                        return;
+                    }
+                };
+                
+                let rpc = match &app_state.rpc_client {
+                    Some(c) => c.clone(),
+                    None => {
+                        wallet_state.set_status_message("RPC client not initialized".into());
+                        return;
+                    }
+                };
+                
+                (from_addr, rpc)
+            };
+            
+            // Drop app_state borrow before the async operation
+            drop(app_state);
+            
+            // Set loading state
+            wallet_state.set_is_loading(true);
+            wallet_state.set_status_message("Preparing transaction...".into());
+            
+            let window_weak = window.as_weak();
+            let to_address = to_address.to_string();
+            
+            // Async nonce fetch and transaction preparation
+            tokio::spawn(async move {
+                // Get nonce from node
+                let nonce = match rpc_client.get_transaction_count(&from_address).await {
+                    Ok(n) => n,
+                    Err(e) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message(format!("Failed to get nonce: {}", e).into());
+                            }
+                        });
+                        return;
+                    }
+                };
+                
+                // Get gas price
+                let gas_price = match rpc_client.get_gas_price().await {
+                    Ok(p) => p,
+                    Err(_) => DEFAULT_GAS_PRICE, // Use default if unavailable
+                };
+                
+                // Calculate fee (simple estimate)
+                let fee = gas_price.saturating_mul(21000);
+                
+                // For now, display transaction details and inform user signing requires wallet unlock
+                // In production, this would integrate with hardware wallet or secure key management
+                let tx_info = format!(
+                    "Transaction prepared:\n\
+                     From: {}\n\
+                     To: {}\n\
+                     Amount: {} units\n\
+                     Fee: {} units\n\
+                     Nonce: {}\n\n\
+                     Hardware wallet signing coming soon. \
+                     Use the CLI or Admin console with HSM for secure signing.",
+                    from_address, to_address, amount_units, fee, nonce
+                );
+                
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(window) = window_weak.upgrade() {
+                        let ws = window.global::<WalletState>();
+                        ws.set_is_loading(false);
+                        ws.set_status_message(tx_info.into());
+                    }
+                });
+            });
         });
     }
     

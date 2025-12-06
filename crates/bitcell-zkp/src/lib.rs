@@ -17,10 +17,13 @@ pub mod state_constraints;
 
 // Merkle tree verification gadgets
 pub mod merkle_gadget;
+// Production-ready Poseidon-based Merkle verification
+pub mod poseidon_merkle;
 
 pub use battle_circuit::BattleCircuit;
 pub use state_circuit::StateCircuit;
 pub use merkle_gadget::{MerklePathGadget, MERKLE_DEPTH};
+pub use poseidon_merkle::{PoseidonMerkleGadget, POSEIDON_MERKLE_DEPTH};
 
 use serde::{Deserialize, Serialize};
 

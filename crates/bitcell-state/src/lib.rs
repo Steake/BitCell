@@ -100,10 +100,12 @@ impl StateManager {
         // Fallback to storage if available
         if let Some(storage) = &self.storage {
             if let Ok(Some(account)) = storage.get_account(pubkey) {
-                tracing::trace!(
-                    pubkey = %hex::encode(&pubkey),
-                    "Loaded account from storage (cache miss)"
-                );
+                if tracing::enabled!(tracing::Level::TRACE) {
+                    tracing::trace!(
+                        pubkey = %hex::encode(&pubkey),
+                        "Loaded account from storage (cache miss)"
+                    );
+                }
                 return Some(account);
             }
         }
@@ -155,10 +157,12 @@ impl StateManager {
         // Fallback to storage if available
         if let Some(storage) = &self.storage {
             if let Ok(Some(bond)) = storage.get_bond(pubkey) {
-                tracing::trace!(
-                    pubkey = %hex::encode(&pubkey),
-                    "Loaded bond from storage (cache miss)"
-                );
+                if tracing::enabled!(tracing::Level::TRACE) {
+                    tracing::trace!(
+                        pubkey = %hex::encode(&pubkey),
+                        "Loaded bond from storage (cache miss)"
+                    );
+                }
                 return Some(bond);
             }
         }

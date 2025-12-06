@@ -1,1127 +1,851 @@
-# BitCell Release Requirements
+# BitCell Release Requirements Specification
 
-**Document Version**: 1.0  
-**Last Updated**: December 2025  
-**Status**: Active Development
-
----
-
-## Overview
-
-This document defines the release requirements for BitCell across three release candidates:
-
-- **RC1**: Foundation completion (~85% complete)
-- **RC2**: Advanced features and integrations (~21 weeks)
-- **RC3**: Production readiness and ecosystem (~36 weeks)
-
-Each requirement includes detailed acceptance criteria and technical specifications.
+**Document Version:** 1.0  
+**Last Updated:** December 2025  
+**Status:** Comprehensive Requirements for RC1, RC2, RC3
 
 ---
 
-## RC1 Requirements (12 Groups - ~85% Complete)
+## Executive Summary
 
-RC1 establishes the core foundation for BitCell's unique blockchain architecture.
-
-### Summary Table
-
-| Requirement | Status | Completion | Missing Items |
-|-------------|--------|------------|---------------|
-| RC1-001 Core Crypto | ✅ | 95% | Ring sigs/VRF need upgrade |
-| RC1-002 CA Engine | ✅ | 100% | None |
-| RC1-003 ZK Architecture | 🟡 | 70% | Real Groth16 constraints |
-| RC1-004 Consensus | 🟡 | 85% | Production VRF |
-| RC1-005 State | 🟡 | 80% | RocksDB persistence |
-| RC1-006 Networking | 🟡 | 60% | Full libp2p |
-| RC1-007 RPC/API | ✅ | 90% | WebSocket subscriptions |
-| RC1-008 Wallet | ✅ | 85% | HW wallet integration |
-| RC1-009 Admin | 🟡 | 80% | HSM providers, auth |
-| RC1-010 Economics | ✅ | 100% | None |
-| RC1-011 EBSL | ✅ | 100% | None |
-| RC1-012 ZKVM | ✅ | 90% | ZK proof integration |
+This document provides a detailed specification of all requirements for BitCell Release Candidates 1, 2, and 3. Each requirement is categorized by priority, includes acceptance criteria, and details the specific implementation needs.
 
 ---
 
-### RC1-001: Core Cryptographic Primitives
+## Table of Contents
 
-**Crate**: `bitcell-crypto`  
-**Status**: ✅ 95% Complete  
-**Tests**: 39 passing
+1. [RC1 Requirements](#rc1-requirements)
+2. [RC2 Requirements](#rc2-requirements)
+3. [RC3 Requirements](#rc3-requirements)
+4. [Cross-Release Dependencies](#cross-release-dependencies)
+5. [Acceptance Criteria Summary](#acceptance-criteria-summary)
+
+---
+
+# RC1 Requirements
+
+## RC1 Completion Status: 85%
+
+### RC1-001: Core Cryptographic Primitives ✅ COMPLETE
+
+**Priority:** Critical  
+**Status:** Complete  
+**Crate:** `bitcell-crypto`
 
 #### Implemented Features
+| Feature | Status | Description |
+|---------|--------|-------------|
+| SHA-256 Hashing | ✅ | `Hash256` wrapper with `Hashable` trait |
+| ECDSA Signatures | ✅ | secp256k1 curve, sign/verify operations |
+| Poseidon Hash | ✅ | BN254 curve, 8 full + 57 partial rounds, 128-bit security |
+| Merkle Trees | ✅ | Binary tree with inclusion proofs |
+| Pedersen Commitments | ✅ | BN254 curve hiding commitments |
 
-- [x] SHA-256 hashing with custom Hash256 wrapper
-- [x] ECDSA signatures (secp256k1)
-- [x] Pedersen commitments over BN254
-- [x] Merkle trees with proof generation/verification
-- [x] ECVRF (Ristretto255) - Production VRF implementation
-- [x] CLSAG Ring Signatures - Monero-style linkable signatures
+#### Missing/Incomplete
+| Feature | Status | Required Action |
+|---------|--------|-----------------|
+| Ring Signatures | 🟡 | Hash-based mock; functional but needs CLSAG upgrade in RC2 |
+| VRF | 🟡 | Hash-based mock; functional but needs ECVRF upgrade in RC2 |
 
 #### Acceptance Criteria
-
-1. All cryptographic operations must be constant-time where security-relevant
-2. No unsafe code blocks in cryptographic implementations
-3. All public APIs must have comprehensive documentation
-4. Test coverage must exceed 90% for all cryptographic primitives
-
-#### Missing Items for RC2
-
-- [ ] Hardware security module (HSM) integration
-- [ ] Threshold signature support
-- [ ] Post-quantum cryptography research
-
-#### Technical Specifications
-
-```
-Hash Function: SHA-256 (general), Poseidon (ZK-friendly)
-Signature Scheme: ECDSA over secp256k1
-Curve for Commitments: BN254
-VRF: ECVRF over Ristretto255
-Ring Signatures: CLSAG (Monero-compatible)
-```
+- [x] All 46 crypto tests passing
+- [x] Poseidon hash produces deterministic outputs
+- [x] Signature verification is constant-time
+- [x] Merkle proofs verify correctly
 
 ---
 
-### RC1-002: Cellular Automaton Engine
+### RC1-002: Cellular Automaton Engine ✅ COMPLETE
 
-**Crate**: `bitcell-ca`  
-**Status**: ✅ 100% Complete  
-**Tests**: 27 passing
+**Priority:** Critical  
+**Status:** Complete  
+**Crate:** `bitcell-ca`
 
 #### Implemented Features
+| Feature | Status | Description |
+|---------|--------|-------------|
+| 1024×1024 Grid | ✅ | Toroidal wrapping, 8-bit cell energy |
+| Conway Evolution | ✅ | B3/S23 rules with parallel Rayon execution |
+| Glider Patterns | ✅ | Standard, LWSS, MWSS, HWSS patterns |
+| Battle Simulation | ✅ | 1000-step deterministic simulation |
+| Energy Calculation | ✅ | Regional energy-based winner determination |
 
-- [x] 1024×1024 toroidal grid with 8-bit cell energy
-- [x] Conway-like rules with energy inheritance
-- [x] Parallel evolution using Rayon
-- [x] 4 glider patterns (Standard, LWSS, MWSS, HWSS)
-- [x] Deterministic battle simulation (1000 steps)
-- [x] Energy-based winner determination
+#### Missing/Incomplete
+None - Fully complete for RC1
 
 #### Acceptance Criteria
-
-1. Grid evolution must be fully deterministic
-2. Battle outcomes must be reproducible given same inputs
-3. Parallel execution must not affect determinism
-4. Memory usage must not exceed 2MB per active grid
-
-#### Performance Targets
-
-| Metric | Target | Achieved |
-|--------|--------|----------|
-| Grid Creation | <10ms | ✅ ~5ms |
-| 1000-step Evolution | <5s | ✅ ~3-4s |
-| Battle Simulation | <25s | ✅ ~15-25s |
-| Memory per Grid | <2MB | ✅ ~1MB |
-
-#### Technical Specifications
-
-```
-Grid Size: 1024×1024 (1,048,576 cells)
-Cell State: 8-bit energy (0-255)
-Evolution Steps: 1000 per battle
-Topology: Toroidal (wrap-around edges)
-Parallelism: Rayon work-stealing
-```
+- [x] All 27 CA tests passing
+- [x] Battle outcomes are deterministic (same inputs = same output)
+- [x] Parallel evolution produces same results as sequential
+- [x] All 4 glider patterns spawn correctly
 
 ---
 
-### RC1-003: ZK-SNARK Architecture
+### RC1-003: Zero-Knowledge Proof Architecture 🟡 PARTIAL
 
-**Crate**: `bitcell-zkp`  
-**Status**: 🟡 70% Complete  
-**Tests**: 6/7 passing
+**Priority:** Critical  
+**Status:** 70% Complete  
+**Crate:** `bitcell-zkp`
 
 #### Implemented Features
+| Feature | Status | Description |
+|---------|--------|-------------|
+| BattleCircuit Structure | ✅ | Circuit struct defined with proper fields |
+| StateCircuit Structure | ✅ | Circuit struct with old_root ≠ new_root constraint |
+| Groth16Proof Wrapper | ✅ | arkworks integration, serialization |
+| MerklePathGadget | ✅ | R1CS-compatible inclusion proofs |
+| PoseidonMerkleGadget | ✅ | Full Poseidon permutation in R1CS |
 
-- [x] R1CS constraint system architecture
-- [x] Battle circuit structure (420 lines)
-- [x] State circuit structure (300 lines)
-- [x] arkworks Groth16 backend integration
-- [x] Mock proof generation for testing
-- [ ] Full constraint implementation
-- [ ] Trusted setup ceremony
+#### Missing/Incomplete for RC1
+| Feature | Status | Required Action |
+|---------|--------|-----------------|
+| Battle Circuit Constraints | 🟡 | Mock implementation - real constraints in RC2 |
+| State Circuit Constraints | 🟡 | Mock implementation - real constraints in RC2 |
+| Trusted Setup | ❌ | Deferred to RC2 |
+| Proof Verification Keys | ❌ | Deferred to RC2 |
 
 #### Acceptance Criteria
-
-1. Battle proofs must verify CA evolution correctness
-2. State proofs must verify Merkle tree updates
-3. Proof generation time must be under 30 seconds
-4. Proof verification must be under 10ms
-5. Constraint count must be under 1M for gas efficiency
-
-#### Circuit Specifications
-
-**Battle Circuit (C_battle)**:
-- Public inputs: commitments, winner ID, seed, spawn positions
-- Private inputs: initial grid state, glider patterns, nonce
-- Verifies: CA evolution, commitment consistency, outcome correctness
-
-**State Circuit (C_state)**:
-- Public inputs: old root, new root, nullifiers
-- Private inputs: Merkle paths, cleartext values
-- Verifies: Merkle tree updates, nullifier correctness
-
-**Execution Circuit (C_exec)**:
-- Public inputs: old state root, new state root, gas used
-- Private inputs: plaintext state, contract code, witness
-- Verifies: ZKVM execution of smart contract
+- [x] All 15 ZKP tests passing
+- [x] Merkle gadget verifies inclusion proofs
+- [x] Poseidon gadget matches native implementation
+- [ ] Real Groth16 proofs generate and verify (RC2)
 
 ---
 
-### RC1-004: Consensus Protocol
+### RC1-004: Consensus Protocol 🟡 PARTIAL
 
-**Crate**: `bitcell-consensus`  
-**Status**: 🟡 85% Complete  
-**Tests**: 8 passing
+**Priority:** Critical  
+**Status:** 85% Complete  
+**Crate:** `bitcell-consensus`
 
 #### Implemented Features
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Block Structure | ✅ | Header + body with all required fields |
+| Tournament Protocol | ✅ | Commit → Reveal → Battle → Complete phases |
+| Fork Choice | ✅ | Heaviest chain rule |
+| Tournament Orchestrator | ✅ | Phase advancement and state management |
+| Deterministic Work | ✅ | Work calculation from tournament |
 
-- [x] Block structure (header + body + proofs)
-- [x] Tournament phases (Commit → Reveal → Battle → Complete)
-- [x] Tournament orchestrator with phase advancement
-- [x] Fork choice (heaviest chain rule)
-- [x] Deterministic work calculation
-- [x] EBSL integration for eligibility
-- [ ] Production VRF randomness
-- [ ] Multi-round bracket execution
+#### Missing/Incomplete for RC1
+| Feature | Status | Required Action |
+|---------|--------|-----------------|
+| VRF Block Selection | 🟡 | Uses hash-based VRF; needs ECVRF in RC2 |
+| Finality Gadget | ❌ | Deferred to RC3 |
 
 #### Acceptance Criteria
-
-1. Block production must be deterministic given tournament results
-2. Fork choice must always select heaviest valid chain
-3. Tournament progression must be verifiable by any node
-4. Equivocation must be detectable and slashable
-
-#### Tournament Protocol
-
-```
-Phase 1: Eligibility Snapshot (compute M_h set)
-Phase 2: Commit (ring-signed glider commitments)
-Phase 3: Randomness (VRF-derived tournament seed)
-Phase 4: Pairing (deterministic bracket from seed)
-Phase 5: Reveal (pattern disclosure or forfeit)
-Phase 6: Battle (CA simulations + proof generation)
-Phase 7: Block Assembly (winner proposes with proofs)
-```
-
-#### Work Calculation
-
-```
-work_h = (N_h - 1) · BATTLE_STEPS · GRID_COST
-```
-
-Where N_h is the number of tournament participants at height h.
+- [x] All 10 consensus tests passing
+- [x] Tournament phases advance correctly
+- [x] Block validation rejects invalid blocks
+- [x] Fork choice selects heaviest chain
 
 ---
 
-### RC1-005: State Management
+### RC1-005: State Management 🟡 PARTIAL
 
-**Crate**: `bitcell-state`  
-**Status**: 🟡 80% Complete  
-**Tests**: 6 passing
+**Priority:** Critical  
+**Status:** 80% Complete  
+**Crate:** `bitcell-state`
 
 #### Implemented Features
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Account Model | ✅ | Balance + nonce tracking |
+| Bond Management | ✅ | Active/Unbonding/Slashed states |
+| State Root | ✅ | Merkle root commitment |
+| credit_account | ✅ | With overflow protection |
 
-- [x] Account model (balance, nonce)
-- [x] Bond management (Active, Unbonding, Slashed states)
-- [x] State root computation
-- [x] Transfer and receive operations
-- [ ] RocksDB persistent storage
-- [ ] State snapshots and pruning
+#### Missing/Incomplete for RC1
+| Feature | Status | Required Action |
+|---------|--------|-----------------|
+| RocksDB Storage | ❌ | In-memory only; RocksDB in RC2 |
+| State Pruning | 🟡 | Basic structure; full implementation in RC2 |
+| State Snapshots | ❌ | Deferred to RC2 |
 
 #### Acceptance Criteria
-
-1. State transitions must be atomic and consistent
-2. Merkle proofs must be verifiable for any account
-3. State must survive node restarts (persistence)
-4. State size must be bounded with pruning
-
-#### State Model
-
-```rust
-Account {
-    address: [u8; 32],
-    balance: u64,
-    nonce: u64,
-}
-
-Bond {
-    miner: Address,
-    amount: u64,
-    state: BondState, // Active | Unbonding | Slashed
-    unbond_height: Option<u64>,
-}
-```
+- [x] All 6 state tests passing
+- [x] Account balances update correctly
+- [x] Bond states transition properly
+- [ ] State persists across restarts (RC2)
 
 ---
 
-### RC1-006: P2P Networking
+### RC1-006: P2P Networking 🟡 PARTIAL
 
-**Crate**: `bitcell-network`  
-**Status**: 🟡 60% Complete  
-**Tests**: 6 passing
+**Priority:** High  
+**Status:** 60% Complete  
+**Crate:** `bitcell-network`, `bitcell-node`
 
 #### Implemented Features
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Message Types | ✅ | Block, Transaction, GliderCommit, GliderReveal, BattleProof |
+| Peer Management | 🟡 | Basic reputation tracking |
+| Basic Gossip | 🟡 | Block/tx propagation |
+| Basic DHT | 🟡 | Kademlia structure |
 
-- [x] Message types (Block, Transaction, GliderCommit, GliderReveal)
-- [x] Peer management with reputation tracking
-- [x] Network structures (libp2p-ready)
-- [ ] Full libp2p transport integration
-- [ ] Peer discovery (mDNS, Kademlia DHT)
-- [ ] NAT traversal
-- [ ] Gossipsub protocol
+#### Missing/Incomplete for RC1
+| Feature | Status | Required Action |
+|---------|--------|-----------------|
+| Full libp2p Integration | ❌ | Deferred to RC2 |
+| Gossipsub Protocol | ❌ | Basic gossip only; Gossipsub in RC2 |
+| NAT Traversal | ❌ | Deferred to RC2 |
+| Compact Blocks | ❌ | Deferred to RC2 |
 
 #### Acceptance Criteria
-
-1. Messages must propagate to all connected peers within 5 seconds
-2. Peer discovery must work across NAT boundaries
-3. Network must handle 100+ concurrent connections
-4. Message deduplication must prevent spam amplification
-
-#### Message Types
-
-```rust
-enum NetworkMessage {
-    Block(Block),
-    Transaction(Transaction),
-    GliderCommit(RingSignature, Commitment),
-    GliderReveal(GliderPattern, Proof),
-    BattleProof(BattleProof),
-    Ping(u64),
-    Pong(u64),
-}
-```
+- [x] All 3 network tests passing
+- [x] Peers can connect and exchange messages
+- [x] Blocks propagate between nodes
+- [ ] Full DHT discovery works (RC2)
 
 ---
 
-### RC1-007: RPC/API Layer
+### RC1-007: RPC/API Layer ✅ MOSTLY COMPLETE
 
-**Crate**: `bitcell-node` (rpc module)  
-**Status**: ✅ 90% Complete
+**Priority:** High  
+**Status:** 90% Complete  
+**Crate:** `bitcell-node`
 
 #### Implemented Features
+| Feature | Status | Description |
+|---------|--------|-------------|
+| eth_blockNumber | ✅ | Current block height |
+| eth_getBlockByNumber | ✅ | Block retrieval by height |
+| eth_getTransactionByHash | ✅ | O(1) lookup via hash index |
+| eth_sendRawTransaction | ✅ | Transaction submission |
+| eth_getTransactionCount | ✅ | Account nonce |
+| eth_getBalance | ✅ | Account balance |
+| eth_gasPrice | ✅ | Fee estimation |
+| bitcell_getNodeInfo | ✅ | Node details |
+| bitcell_getTournamentState | ✅ | Tournament status |
+| bitcell_getBattleReplay | ✅ | Battle replay data |
 
-- [x] JSON-RPC server structure
-- [x] Transaction submission endpoints
-- [x] Block query endpoints
-- [x] Account balance queries
-- [x] Node status endpoints
-- [ ] WebSocket subscriptions
-- [ ] Real-time event streaming
+#### Missing/Incomplete for RC1
+| Feature | Status | Required Action |
+|---------|--------|-----------------|
+| WebSocket Subscriptions | 🟡 | Basic support; full subscriptions in RC2 |
+| eth_subscribe | ❌ | Deferred to RC2 |
+| Event Filtering | ❌ | Deferred to RC2 |
 
 #### Acceptance Criteria
-
-1. RPC latency must be under 100ms for read operations
-2. Transaction submission must return within 500ms
-3. WebSocket connections must support 1000+ concurrent subscribers
-4. API must be fully documented with OpenAPI spec
-
-#### API Endpoints
-
-```
-GET  /chain/height
-GET  /chain/block/{height}
-GET  /chain/block/{hash}
-POST /chain/transaction
-GET  /account/{address}
-GET  /account/{address}/balance
-GET  /account/{address}/nonce
-GET  /node/status
-GET  /node/peers
-WS   /subscribe (pending)
-```
+- [x] All JSON-RPC methods return valid responses
+- [x] Transaction submission validates signature
+- [x] Balance queries return correct values
+- [ ] WebSocket subscriptions work (RC2)
 
 ---
 
-### RC1-008: Wallet Infrastructure
+### RC1-008: Wallet Infrastructure ✅ MOSTLY COMPLETE
 
-**Crate**: `bitcell-wallet`  
-**Status**: ✅ 85% Complete
+**Priority:** High  
+**Status:** 85% Complete  
+**Crates:** `bitcell-wallet`, `bitcell-wallet-gui`
 
 #### Implemented Features
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Mnemonic Generation | ✅ | BIP39 12/18/24 word support |
+| Address Derivation | ✅ | Multi-chain (BitCell/BTC/ETH) |
+| Transaction Building | ✅ | Builder pattern with signing |
+| Wallet Lock/Unlock | ✅ | Security state management |
+| GUI Balance Display | ✅ | Real-time balance updates |
+| GUI QR Codes | ✅ | Address QR generation |
+| Hardware Wallet Abstraction | ✅ | `HardwareWalletDevice` trait |
+| SigningMethod | ✅ | Unified SW/HW signing |
 
-- [x] Key generation and management
-- [x] Transaction signing
-- [x] Balance tracking
-- [x] Address derivation (BIP-32)
-- [x] Encrypted key storage
-- [ ] Hardware wallet integration (Ledger/Trezor)
-- [ ] Multi-signature support
+#### Missing/Incomplete for RC1
+| Feature | Status | Required Action |
+|---------|--------|-----------------|
+| Ledger Integration | 🟡 | Abstraction ready; full integration in RC2 |
+| Trezor Integration | 🟡 | Abstraction ready; full integration in RC2 |
+| GUI Transaction Sending | 🟡 | UI exists; full functionality in RC2 |
+| Multi-sig Support | ❌ | Deferred to RC3 |
 
 #### Acceptance Criteria
-
-1. Private keys must never be exposed in plaintext
-2. Key derivation must follow BIP-32/BIP-44 standards
-3. Wallet must support offline signing
-4. Recovery phrase must follow BIP-39 standard
-
-#### Key Management
-
-```rust
-Wallet {
-    seed: [u8; 32],      // Encrypted at rest
-    master_key: ExtendedPrivateKey,
-    derived_keys: Vec<DerivedKey>,
-    address_gap: u32,    // BIP-44 gap limit
-}
-```
+- [x] All 87 wallet tests passing
+- [x] Mnemonic recovery works correctly
+- [x] Transactions sign and verify
+- [x] Hardware wallet mock works
+- [ ] Real hardware wallet signing (RC2)
 
 ---
 
-### RC1-009: Admin Tools
+### RC1-009: Admin Console 🟡 PARTIAL
 
-**Crate**: `bitcell-admin`  
-**Status**: 🟡 80% Complete
+**Priority:** Medium  
+**Status:** 80% Complete  
+**Crate:** `bitcell-admin`
 
 #### Implemented Features
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Web Dashboard | ✅ | Tera-templated interface |
+| Metrics API | ✅ | System/chain/network metrics |
+| Config API | ✅ | Node configuration management |
+| Blocks API | ✅ | Block explorer endpoints |
+| HSM Integration | ✅ | `HsmClient` with multiple providers |
+| MockHsmBackend | ✅ | Testing implementation |
 
-- [x] Node monitoring dashboard
-- [x] Configuration management
-- [x] Log aggregation
-- [x] Metrics export (Prometheus)
-- [ ] HSM provider integration
-- [ ] Role-based authentication
-- [ ] Audit logging
+#### Missing/Incomplete for RC1
+| Feature | Status | Required Action |
+|---------|--------|-----------------|
+| Vault HSM Provider | 🟡 | Structure only; full implementation in RC2 |
+| AWS CloudHSM Provider | 🟡 | Structure only; full implementation in RC2 |
+| Azure KeyVault Provider | ❌ | Deferred to RC2 |
+| Authentication | ❌ | Deferred to RC2 |
+| Audit Dashboard | ❌ | Deferred to RC2 |
 
 #### Acceptance Criteria
-
-1. Admin operations must require authentication
-2. All admin actions must be logged with timestamp and actor
-3. HSM keys must never leave secure enclave
-4. Configuration changes must be auditable
+- [x] Dashboard loads and displays metrics
+- [x] HSM mock operations work
+- [x] Config can be read/updated
+- [ ] Real HSM providers work (RC2)
 
 ---
 
-### RC1-010: Economic Model
+### RC1-010: Economics System ✅ COMPLETE
 
-**Crate**: `bitcell-economics`  
-**Status**: ✅ 100% Complete  
-**Tests**: 14 passing
+**Priority:** Medium  
+**Status:** 100% Complete  
+**Crate:** `bitcell-economics`
 
 #### Implemented Features
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Block Rewards | ✅ | 50 CELL initial, 210K halving interval |
+| Reward Distribution | ✅ | 60% winner, 30% participants, 10% treasury |
+| Gas Pricing | ✅ | EIP-1559 style with base fee |
+| Treasury Management | ✅ | Allocation tracking |
+| Privacy Multiplier | ✅ | 2x for private contracts |
 
-- [x] Block reward schedule with halvings (210K intervals)
-- [x] Reward distribution (60% winner, 30% participants, 10% treasury)
-- [x] EIP-1559 style gas pricing with dynamic adjustment
-- [x] Privacy multiplier (2x for private contracts)
-- [x] Treasury management with allocations
-- [x] Fee burning mechanism
+#### Missing/Incomplete
+None - Fully complete for RC1
 
 #### Acceptance Criteria
-
-1. Reward calculations must be deterministic
-2. Treasury allocations must be transparent
-3. Gas pricing must respond to network congestion
-4. Fee distribution must be verifiable in blocks
-
-#### Reward Distribution
-
-```
-Total = base_subsidy(height) + tx_fees + contract_fees
-
-60% → Winner (block proposer)
-30% → Participants (weighted by round reached)
-10% → Treasury (governance, dev fund)
-```
+- [x] All 14 economics tests passing
+- [x] Halving occurs at correct intervals
+- [x] Reward distribution matches specification
+- [x] Gas pricing adjusts correctly
 
 ---
 
-### RC1-011: Evidence-Based Subjective Logic
+### RC1-011: EBSL Trust System ✅ COMPLETE
 
-**Crate**: `bitcell-ebsl`  
-**Status**: ✅ 100% Complete  
-**Tests**: 27 passing
+**Priority:** Medium  
+**Status:** 100% Complete  
+**Crate:** `bitcell-ebsl`
 
 #### Implemented Features
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Evidence Tracking | ✅ | r_m (positive), s_m (negative) counters |
+| Trust Computation | ✅ | T = b + α·u formula |
+| Decay System | ✅ | Asymmetric (fast punish, slow forgive) |
+| Slashing | ✅ | Graduated penalties + equivocation ban |
 
-- [x] Evidence tracking (r_m positive, s_m negative)
-- [x] Subjective logic opinion computation (b, d, u)
-- [x] Trust score calculation: T = b + α·u
-- [x] Asymmetric decay (fast punish, slow forgive)
-- [x] Graduated slashing logic
-- [x] Permanent equivocation bans
+#### Missing/Incomplete
+None - Fully complete for RC1
 
 #### Acceptance Criteria
-
-1. Trust calculations must be deterministic
-2. Evidence decay must be applied consistently
-3. Slashing must be proportional to violation severity
-4. Banned miners must never regain eligibility
-
-#### Trust Computation
-
-```
-R = r_m + s_m
-belief = r_m / (R + K)
-disbelief = s_m / (R + K)
-uncertainty = K / (R + K)
-trust = belief + α · uncertainty
-```
-
-**Parameters**:
-- K = 2 (binary: honest/dishonest)
-- α = 0.4 (prior weight)
-- T_MIN = 0.75 (eligibility threshold)
-- T_KILL = 0.2 (ban threshold)
+- [x] All 27 EBSL tests passing
+- [x] Trust scores compute correctly
+- [x] Decay applies per-epoch
+- [x] Equivocation triggers permanent ban
 
 ---
 
-### RC1-012: ZKVM Execution
+### RC1-012: ZKVM Execution ✅ MOSTLY COMPLETE
 
-**Crate**: `bitcell-zkvm`  
-**Status**: ✅ 90% Complete  
-**Tests**: 9 passing
+**Priority:** Medium  
+**Status:** 90% Complete  
+**Crate:** `bitcell-zkvm`
 
 #### Implemented Features
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Instruction Set | ✅ | 22 opcodes (arithmetic, logic, memory, control) |
+| 32-Register Model | ✅ | General purpose registers |
+| Sparse Memory | ✅ | 1MB address space |
+| Gas Metering | ✅ | Per-instruction costs |
+| Execution Trace | ✅ | For proof generation |
 
-- [x] RISC-like instruction set (22 opcodes)
-- [x] 32-register interpreter
-- [x] Sparse memory model (1MB address space)
-- [x] Gas metering per instruction
-- [x] Execution trace generation
-- [ ] ZK proof integration for execution
+#### Missing/Incomplete for RC1
+| Feature | Status | Required Action |
+|---------|--------|-----------------|
+| ZK Proof Integration | 🟡 | Structure ready; full integration in RC2 |
+| Contract Deployment | 🟡 | Basic; full in RC2 |
 
 #### Acceptance Criteria
-
-1. Execution must be fully deterministic
-2. Gas limits must be enforced precisely
-3. Memory access must be bounds-checked
-4. Execution traces must be provable
-
-#### Instruction Set
-
-| Category | Opcodes |
-|----------|---------|
-| Arithmetic | Add, Sub, Mul, Div, Mod |
-| Logic | And, Or, Xor, Not |
-| Comparison | Eq, Lt, Gt, Le, Ge |
-| Memory | Load, Store |
-| Control | Jmp, Jz, Call, Ret |
-| Crypto | Hash |
-| System | Halt |
+- [x] All 9 ZKVM tests passing
+- [x] Arithmetic operations compute correctly
+- [x] Memory operations work within bounds
+- [x] Gas metering tracks correctly
 
 ---
 
-## RC2 Requirements (11 Groups - ~21 Weeks)
+# RC2 Requirements
 
-RC2 focuses on production-ready features and advanced integrations.
-
-### Summary Table
-
-| Requirement | Description | Duration | Dependencies |
-|-------------|-------------|----------|--------------|
-| RC2-001 | Real Groth16 Circuits | 7 weeks | RC1-003 |
-| RC2-002 | Production ECVRF | 2 weeks | RC1-001, RC1-004 |
-| RC2-003 | CLSAG Ring Signatures | 2 weeks | RC1-001 |
-| RC2-004 | Full libp2p Integration | 3 weeks | RC1-006 |
-| RC2-005 | RocksDB Persistence | 2 weeks | RC1-005 |
-| RC2-006 | Hardware Wallet Integration | 4 weeks | RC1-008 |
-| RC2-007 | HSM Providers | 3 weeks | RC1-009 |
-| RC2-008 | WebSocket Subscriptions | 2 weeks | RC1-007 |
-| RC2-009 | Admin Authentication | 2 weeks | RC1-009 |
-| RC2-010 | Testnet Faucet | 1 week | RC1-007 |
-| RC2-011 | Mobile SDK | 3 weeks | RC1-008 |
+## RC2 Theme: "Production Hardening"
+## Target: Q1 2026
 
 ---
 
 ### RC2-001: Real Groth16 Circuits
 
-**Duration**: 7 weeks  
-**Dependencies**: RC1-003 ZK Architecture
+**Priority:** Critical  
+**Estimated Effort:** 7 weeks  
+**Dependencies:** RC1-003 (ZKP Architecture)
 
-#### Scope
+#### Requirements
 
-Complete implementation of production Groth16 circuits for:
-- Battle verification (CA evolution)
-- State transitions (Merkle updates)
-- ZKVM execution (smart contracts)
-
-#### Deliverables
-
-- [ ] Battle circuit with <500K constraints
-- [ ] State circuit with <200K constraints
-- [ ] Execution circuit with <1M constraints
-- [ ] Trusted setup ceremony tooling
-- [ ] Proving/verification key generation
-- [ ] Proof aggregation preparation
-
-#### Acceptance Criteria
-
-1. Proof generation under 30 seconds
-2. Proof verification under 10ms
-3. All circuits pass formal verification
-4. Zero-knowledge property verified
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC2-001.1** Battle Circuit Constraints | Implement full R1CS constraints for CA evolution verification | - Constraints enforce Conway rules<br>- Winner determination is verifiable<br>- Proof size < 300 bytes |
+| **RC2-001.2** State Circuit Constraints | Implement constraints for state transition verification | - State root updates are verifiable<br>- Nullifiers prevent double-spend<br>- Merkle proofs verify in-circuit |
+| **RC2-001.3** Trusted Setup Ceremony | Generate production proving/verification keys | - Multi-party computation ceremony<br>- Toxic waste properly destroyed<br>- Keys published and verified |
+| **RC2-001.4** Proof Performance | Optimize proof generation time | - Battle proof < 30 seconds<br>- State proof < 20 seconds<br>- Verification < 10ms |
 
 #### Technical Specifications
 
 ```
-Backend: arkworks Groth16
-Curve: BN254
-Constraint Target: <2.5M total (allows margin for aggregation overhead)
-Proof Size: 288 bytes (Groth16)
-Verification: 3 pairings + 2 scalar muls
+Battle Circuit:
+- Public Inputs: glider_commitments[2], winner_id, vrf_seed, spawn_positions[2]
+- Private Inputs: initial_grid[1024x1024], patterns[2], nonces[2]
+- Constraints: ~10M (estimated)
+- Proving Time Target: <30s on 8-core CPU
+
+State Circuit:
+- Public Inputs: old_root, new_root, nullifier_set_root
+- Private Inputs: merkle_paths[], old_values[], new_values[]
+- Constraints: ~1M (estimated)
+- Proving Time Target: <20s on 8-core CPU
 ```
 
 ---
 
-### RC2-002: Production ECVRF
+### RC2-002: Production VRF (ECVRF)
 
-**Duration**: 2 weeks  
-**Dependencies**: RC1-001 Core Crypto, RC1-004 Consensus
+**Priority:** Critical  
+**Estimated Effort:** 2 weeks  
+**Dependencies:** RC1-001 (Crypto Primitives)
 
-#### Scope
+#### Requirements
 
-Upgrade VRF implementation to production-grade ECVRF with proper randomness generation for tournament seeding.
-
-#### Deliverables
-
-- [ ] ECVRF over Ristretto255 (if not already complete)
-- [ ] Multi-party VRF combination
-- [ ] Randomness bias analysis
-- [ ] Integration with consensus protocol
-
-#### Acceptance Criteria
-
-1. VRF output must be uniformly distributed
-2. Proof verification must be constant-time
-3. No grinding attacks possible
-4. Randomness must be verifiable by any node
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC2-002.1** ECVRF Implementation | Replace hash-based VRF with proper ECVRF | - Uses P-256 or Ed25519 curve<br>- Follows IETF draft-irtf-cfrg-vrf<br>- Proof size ~80 bytes |
+| **RC2-002.2** VRF Verification | Cryptographically sound verification | - Verification time < 1ms<br>- No false positives possible<br>- Deterministic output |
+| **RC2-002.3** VRF Chaining | Proper input chaining between blocks | - Uses previous block's VRF output<br>- Prevents grinding attacks<br>- Maintains determinism |
 
 ---
 
 ### RC2-003: CLSAG Ring Signatures
 
-**Duration**: 2 weeks  
-**Dependencies**: RC1-001 Core Crypto
+**Priority:** Critical  
+**Estimated Effort:** 2 weeks  
+**Dependencies:** RC1-001 (Crypto Primitives)
 
-#### Scope
+#### Requirements
 
-Ensure CLSAG ring signatures are production-ready for tournament anonymity.
-
-#### Deliverables
-
-- [ ] Complete CLSAG implementation review
-- [ ] Batch verification optimization
-- [ ] Ring size recommendations
-- [ ] Integration testing with tournaments
-
-#### Acceptance Criteria
-
-1. Linkability must prevent double-commitment
-2. Anonymity set must be configurable (4-16 members)
-3. Signature size must scale linearly with ring size
-4. Verification must be under 50ms for ring size 8
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC2-003.1** CLSAG Implementation | Implement Concise Linkable Spontaneous Anonymous Group signatures | - O(n) verification complexity<br>- Linkability prevents double-signing<br>- Key images are unique |
+| **RC2-003.2** Ring Size | Support configurable ring sizes | - Minimum ring size: 11<br>- Maximum ring size: 64<br>- Default: 16 |
+| **RC2-003.3** Key Image Tracking | Prevent double-spending via key images | - Key images stored in persistent set<br>- O(1) duplicate detection<br>- Merkle commitment for light clients |
 
 ---
 
 ### RC2-004: Full libp2p Integration
 
-**Duration**: 3 weeks  
-**Dependencies**: RC1-006 Networking
+**Priority:** Critical  
+**Estimated Effort:** 3 weeks  
+**Dependencies:** RC1-006 (Networking)
 
-#### Scope
+#### Requirements
 
-Complete P2P networking layer with full libp2p stack.
-
-#### Deliverables
-
-- [ ] TCP and QUIC transports
-- [ ] mDNS local discovery
-- [ ] Kademlia DHT for peer routing
-- [ ] NAT traversal (hole punching)
-- [ ] Gossipsub message propagation
-- [ ] Connection encryption (Noise)
-
-#### Acceptance Criteria
-
-1. Discovery works across NAT boundaries
-2. Message propagation under 5 seconds
-3. Support 500+ peer connections
-4. Bandwidth usage under 10 Mbps at peak
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC2-004.1** Gossipsub Protocol | Implement proper Gossipsub for block/tx propagation | - Topic mesh with D=6<br>- Heartbeat interval: 1s<br>- Message deduplication |
+| **RC2-004.2** Kademlia DHT | Full peer discovery implementation | - Bootstrap nodes<br>- Iterative routing<br>- Value storage for peer info |
+| **RC2-004.3** NAT Traversal | Enable connections behind NAT | - AutoNAT protocol<br>- Relay circuit fallback<br>- Hole punching support |
+| **RC2-004.4** Transport Encryption | Secure peer connections | - Noise protocol handshake<br>- TLS 1.3 alternative<br>- Perfect forward secrecy |
+| **RC2-004.5** Compact Blocks | Bandwidth-efficient block propagation | - Send tx hashes instead of full txs<br>- Reconciliation protocol<br>- ~80% bandwidth reduction |
 
 ---
 
 ### RC2-005: RocksDB Persistence
 
-**Duration**: 2 weeks  
-**Dependencies**: RC1-005 State
+**Priority:** Critical  
+**Estimated Effort:** 2 weeks  
+**Dependencies:** RC1-005 (State Management)
 
-#### Scope
+#### Requirements
 
-Implement persistent storage layer using RocksDB.
-
-#### Deliverables
-
-- [ ] Block storage with indexing
-- [ ] State trie persistence
-- [ ] Transaction indexing
-- [ ] Pruning strategies
-- [ ] Snapshot export/import
-
-#### Acceptance Criteria
-
-1. State survives node restart
-2. Startup time under 30 seconds
-3. Disk usage grows linearly
-4. Pruning reduces storage by 50%+
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC2-005.1** Block Storage | Persist blocks to RocksDB | - Blocks indexed by height and hash<br>- Headers in separate column family<br>- Atomic writes |
+| **RC2-005.2** State Storage | Persist account state | - Account data serialized efficiently<br>- State root by height<br>- Efficient range queries |
+| **RC2-005.3** Transaction Index | Fast transaction lookup | - Index by hash<br>- Index by sender<br>- O(1) lookup |
+| **RC2-005.4** State Snapshots | Periodic state checkpoints | - Snapshot every 10000 blocks<br>- Atomic snapshot creation<br>- Fast state recovery |
+| **RC2-005.5** Pruning | Remove old block data | - Configurable retention period<br>- Optional archive to cold storage<br>- Database compaction |
 
 ---
 
 ### RC2-006: Hardware Wallet Integration
 
-**Duration**: 4 weeks  
-**Dependencies**: RC1-008 Wallet
+**Priority:** High  
+**Estimated Effort:** 4 weeks (2 weeks each)  
+**Dependencies:** RC1-008 (Wallet Infrastructure)
 
-#### Scope
+#### Requirements
 
-Add support for Ledger and Trezor hardware wallets.
-
-#### Deliverables
-
-- [ ] Ledger Nano S/X integration
-- [ ] Trezor Model T integration
-- [ ] Address derivation on device
-- [ ] Transaction signing on device
-- [ ] Display verification
-
-#### Acceptance Criteria
-
-1. Private keys never leave device
-2. Transaction details shown on device
-3. Support standard derivation paths
-4. Works with major operating systems
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC2-006.1** Ledger Integration | Full Ledger device support | - Nano S/X support<br>- Transaction signing<br>- Address derivation on device |
+| **RC2-006.2** Trezor Integration | Full Trezor device support | - Model One/T support<br>- Transaction signing<br>- Passphrase support |
+| **RC2-006.3** BIP44 Derivation | Standard derivation paths | - m/44'/9999'/0'/0/n for BitCell<br>- Display on device<br>- Address verification |
 
 ---
 
-### RC2-007: HSM Providers
+### RC2-007: HSM Provider Implementations
 
-**Duration**: 3 weeks  
-**Dependencies**: RC1-009 Admin
+**Priority:** High  
+**Estimated Effort:** 3 weeks  
+**Dependencies:** RC1-009 (Admin Console)
 
-#### Scope
+#### Requirements
 
-Integrate hardware security module support for validator key management.
-
-#### Deliverables
-
-- [ ] AWS CloudHSM integration
-- [ ] Azure Dedicated HSM integration
-- [ ] YubiHSM integration
-- [ ] Key ceremony documentation
-- [ ] Audit logging integration
-
-#### Acceptance Criteria
-
-1. Signing keys protected by HSM
-2. Key extraction impossible
-3. Audit trail for all operations
-4. Failover support
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC2-007.1** HashiCorp Vault | Full Vault Transit integration | - Key generation<br>- ECDSA signing<br>- Audit logging |
+| **RC2-007.2** AWS CloudHSM | AWS HSM integration | - PKCS#11 interface<br>- Key management<br>- Multi-AZ support |
+| **RC2-007.3** Azure KeyVault | Azure integration | - Managed HSM<br>- Key rotation<br>- Access policies |
 
 ---
 
 ### RC2-008: WebSocket Subscriptions
 
-**Duration**: 2 weeks  
-**Dependencies**: RC1-007 RPC/API
+**Priority:** High  
+**Estimated Effort:** 2 weeks  
+**Dependencies:** RC1-007 (RPC/API)
 
-#### Scope
+#### Requirements
 
-Add real-time event streaming via WebSocket.
-
-#### Deliverables
-
-- [ ] WebSocket server implementation
-- [ ] Block subscription events
-- [ ] Transaction subscription events
-- [ ] Tournament progress events
-- [ ] Reconnection handling
-
-#### Acceptance Criteria
-
-1. Event delivery under 100ms
-2. Support 1000+ concurrent subscribers
-3. Automatic reconnection
-4. Subscription filtering
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC2-008.1** eth_subscribe | Standard subscription endpoint | - newHeads subscription<br>- logs subscription<br>- pendingTransactions |
+| **RC2-008.2** Event Filtering | Filter events by criteria | - Address filter<br>- Topic filter<br>- Block range |
+| **RC2-008.3** Connection Management | Handle multiple clients | - Client tracking<br>- Graceful disconnect<br>- Rate limiting |
 
 ---
 
 ### RC2-009: Admin Authentication
 
-**Duration**: 2 weeks  
-**Dependencies**: RC1-009 Admin
+**Priority:** High  
+**Estimated Effort:** 2 weeks  
+**Dependencies:** RC1-009 (Admin Console)
 
-#### Scope
+#### Requirements
 
-Implement secure authentication for admin operations.
-
-#### Deliverables
-
-- [ ] JWT-based authentication
-- [ ] Role-based access control
-- [ ] API key management
-- [ ] Session management
-- [ ] Audit logging
-
-#### Acceptance Criteria
-
-1. All admin operations authenticated
-2. Roles enforce least privilege
-3. Sessions expire after inactivity
-4. Failed attempts logged and limited
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC2-009.1** JWT Authentication | Token-based auth | - RS256 signing<br>- Refresh tokens<br>- Token revocation |
+| **RC2-009.2** Role-Based Access | Permission system | - Admin role<br>- Operator role<br>- Viewer role |
+| **RC2-009.3** Audit Logging | Log all admin actions | - Timestamp<br>- User identification<br>- Action details |
 
 ---
 
 ### RC2-010: Testnet Faucet
 
-**Duration**: 1 week  
-**Dependencies**: RC1-007 RPC/API
+**Priority:** Medium  
+**Estimated Effort:** 1 week  
+**Dependencies:** RC2-005 (RocksDB)
 
-#### Scope
+#### Requirements
 
-Create a testnet faucet for developer onboarding.
-
-#### Deliverables
-
-- [ ] Faucet web interface
-- [ ] Rate limiting per address/IP
-- [ ] CAPTCHA integration
-- [ ] Distribution tracking
-
-#### Acceptance Criteria
-
-1. Simple claim process
-2. Rate limits prevent abuse
-3. Configurable distribution amount
-4. Monitoring dashboard
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC2-010.1** Faucet API | Token distribution endpoint | - Rate limiting per address<br>- CAPTCHA integration<br>- Amount limits |
+| **RC2-010.2** Web Interface | User-friendly faucet UI | - Address input<br>- Transaction status<br>- Queue position |
 
 ---
 
-### RC2-011: Mobile SDK
+### RC2-011: Mobile Wallet SDK
 
-**Duration**: 3 weeks  
-**Dependencies**: RC1-008 Wallet
+**Priority:** Medium  
+**Estimated Effort:** 3 weeks  
+**Dependencies:** RC1-008 (Wallet Infrastructure)
 
-#### Scope
+#### Requirements
 
-Create mobile SDKs for iOS and Android.
-
-#### Deliverables
-
-- [ ] React Native SDK
-- [ ] Key management on device
-- [ ] Transaction construction
-- [ ] Balance queries
-- [ ] Example applications
-
-#### Acceptance Criteria
-
-1. Works on iOS 14+ and Android 10+
-2. Secure enclave key storage
-3. Under 5MB SDK size
-4. Comprehensive documentation
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC2-011.1** Core SDK | Cross-platform wallet core | - iOS/Android support<br>- FFI bindings<br>- Secure storage |
+| **RC2-011.2** Key Management | Mobile key storage | - Keychain/Keystore integration<br>- Biometric unlock<br>- Backup/restore |
 
 ---
 
-## RC3 Requirements (10 Groups - ~36 Weeks)
+## RC2 Success Criteria
 
-RC3 prepares BitCell for mainnet launch with security, scalability, and ecosystem development.
+- [ ] All tests pass with real ZK proofs
+- [ ] 3-node testnet runs for 1 week without issues
+- [ ] Transaction throughput ≥ 50 TPS
+- [ ] Proof generation < 30 seconds
+- [ ] State persists across node restarts
+- [ ] Hardware wallet transaction signing works
+- [ ] HSM signing operations work
 
-### Summary Table
+---
 
-| Requirement | Description | Duration | Dependencies |
-|-------------|-------------|----------|--------------|
-| RC3-001 | Security Audit | 6-8 weeks | RC2-* |
-| RC3-002 | Recursive SNARK Aggregation | 6 weeks | RC2-001 |
-| RC3-003 | GPU CA Acceleration | 4 weeks | RC1-002 |
-| RC3-004 | Block Explorer | 4 weeks | RC2-004 |
-| RC3-005 | Governance System | 4 weeks | RC1-010 |
-| RC3-006 | Smart Contract SDK | 3 weeks | RC1-012 |
-| RC3-007 | Light Client | 4 weeks | RC2-004 |
-| RC3-008 | Finality Gadget | 3 weeks | RC1-004 |
-| RC3-009 | Documentation Portal | 2 weeks | All |
-| RC3-010 | Production Infrastructure | 4 weeks | All |
+# RC3 Requirements
+
+## RC3 Theme: "Mainnet Preparation"
+## Target: Q2 2026
 
 ---
 
 ### RC3-001: Security Audit
 
-**Duration**: 6-8 weeks (external)  
-**Dependencies**: All RC2 requirements
+**Priority:** Critical  
+**Estimated Effort:** 6-8 weeks (external)  
+**Dependencies:** RC2 Complete
 
-#### Scope
+#### Requirements
 
-Comprehensive third-party security audit of all critical systems.
-
-#### Deliverables
-
-- [ ] Cryptography audit (curves, signatures, VRF)
-- [ ] Consensus audit (tournament protocol, fork choice)
-- [ ] ZK circuit audit (soundness, completeness)
-- [ ] Smart contract audit (ZKVM, economics)
-- [ ] Network audit (P2P, DoS resistance)
-- [ ] Penetration testing
-
-#### Acceptance Criteria
-
-1. All critical vulnerabilities fixed
-2. All high-severity issues addressed
-3. Audit report published
-4. Bug bounty program launched
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC3-001.1** Cryptography Audit | Third-party review of crypto | - No critical findings<br>- All high/medium resolved<br>- Audit report published |
+| **RC3-001.2** Smart Contract Audit | ZKVM security review | - Execution safety verified<br>- Gas metering reviewed<br>- No reentrancy issues |
+| **RC3-001.3** Economic Audit | Economic model validation | - No inflation bugs<br>- Reward distribution verified<br>- Fee market analysis |
+| **RC3-001.4** Penetration Testing | Infrastructure security | - No critical vulnerabilities<br>- DoS resistance verified<br>- Network attack simulation |
 
 ---
 
 ### RC3-002: Recursive SNARK Aggregation
 
-**Duration**: 6 weeks  
-**Dependencies**: RC2-001 Real Groth16 Circuits
+**Priority:** Critical  
+**Estimated Effort:** 6 weeks  
+**Dependencies:** RC2-001 (Real Groth16)
 
-#### Scope
+#### Requirements
 
-Implement proof aggregation for scalability.
-
-#### Deliverables
-
-- [ ] IVC (Incrementally Verifiable Computation) design
-- [ ] Proof aggregation circuit
-- [ ] Block-level proof compression
-- [ ] Verification cost reduction
-
-#### Acceptance Criteria
-
-1. Aggregate N proofs into 1
-2. Verification time constant regardless of N
-3. Aggregation under 10 seconds
-4. Compatible with existing circuits
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC3-002.1** Plonk Migration | Move from Groth16 to Plonk | - Compatible with recursion<br>- Universal setup<br>- Same security level |
+| **RC3-002.2** Proof Aggregation | Aggregate multiple proofs | - Aggregate N proofs into 1<br>- Constant verification time<br>- Proof size < 1KB |
+| **RC3-002.3** Performance Target | Optimize aggregated proofs | - Block proof < 10 seconds<br>- Verification < 5ms<br>- Memory < 16GB |
 
 ---
 
 ### RC3-003: GPU CA Acceleration
 
-**Duration**: 4 weeks  
-**Dependencies**: RC1-002 CA Engine
+**Priority:** High  
+**Estimated Effort:** 4 weeks  
+**Dependencies:** RC1-002 (CA Engine)
 
-#### Scope
+#### Requirements
 
-CUDA/OpenCL acceleration for cellular automaton simulation.
-
-#### Deliverables
-
-- [ ] CUDA kernel implementation
-- [ ] OpenCL fallback
-- [ ] CPU fallback for compatibility
-- [ ] Benchmark suite
-
-#### Acceptance Criteria
-
-1. 10x speedup over CPU
-2. Determinism preserved
-3. Works on consumer GPUs
-4. Graceful degradation
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC3-003.1** CUDA Implementation | GPU kernel for evolution | - CUDA 11+ support<br>- Same results as CPU<br>- 10x+ speedup |
+| **RC3-003.2** OpenCL Fallback | Cross-platform GPU support | - AMD/Intel GPU support<br>- Graceful fallback to CPU<br>- Automatic detection |
+| **RC3-003.3** Larger Grids | Support bigger battle arenas | - 4096×4096 grid option<br>- Configurable size<br>- Linear memory scaling |
 
 ---
 
 ### RC3-004: Block Explorer
 
-**Duration**: 4 weeks  
-**Dependencies**: RC2-004 Full libp2p
+**Priority:** High  
+**Estimated Effort:** 4 weeks  
+**Dependencies:** RC2-005 (RocksDB)
 
-#### Scope
+#### Requirements
 
-Web-based block explorer for chain transparency.
-
-#### Deliverables
-
-- [ ] Block browser UI
-- [ ] Transaction search
-- [ ] Account lookup
-- [ ] Tournament visualization
-- [ ] Network statistics
-- [ ] API for third-party explorers
-
-#### Acceptance Criteria
-
-1. Real-time block updates
-2. Search under 500ms
-3. Mobile-responsive design
-4. Accessible without wallet
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC3-004.1** Block Viewing | Display block details | - Block header fields<br>- Transaction list<br>- State root |
+| **RC3-004.2** Transaction Details | Transaction information | - Sender/recipient<br>- Amount/fee<br>- Status |
+| **RC3-004.3** Tournament Visualization | Battle replay UI | - Grid visualization<br>- Step-by-step playback<br>- Winner highlight |
+| **RC3-004.4** Account Page | Address information | - Balance history<br>- Transaction list<br>- Trust score |
+| **RC3-004.5** Search | Find blocks/txs/addresses | - Hash search<br>- Address search<br>- Block height |
 
 ---
 
 ### RC3-005: Governance System
 
-**Duration**: 4 weeks  
-**Dependencies**: RC1-010 Economics
+**Priority:** High  
+**Estimated Effort:** 4 weeks  
+**Dependencies:** RC2-001 (Real ZK)
 
-#### Scope
+#### Requirements
 
-On-chain governance for protocol upgrades.
-
-#### Deliverables
-
-- [ ] Proposal submission
-- [ ] Voting mechanism (stake-weighted)
-- [ ] Timelock execution
-- [ ] Parameter changes
-- [ ] Treasury spending
-
-#### Acceptance Criteria
-
-1. Minimum quorum requirements
-2. Upgrade delay period
-3. Emergency governance path
-4. Transparent voting results
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC3-005.1** Proposal System | On-chain governance proposals | - Parameter changes<br>- Treasury spending<br>- Protocol upgrades |
+| **RC3-005.2** Voting Mechanism | Token-weighted voting | - 1 CELL = 1 vote<br>- Delegation support<br>- Quadratic option |
+| **RC3-005.3** Execution | Automatic proposal execution | - Timelock delay<br>- Emergency cancel<br>- Multi-sig guardian |
 
 ---
 
 ### RC3-006: Smart Contract SDK
 
-**Duration**: 3 weeks  
-**Dependencies**: RC1-012 ZKVM
+**Priority:** Medium  
+**Estimated Effort:** 3 weeks  
+**Dependencies:** RC2-001 (Real ZK)
 
-#### Scope
+#### Requirements
 
-Developer tools for building privacy-preserving smart contracts.
-
-#### Deliverables
-
-- [ ] High-level language (Rust DSL)
-- [ ] Compiler to ZKVM bytecode
-- [ ] Local testing framework
-- [ ] Deployment tools
-- [ ] Example contracts
-
-#### Acceptance Criteria
-
-1. Compile Rust DSL to ZKVM
-2. Local execution without proofs
-3. Gas estimation
-4. Comprehensive documentation
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC3-006.1** Contract Templates | Pre-built contract patterns | - Token standard<br>- NFT standard<br>- Escrow pattern |
+| **RC3-006.2** Development Tools | Contract development kit | - Local testnet<br>- Deployment scripts<br>- Testing framework |
+| **RC3-006.3** Documentation | Comprehensive guides | - Getting started<br>- API reference<br>- Best practices |
 
 ---
 
 ### RC3-007: Light Client
 
-**Duration**: 4 weeks  
-**Dependencies**: RC2-004 Full libp2p
+**Priority:** Medium  
+**Estimated Effort:** 4 weeks  
+**Dependencies:** RC2-004 (libp2p)
 
-#### Scope
+#### Requirements
 
-Resource-efficient light client for mobile and browser.
-
-#### Deliverables
-
-- [ ] Header-only sync
-- [ ] Merkle proof requests
-- [ ] Transaction verification
-- [ ] SPV security model
-- [ ] Browser (WASM) support
-
-#### Acceptance Criteria
-
-1. Sync time under 30 seconds
-2. Storage under 100MB
-3. Works in browser
-4. Proof verification only
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC3-007.1** Header Sync | Download and verify headers | - Header chain validation<br>- Checkpoint support<br>- Low bandwidth |
+| **RC3-007.2** Merkle Proofs | Request and verify proofs | - State proof requests<br>- Transaction inclusion<br>- Receipt proofs |
+| **RC3-007.3** Wallet Integration | Light client wallet mode | - Balance queries<br>- Transaction submission<br>- Minimal resources |
 
 ---
 
 ### RC3-008: Finality Gadget
 
-**Duration**: 3 weeks  
-**Dependencies**: RC1-004 Consensus
+**Priority:** Medium  
+**Estimated Effort:** 3 weeks  
+**Dependencies:** RC2-004 (libp2p)
 
-#### Scope
+#### Requirements
 
-Fast finality mechanism for confirmed transactions.
-
-#### Deliverables
-
-- [ ] Validator voting protocol
-- [ ] Finality threshold (⅔+ stake)
-- [ ] Economic finality guarantees
-- [ ] Finality proofs
-
-#### Acceptance Criteria
-
-1. Finality under 2 epochs
-2. Slashing for finality violations
-3. Provable finality
-4. Light client compatible
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC3-008.1** BFT Finality | Finalize blocks after N confirmations | - 2/3 stake agreement<br>- Irreversible after finality<br>- < 1 minute finality |
+| **RC3-008.2** Slashing | Punish equivocation | - Double-sign detection<br>- Evidence submission<br>- Automatic slashing |
 
 ---
 
 ### RC3-009: Documentation Portal
 
-**Duration**: 2 weeks  
-**Dependencies**: All requirements
+**Priority:** Medium  
+**Estimated Effort:** 2 weeks  
+**Dependencies:** None
 
-#### Scope
+#### Requirements
 
-Comprehensive documentation website.
-
-#### Deliverables
-
-- [ ] Getting started guide
-- [ ] Architecture documentation
-- [ ] API reference (auto-generated)
-- [ ] Tutorials and examples
-- [ ] Whitepaper
-- [ ] Search functionality
-
-#### Acceptance Criteria
-
-1. Covers all public APIs
-2. Code examples for all features
-3. Multi-language support
-4. Community contributions enabled
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC3-009.1** Website | Documentation site | - Clean design<br>- Search functionality<br>- Mobile responsive |
+| **RC3-009.2** API Reference | Complete API docs | - All RPC methods<br>- Request/response examples<br>- Error codes |
+| **RC3-009.3** Tutorials | Step-by-step guides | - Node setup<br>- Wallet usage<br>- Contract development |
 
 ---
 
 ### RC3-010: Production Infrastructure
 
-**Duration**: 4 weeks  
-**Dependencies**: All requirements
+**Priority:** Critical  
+**Estimated Effort:** 4 weeks  
+**Dependencies:** All RC2
 
-#### Scope
+#### Requirements
 
-Infrastructure for mainnet deployment and operations.
-
-#### Deliverables
-
-- [ ] Kubernetes deployment manifests
-- [ ] Terraform infrastructure code
-- [ ] Monitoring and alerting
-- [ ] Incident response runbooks
-- [ ] Backup and recovery procedures
-- [ ] Geographic distribution
-
-#### Acceptance Criteria
-
-1. 99.9% uptime SLA capability
-2. Auto-scaling under load
-3. Disaster recovery tested
-4. Security hardened
+| Requirement | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| **RC3-010.1** Multi-Region Deployment | Geographically distributed | - 3+ regions<br>- Latency < 200ms<br>- Failover |
+| **RC3-010.2** Monitoring | Production observability | - Prometheus metrics<br>- Grafana dashboards<br>- Alerting |
+| **RC3-010.3** Chaos Engineering | Fault tolerance testing | - Node failures<br>- Network partitions<br>- Byzantine behavior |
+| **RC3-010.4** Incident Response | Operational procedures | - Runbooks<br>- On-call rotation<br>- Post-mortem process |
 
 ---
 
-## Appendix
+## RC3 Success Criteria
 
-### Version History
-
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 | December 2025 | Initial release requirements document |
-
-### Contributors
-
-- BitCell Development Team
-- Community Contributors
-
-### References
-
-- [BitCell Architecture](ARCHITECTURE.md)
-- [Implementation Summary](IMPLEMENTATION_SUMMARY.md)
-- [v0.3 Completion Report](V0.3_COMPLETION_REPORT.md)
+- [ ] Security audit completed with no critical findings
+- [ ] 10-node testnet runs for 1 month without issues
+- [ ] Transaction throughput ≥ 100 TPS
+- [ ] Proof generation < 10 seconds (with recursion)
+- [ ] Block explorer operational
+- [ ] Governance proposals can be submitted
+- [ ] Light client syncs and verifies
+- [ ] Documentation complete
 
 ---
 
-*Document maintained by the BitCell development team. For questions or clarifications, please open an issue in the repository.*
+# Cross-Release Dependencies
+
+```
+RC1 Foundation
+├── RC1-001 Crypto ──────────────────┬─→ RC2-002 ECVRF
+│                                    └─→ RC2-003 CLSAG
+├── RC1-003 ZKP Architecture ────────→ RC2-001 Real Groth16 ──→ RC3-002 Recursive SNARKs
+├── RC1-005 State Management ────────→ RC2-005 RocksDB
+├── RC1-006 Networking ──────────────→ RC2-004 libp2p ────────→ RC3-007 Light Client
+├── RC1-008 Wallet ──────────────────→ RC2-006 Hardware Wallet
+└── RC1-009 Admin ───────────────────→ RC2-007 HSM Providers
+                                      └─→ RC2-009 Authentication
+
+RC2 Production
+├── RC2-001 Real ZK ─────────────────→ RC3-001 Security Audit
+│                                    └─→ RC3-002 Recursive SNARKs
+├── RC2-004 libp2p ──────────────────→ RC3-007 Light Client
+│                                    └─→ RC3-008 Finality
+└── RC2-005 RocksDB ─────────────────→ RC3-004 Block Explorer
+
+RC3 Mainnet
+├── RC3-001 Security Audit ──────────→ Mainnet Launch
+├── RC3-002 Recursive SNARKs ────────→ Mainnet Launch
+└── RC3-010 Production Infra ────────→ Mainnet Launch
+```
+
+---
+
+# Acceptance Criteria Summary
+
+## RC1 Release Gate
+
+| Criteria | Status |
+|----------|--------|
+| All unit tests pass | ✅ 200+ passing |
+| Core crypto functional | ✅ |
+| CA battles deterministic | ✅ |
+| Mock ZK proofs work | ✅ |
+| Basic networking works | ✅ |
+| Wallet creates/signs | ✅ |
+| RPC endpoints respond | ✅ |
+
+## RC2 Release Gate
+
+| Criteria | Target |
+|----------|--------|
+| Real ZK proofs generate | < 30s |
+| ZK proofs verify | < 10ms |
+| State persists | Survives restart |
+| 3-node testnet | 1 week stable |
+| Hardware wallet signs | Works |
+| TPS | ≥ 50 |
+
+## RC3 Release Gate
+
+| Criteria | Target |
+|----------|--------|
+| Security audit | No critical findings |
+| Recursive proofs | < 10s generation |
+| 10-node testnet | 1 month stable |
+| Block explorer | Operational |
+| Light client | Syncs correctly |
+| TPS | ≥ 100 |
+
+---
+
+**Document Version:** 1.0  
+**Generated:** December 2025  
+**Next Update:** RC2 Planning Sprint

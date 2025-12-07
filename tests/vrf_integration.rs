@@ -4,8 +4,10 @@
 //! including key derivation, proof generation/verification, and blockchain integration.
 
 use bitcell_crypto::{PublicKey, SecretKey, Hash256};
+use bitcell_crypto::vrf::combine_vrf_outputs;
 use bitcell_node::blockchain::Blockchain;
 use bitcell_metrics::MetricsRegistry;
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
 /// Test that VRF keys are correctly derived from secp256k1 keys
@@ -112,27 +114,27 @@ fn test_vrf_chaining_in_blockchain() {
             vec![],
             vec![],
             sk.public_key(),
-        ).expect(&format!("Should produce block {}", i + 1));
+        ).expect("Should produce block");
         
         // Verify VRF output is non-zero
         assert_ne!(block.header.vrf_output, [0u8; 32], 
-                   "Block {} VRF output should be non-zero", i + 1);
+                   "Block VRF output should be non-zero");
         
         // Verify VRF proof exists
         assert!(!block.header.vrf_proof.is_empty(),
-                "Block {} should have VRF proof", i + 1);
+                "Block should have VRF proof");
         
         // If not first block, verify VRF output differs from previous
         if i > 0 {
             assert_ne!(block.header.vrf_output, blocks[i - 1].header.vrf_output,
-                       "Block {} VRF should differ from block {} due to chaining", i + 1, i);
+                       "Block VRF should differ from previous block due to chaining");
         }
         
         // Validate and add block
         blockchain.validate_block(&block)
-            .expect(&format!("Block {} should be valid", i + 1));
+            .expect("Block should be valid");
         blockchain.add_block(block.clone())
-            .expect(&format!("Should add block {}", i + 1));
+            .expect("Should add block");
         
         blocks.push(block);
     }
@@ -202,15 +204,15 @@ fn test_vrf_multiple_validators() {
             vec![],
             vec![],
             validator.public_key(),
-        ).expect(&format!("Validator {} should produce block", i));
+        ).expect("Validator should produce block");
         
         // Verify VRF output is unique and non-zero
         assert_ne!(block.header.vrf_output, [0u8; 32],
-                   "Validator {} block should have non-zero VRF", i);
+                   "Validator block should have non-zero VRF");
         
         // Verify block is valid
         blockchain.validate_block(&block)
-            .expect(&format!("Validator {} block should be valid", i));
+            .expect("Validator block should be valid");
         
         blockchain.add_block(block).expect("Should add block");
     }
@@ -238,9 +240,9 @@ fn test_vrf_output_distribution() {
     }
     
     // Outputs should not be all zeros
-    for (i, output) in outputs.iter().enumerate() {
+    for output in outputs.iter() {
         assert_ne!(output.as_bytes(), &[0u8; 32],
-                   "VRF output {} should not be all zeros", i);
+                   "VRF output should not be all zeros");
     }
 }
 
@@ -260,7 +262,7 @@ fn test_vrf_output_unpredictability() {
     
     // Outputs should not be trivially related to the message
     let message_hash = Hash256::from_bytes(
-        sha2::Sha256::digest(message).into()
+        Sha256::digest(message).into()
     );
     assert_ne!(output1.as_bytes(), message_hash.as_bytes());
     assert_ne!(output2.as_bytes(), message_hash.as_bytes());
@@ -328,8 +330,6 @@ fn test_vrf_long_message() {
 /// Test combining multiple VRF outputs for tournament seeding
 #[test]
 fn test_vrf_output_combination() {
-    use bitcell_crypto::vrf::combine_vrf_outputs;
-    
     let sk1 = SecretKey::generate();
     let sk2 = SecretKey::generate();
     let sk3 = SecretKey::generate();

@@ -81,7 +81,7 @@ fn test_vrf_proof_different_messages() {
 /// Test VRF proof with wrong message
 /// Note: The simplified VRF implementation (v0.1) recomputes output from message,
 /// so it doesn't fail verification but produces different output.
-/// Proper ECVRF would fail verification (see ecvrf.rs:273-282)
+/// Proper ECVRF would fail verification (see crates/bitcell-crypto/src/ecvrf.rs:273-282)
 #[test]
 fn test_vrf_proof_wrong_message() {
     let sk = SecretKey::generate();
@@ -107,7 +107,7 @@ fn test_vrf_proof_wrong_message() {
 
 /// Test VRF proof with wrong public key
 /// Critical security property: proof from one key shouldn't verify with another key
-/// Note: Simplified VRF (v0.1) doesn't enforce this. See ecvrf.rs:259-270 for proper behavior.
+/// Note: Simplified VRF (v0.1) doesn't enforce this. See crates/bitcell-crypto/src/ecvrf.rs:259-270 for proper behavior.
 #[test]
 fn test_vrf_proof_wrong_public_key() {
     let sk1 = SecretKey::generate();
@@ -214,7 +214,7 @@ fn test_vrf_blockchain_determinism() {
 
 /// Test VRF with multiple different validators
 /// Note: This test validates VRF chaining with multiple blocks.
-/// The blockchain uses its own secret_key for VRF generation (blockchain.rs:209,229),
+/// The blockchain uses its own secret_key for VRF generation (crates/bitcell-node/src/blockchain.rs:209,229),
 /// not the validator parameter, so all VRFs are from the same key.
 /// To properly test multiple validators, each would need their own blockchain instance.
 #[test]

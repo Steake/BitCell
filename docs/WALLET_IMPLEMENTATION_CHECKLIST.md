@@ -182,27 +182,28 @@ This checklist tracks the implementation status of the BitCell Wallet applicatio
 - ✅ Recipient address input
 - ✅ Amount input field
 - ✅ Fee input/display
-- 🟡 Transaction building (uses mock format currently)
-- 🔴 Real transaction struct construction
-- 🔴 RPC nonce fetching
-- 🔴 Transaction signing in GUI
-- 🔴 Transaction serialization
-- 🔴 RPC transaction broadcasting
+- ✅ Transaction building (fetches nonce, gas price, calculates fee)
+- 🔴 Hardware wallet signing integration
+- 🔴 Transaction broadcasting to RPC
 - 🔴 Transaction status tracking
 - 🔵 QR code scanning for addresses (future)
 - 🔵 Address book integration (future)
 
 **Status**: 🟡 **PARTIAL** (UI exists, functionality incomplete)
 
-**Critical Gap**: `main.rs:393` - Replace mock transaction format
+**Critical Gap**: Transaction preparation complete (fetches nonce, gas price, calculates fee) but hardware wallet signing and broadcasting not yet implemented
 ```rust
-// Current (MOCK):
-let tx_hex = format!("mock_tx:{}:{}:{}", from, to, amount);
+// Current implementation (lines 388-510):
+// - Fetches nonce from RPC
+// - Gets gas price
+// - Calculates fee
+// - Displays transaction info
+// - Notes: "Hardware wallet signing coming soon"
 
-// Needed:
-let tx = Transaction::new(chain, from, to, amount, fee, nonce, data);
-let signed = wallet.sign(&tx)?;
-let tx_hex = hex::encode(bincode::serialize(&signed)?);
+// Needed for RC2:
+// - Implement hardware wallet signing
+// - Integrate transaction broadcasting
+// - Add confirmation UI
 ```
 
 ### 2.4 Balance Display
@@ -288,11 +289,12 @@ let tx_hex = hex::encode(bincode::serialize(&signed)?);
 - ✅ Mnemonic tests (11 tests)
 - ✅ Wallet tests (16 tests)
 - ✅ Transaction tests (11 tests)
-- ✅ Address tests (19 tests)
-- ✅ Balance tests (9 tests)
-- ✅ History tests (7 tests)
-- ✅ Hardware tests (2 tests)
-- ✅ Chain tests (12 tests)
+- ✅ Address tests (8 tests)
+- ✅ Balance tests (13 tests)
+- ✅ History tests (13 tests)
+- ✅ Hardware tests (7 tests)
+- ✅ Chain tests (7 tests)
+- ✅ Lib tests (1 test)
 - ✅ Test coverage: High for core modules
 - 🔴 Edge case tests needed (see WALLET_TESTING_STRATEGY.md)
 
@@ -427,7 +429,7 @@ let tx_hex = hex::encode(bincode::serialize(&signed)?);
 **Status**: 🟡 **IN PROGRESS**
 
 **Blockers**:
-1. Transaction building in GUI (mock format)
+1. Hardware wallet signing integration in GUI
 2. RPC integration for balance updates
 3. Transaction broadcasting implementation
 4. Platform builds (macOS, Windows)
@@ -450,7 +452,7 @@ let tx_hex = hex::encode(bincode::serialize(&signed)?);
 ## 7. Priority Matrix
 
 ### Critical (Must Have for RC2)
-1. 🔴 **Transaction building in GUI** - Replace mock format
+1. 🔴 **Hardware wallet signing in GUI** - Implement signing and broadcast
 2. 🔴 **RPC balance integration** - Real-time balance updates
 3. 🔴 **Transaction broadcasting** - End-to-end tx flow
 4. 🔴 **Platform builds** - Verify macOS, Windows

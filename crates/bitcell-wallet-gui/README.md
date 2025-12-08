@@ -469,9 +469,9 @@ cargo test -p bitcell-wallet-gui --test integration
 ## Known Issues
 
 1. **Transaction submission incomplete** (High Priority)
-   - Status: Mock format used, needs real implementation
-   - Location: `main.rs:393`
-   - Impact: Cannot submit real transactions yet
+   - Status: Transaction preparation complete (fetches nonce, gas price, calculates fee) but hardware wallet signing and broadcasting not yet implemented
+   - Location: `main.rs:388-510`
+   - Impact: Transaction details prepared but cannot sign and submit yet
 
 2. **Balance updates manual** (High Priority)
    - Status: No RPC polling for balances

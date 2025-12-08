@@ -44,11 +44,12 @@ This document defines the comprehensive testing and quality assurance strategy f
 | `mnemonic.rs` | 11 | ✅ Pass | High |
 | `wallet.rs` | 16 | ✅ Pass | High |
 | `transaction.rs` | 11 | ✅ Pass | High |
-| `address.rs` | 19 | ✅ Pass | High |
-| `balance.rs` | 9 | ✅ Pass | High |
-| `history.rs` | 7 | ✅ Pass | Medium |
-| `hardware.rs` | 2 | ✅ Pass | Low |
-| `chain.rs` | 12 | ✅ Pass | High |
+| `address.rs` | 8 | ✅ Pass | High |
+| `balance.rs` | 13 | ✅ Pass | High |
+| `history.rs` | 13 | ✅ Pass | High |
+| `hardware.rs` | 7 | ✅ Pass | Medium |
+| `chain.rs` | 7 | ✅ Pass | High |
+| `lib.rs` | 1 | ✅ Pass | High |
 
 #### 3.1.2 Critical Test Cases
 
@@ -112,6 +113,21 @@ This document defines the comprehensive testing and quality assurance strategy f
 #### 3.2.1 Required Integration Tests
 
 **Test Suite 1: Wallet Lifecycle**
+```rust
+#[test]
+fn test_complete_wallet_lifecycle() {
+    // 1. Create new wallet
+    // 2. Generate addresses for multiple chains
+    // 3. Lock wallet
+    // 4. Unlock with mnemonic
+    // 5. Verify addresses regenerated correctly
+    // 6. Export wallet data
+    // 7. Import into new instance
+    // 8. Verify data integrity
+}
+```
+
+**Test Suite 2: Transaction Flow**
 ```rust
 #[test]
 fn test_complete_wallet_lifecycle() {

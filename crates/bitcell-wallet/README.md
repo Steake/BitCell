@@ -300,11 +300,12 @@ cargo test -p bitcell-wallet --features proptest
 | mnemonic | 11 | High |
 | wallet | 16 | High |
 | transaction | 11 | High |
-| address | 19 | High |
-| balance | 9 | High |
-| history | 7 | Medium |
-| hardware | 2 | Low |
-| chain | 12 | High |
+| address | 8 | High |
+| balance | 13 | High |
+| history | 13 | High |
+| hardware | 7 | Medium |
+| chain | 7 | High |
+| lib | 1 | High |
 
 ### Benchmarks
 

@@ -112,9 +112,9 @@ This document defines the requirements for the BitCell Wallet application, a mod
 - The wallet SHALL display real-time balance updates
 - The wallet SHALL show estimated transaction fees
 - The wallet SHALL confirm transactions before broadcasting
-- **Implementation Gap**: Transaction building in GUI uses mock format
-- **Location**: `crates/bitcell-wallet-gui/src/main.rs:393`
-- **Action Required**: Replace mock transaction format with actual Transaction struct
+- **Implementation Gap**: Transaction building in GUI prepares real transactions (fetches nonce, gas price, calculates fee) but hardware wallet signing and broadcasting are not yet implemented
+- **Location**: `crates/bitcell-wallet-gui/src/main.rs:388-510`
+- **Action Required**: Implement hardware wallet signing and transaction broadcast functionality
 
 #### FR-1.3.3: Balance Display
 - **Priority**: HIGH

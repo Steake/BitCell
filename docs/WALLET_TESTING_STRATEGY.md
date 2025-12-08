@@ -130,21 +130,6 @@ fn test_complete_wallet_lifecycle() {
 **Test Suite 2: Transaction Flow**
 ```rust
 #[test]
-fn test_complete_wallet_lifecycle() {
-    // 1. Create new wallet
-    // 2. Generate addresses for multiple chains
-    // 3. Lock wallet
-    // 4. Unlock with mnemonic
-    // 5. Verify addresses regenerated correctly
-    // 6. Export wallet data
-    // 7. Import into new instance
-    // 8. Verify data integrity
-}
-```
-
-**Test Suite 2: Transaction Flow**
-```rust
-#[test]
 fn test_end_to_end_transaction() {
     // 1. Create wallet with balance
     // 2. Build transaction
@@ -168,6 +153,8 @@ fn test_multi_chain_transaction_flow() {
     // 6. Validate signatures per chain
 }
 ```
+
+**Test Suite 4: RPC Integration**
 
 **Test Suite 4: RPC Integration**
 ```rust

@@ -292,6 +292,15 @@ impl NullifierCircuit<Fr> {
         Groth16::<Bn254>::verify(vk, public_inputs, &proof.proof)
             .map_err(|_| crate::Error::ProofVerification)
     }
+    
+    /// Helper to construct public inputs vector from circuit components
+    pub fn public_inputs(&self) -> Vec<Fr> {
+        vec![
+            self.nullifier.unwrap_or(Fr::from(0u64)),
+            self.set_root.unwrap_or(Fr::from(0u64)),
+            Fr::from(if self.is_member.unwrap_or(false) { 1u64 } else { 0u64 }),
+        ]
+    }
 }
 
 /// Nullifier set membership circuit
@@ -493,8 +502,8 @@ mod tests {
         // Generate proof
         let proof = circuit.prove(&pk).expect("Proof generation should succeed");
         
-        // Verify proof
-        let public_inputs = vec![nullifier, root, Fr::from(1u64)]; // is_member = true = 1
+        // Verify proof using helper method
+        let public_inputs = circuit.public_inputs();
         assert!(
             NullifierCircuit::verify(&vk, &proof, &public_inputs).expect("Verification should complete"),
             "Proof verification should succeed"

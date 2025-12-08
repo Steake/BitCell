@@ -5,8 +5,8 @@
 //! 1. The winner ID is valid (0, 1, or 2)
 //! 2. The commitments match the public inputs
 //! 
-//! Full battle verification requires extensive constraint programming to
-//! verify the CA simulation steps, which is a complex undertaking.
+//! **Note**: This is a simplified circuit for testing and development.
+//! For production use with full CA evolution simulation, see `battle_constraints::BattleCircuit`.
 
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_bn254::Fr;

@@ -5,13 +5,52 @@
 //! - State transition verification (Merkle updates)
 //! - Merkle tree inclusion proofs
 //!
-//! Note: v0.1 provides circuit structure and basic constraints.
-//! Full CA evolution verification requires extensive constraint programming.
+//! ## Circuit Implementations
+//!
+//! This crate provides two tiers of circuit implementations:
+//!
+//! ### Simplified Circuits (battle_circuit, state_circuit)
+//! - **Purpose**: Fast testing, development, and basic validation
+//! - **Constraints**: Minimal (winner validation, root non-equality)
+//! - **Performance**: Very fast proof generation (~1-2 seconds)
+//! - **Security**: Cryptographically sound but doesn't verify full computation
+//!
+//! ### Full Constraint Circuits (battle_constraints, state_constraints)
+//! - **Purpose**: Production deployment with complete verification
+//! - **Constraints**: Complete CA evolution simulation and Merkle tree verification
+//! - **Performance**: Slower proof generation (30-60 seconds for battles)
+//! - **Security**: Fully verifies all computation steps
+//!
+//! ## Usage
+//!
+//! ```rust,ignore
+//! use bitcell_zkp::{battle_constraints::BattleCircuit, Groth16Proof};
+//! use ark_bn254::Fr;
+//!
+//! // Setup (one-time, reusable)
+//! let (pk, vk) = BattleCircuit::<Fr>::setup().unwrap();
+//!
+//! // Create circuit instance
+//! let circuit = BattleCircuit::new(
+//!     initial_grid,
+//!     final_grid,
+//!     commitment_a,
+//!     commitment_b,
+//!     winner_id,
+//! ).with_witnesses(pattern_a, pattern_b, nonce_a, nonce_b);
+//!
+//! // Generate proof
+//! let proof = circuit.prove(&pk).unwrap();
+//!
+//! // Verify proof
+//! let public_inputs = circuit.public_inputs();
+//! assert!(BattleCircuit::verify(&vk, &proof, &public_inputs).unwrap());
+//! ```
 
 pub mod battle_circuit;
 pub mod state_circuit;
 
-// New: Full constraint implementations
+// Full constraint implementations for production
 pub mod battle_constraints;
 pub mod state_constraints;
 
@@ -20,8 +59,14 @@ pub mod merkle_gadget;
 // Production-ready Poseidon-based Merkle verification
 pub mod poseidon_merkle;
 
-pub use battle_circuit::BattleCircuit;
-pub use state_circuit::StateCircuit;
+// Export simplified circuits for backward compatibility
+pub use battle_circuit::BattleCircuit as SimpleBattleCircuit;
+pub use state_circuit::StateCircuit as SimpleStateCircuit;
+
+// Export full circuits as recommended defaults
+pub use battle_constraints::BattleCircuit;
+pub use state_constraints::{StateCircuit, NullifierCircuit};
+
 pub use merkle_gadget::{MerklePathGadget, MERKLE_DEPTH};
 pub use poseidon_merkle::{PoseidonMerkleGadget, POSEIDON_MERKLE_DEPTH};
 

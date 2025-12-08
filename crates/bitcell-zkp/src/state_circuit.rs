@@ -16,7 +16,9 @@ use ark_std::Zero;
 /// This circuit proves that a state transition occurred correctly by verifying:
 /// 1. The old and new state roots are different (state changed)
 /// 2. The nullifier is properly computed to prevent double-spending
-/// 3. The Merkle tree update is valid (TODO: full implementation)
+///
+/// **Note**: This is a simplified circuit for testing and development.
+/// For production use with full Merkle tree verification, see `state_constraints::StateCircuit`.
 #[derive(Clone)]
 pub struct StateCircuit {
     // Public inputs
@@ -135,8 +137,9 @@ impl ConstraintSynthesizer<Fr> for StateCircuit {
             ark_relations::lc!() + ark_relations::r1cs::Variable::One,
         )?;
 
-        // TODO: Add full Merkle tree verification constraints
-        // This would include:
+        // Note: This simplified circuit only verifies state change (old_root != new_root).
+        // Full Merkle tree verification is implemented in state_constraints::StateCircuit,
+        // which includes:
         // - Verifying the old leaf at leaf_index against old_state_root
         // - Verifying the new leaf at leaf_index against new_state_root
         // - Ensuring the nullifier is derived from the old leaf

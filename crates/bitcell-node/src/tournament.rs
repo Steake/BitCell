@@ -15,6 +15,9 @@ const COMMIT_PHASE_SECS: u64 = 5;
 const REVEAL_PHASE_SECS: u64 = 5;
 const BATTLE_PHASE_SECS: u64 = 5;
 
+/// Default trust score for new miners or when no miners exist
+const DEFAULT_TRUST_SCORE: f64 = 0.85;
+
 /// Tournament manager
 pub struct TournamentManager {
     /// Current tournament
@@ -166,16 +169,8 @@ impl TournamentManager {
             counters.add_evidence(bitcell_ebsl::Evidence::new(evidence_type, 0, height));
             
             // Track slashing events (negative evidence)
-            match evidence_type {
-                EvidenceType::InvalidBlock | 
-                EvidenceType::InvalidTournament | 
-                EvidenceType::ProofFailure | 
-                EvidenceType::Equivocation |
-                EvidenceType::MissedCommitment |
-                EvidenceType::MissedReveal => {
-                    self.metrics.inc_slashing_events();
-                }
-                _ => {}
+            if evidence_type.is_negative() {
+                self.metrics.inc_slashing_events();
             }
         } // Drop write lock here
         
@@ -246,8 +241,8 @@ impl TournamentManager {
             let avg_trust = total_trust_score / miner_count as f64;
             self.metrics.set_average_trust_score(avg_trust);
         } else {
-            // Default trust score when no miners
-            self.metrics.set_average_trust_score(0.85);
+            // Use default trust score when no miners
+            self.metrics.set_average_trust_score(DEFAULT_TRUST_SCORE);
         }
     }
 }

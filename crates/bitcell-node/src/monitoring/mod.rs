@@ -186,7 +186,10 @@ impl MetricsRegistry {
     
     pub fn set_average_trust_score(&self, score: f64) {
         // Store as fixed-point * 1000 for atomic operations
-        let fixed_point = (score * 1000.0) as u64;
+        // Trust scores are typically in range [0.0, 1.0], so this provides
+        // 3 decimal places of precision without overflow risk
+        let clamped_score = score.clamp(0.0, 1000.0);
+        let fixed_point = (clamped_score * 1000.0) as u64;
         self.avg_trust_score.store(fixed_point, Ordering::Relaxed);
     }
     

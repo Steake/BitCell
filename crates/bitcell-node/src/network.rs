@@ -584,6 +584,10 @@ impl NetworkManager {
         }
         
         self.metrics.add_bytes_sent(block_size * peer_ids.len() as u64);
+        // Update message counter for each peer we sent to
+        for _ in &peer_ids {
+            self.metrics.add_message_sent();
+        }
         
         // Broadcast via Gossipsub
         let dht_opt = {
@@ -618,6 +622,10 @@ impl NetworkManager {
         }
         
         self.metrics.add_bytes_sent(tx_size * peer_ids.len() as u64);
+        // Update message counter for each peer we sent to
+        for _ in &peer_ids {
+            self.metrics.add_message_sent();
+        }
         
         // Broadcast via Gossipsub
         let dht_opt = {
@@ -648,6 +656,7 @@ impl NetworkManager {
     pub async fn handle_incoming_block(&self, block: Block) -> Result<()> {
         let block_size = bincode::serialize(&block).unwrap_or_default().len() as u64;
         self.metrics.add_bytes_received(block_size);
+        self.metrics.add_message_received();
         
         // Forward to block processing channel
         let tx_opt = {
@@ -665,6 +674,7 @@ impl NetworkManager {
     pub async fn handle_incoming_transaction(&self, tx: Transaction) -> Result<()> {
         let tx_size = bincode::serialize(&tx).unwrap_or_default().len() as u64;
         self.metrics.add_bytes_received(tx_size);
+        self.metrics.add_message_received();
         
         // Forward to transaction processing channel
         let sender_opt = {

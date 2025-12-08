@@ -164,6 +164,19 @@ impl TournamentManager {
             // Add evidence with current block height
             let height = *self.current_height.read().unwrap();
             counters.add_evidence(bitcell_ebsl::Evidence::new(evidence_type, 0, height));
+            
+            // Track slashing events (negative evidence)
+            match evidence_type {
+                EvidenceType::InvalidBlock | 
+                EvidenceType::InvalidTournament | 
+                EvidenceType::ProofFailure | 
+                EvidenceType::Equivocation |
+                EvidenceType::MissedCommitment |
+                EvidenceType::MissedReveal => {
+                    self.metrics.inc_slashing_events();
+                }
+                _ => {}
+            }
         } // Drop write lock here
         
         // Update metrics (acquires read lock)
@@ -208,19 +221,34 @@ impl TournamentManager {
         
         let mut active_count = 0;
         let mut banned_count = 0;
+        let mut total_trust_score = 0.0;
+        let mut miner_count = 0;
         
         for (_miner, counters) in evidence_map.iter() {
             let trust = TrustScore::from_evidence(counters, &self.ebsl_params);
+            let trust_value = trust.value();
+            
+            total_trust_score += trust_value;
+            miner_count += 1;
             
             if trust.is_eligible(&self.ebsl_params) {
                 active_count += 1;
-            } else if trust.value() < self.ebsl_params.t_kill {
+            } else if trust_value < self.ebsl_params.t_kill {
                 banned_count += 1;
             }
         }
         
         self.metrics.set_active_miners(active_count);
         self.metrics.set_banned_miners(banned_count);
+        
+        // Calculate average trust score
+        if miner_count > 0 {
+            let avg_trust = total_trust_score / miner_count as f64;
+            self.metrics.set_average_trust_score(avg_trust);
+        } else {
+            // Default trust score when no miners
+            self.metrics.set_average_trust_score(0.85);
+        }
     }
 }
 

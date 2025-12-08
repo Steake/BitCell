@@ -152,6 +152,9 @@ mod tests {
     use super::*;
     use bitcell_crypto::SecretKey;
 
+    /// Placeholder signature for tests (before actual signing)
+    const PLACEHOLDER_SIGNATURE: [u8; 64] = [0u8; 64];
+
     #[test]
     fn test_block_header_hash() {
         let sk = SecretKey::generate();
@@ -195,8 +198,8 @@ mod tests {
         let sk = SecretKey::generate();
         let pk = sk.public_key();
         
-        // Create transaction with placeholder signature
-        let placeholder_sig = bitcell_crypto::Signature::from_bytes([0u8; 64]);
+        // Create transaction with placeholder signature (will be replaced after signing)
+        let placeholder_sig = bitcell_crypto::Signature::from_bytes(PLACEHOLDER_SIGNATURE);
         let mut tx = Transaction {
             nonce: 1,
             from: pk.clone(),

@@ -20,6 +20,9 @@ mod game_viz;
 /// Default gas price when RPC call fails
 const DEFAULT_GAS_PRICE: u64 = 1000;
 
+/// Placeholder signature for transaction creation (before signing)
+const PLACEHOLDER_SIGNATURE: [u8; 64] = [0u8; 64];
+
 /// Wallet application state
 struct AppState {
     wallet: Option<Wallet>,
@@ -599,8 +602,8 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                 
                 drop(app_state); // Release borrow
                 
-                // Create transaction with placeholder signature
-                let placeholder_sig = bitcell_crypto::Signature::from_bytes([0u8; 64]);
+                // Create transaction with placeholder signature (will be replaced after signing)
+                let placeholder_sig = bitcell_crypto::Signature::from_bytes(PLACEHOLDER_SIGNATURE);
                 
                 let mut tx = bitcell_consensus::Transaction {
                     nonce,

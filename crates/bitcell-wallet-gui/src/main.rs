@@ -600,8 +600,7 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                 drop(app_state); // Release borrow
                 
                 // Create transaction with placeholder signature
-                let placeholder_sig = bitcell_crypto::Signature::from_bytes([0u8; 64])
-                    .expect("placeholder signature");
+                let placeholder_sig = bitcell_crypto::Signature::from_bytes([0u8; 64]);
                 
                 let mut tx = bitcell_consensus::Transaction {
                     nonce,

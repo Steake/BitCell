@@ -198,6 +198,9 @@ impl StateCircuit<Fr> {
     /// Setup the circuit and generate proving/verifying keys
     ///
     /// Returns an error if the circuit setup fails (e.g., due to constraint system issues).
+    ///
+    /// **Note on RNG**: Uses `thread_rng()` which is cryptographically secure (ChaCha20-based).
+    /// For deterministic testing, consider using a seeded RNG from `ark_std::test_rng()`.
     pub fn setup() -> crate::Result<(ProvingKey<Bn254>, VerifyingKey<Bn254>)> {
         let rng = &mut thread_rng();
         
@@ -241,7 +244,7 @@ impl StateCircuit<Fr> {
         public_inputs: &[Fr],
     ) -> crate::Result<bool> {
         Groth16::<Bn254>::verify(vk, public_inputs, &proof.proof)
-            .map_err(|_| crate::Error::ProofVerification)
+            .map_err(|e| crate::Error::ProofVerification)
     }
     
     /// Helper to construct public inputs vector from circuit components
@@ -257,6 +260,9 @@ impl StateCircuit<Fr> {
 
 impl NullifierCircuit<Fr> {
     /// Setup the circuit and generate proving/verifying keys
+    ///
+    /// **Note on RNG**: Uses `thread_rng()` which is cryptographically secure (ChaCha20-based).
+    /// For deterministic testing, consider using a seeded RNG from `ark_std::test_rng()`.
     pub fn setup() -> crate::Result<(ProvingKey<Bn254>, VerifyingKey<Bn254>)> {
         let rng = &mut thread_rng();
         
@@ -290,7 +296,7 @@ impl NullifierCircuit<Fr> {
         public_inputs: &[Fr],
     ) -> crate::Result<bool> {
         Groth16::<Bn254>::verify(vk, public_inputs, &proof.proof)
-            .map_err(|_| crate::Error::ProofVerification)
+            .map_err(|e| crate::Error::ProofVerification)
     }
     
     /// Helper to construct public inputs vector from circuit components

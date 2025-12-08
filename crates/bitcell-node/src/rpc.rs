@@ -515,8 +515,8 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
     })?;
     
     // Validate transaction signature
-    let tx_hash = tx.hash();
-    if tx.signature.verify(&tx.from, tx_hash.as_bytes()).is_err() {
+    let signing_hash = tx.signing_hash();
+    if tx.signature.verify(&tx.from, signing_hash.as_bytes()).is_err() {
         return Err(JsonRpcError {
             code: -32602,
             message: "Invalid transaction signature".to_string(),

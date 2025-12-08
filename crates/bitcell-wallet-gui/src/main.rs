@@ -584,9 +584,9 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                         signature: bitcell_crypto::Signature::from_bytes(&[0u8; 64]).unwrap(), // Placeholder
                     };
                     
-                    // Sign the transaction hash
-                    let tx_hash = consensus_tx.hash();
-                    let signature = match wallet.sign_data(&from_address, tx_hash.as_bytes()) {
+                    // Sign the transaction signing hash (excludes signature field)
+                    let signing_hash = consensus_tx.signing_hash();
+                    let signature = match wallet.sign_data(&from_address, signing_hash.as_bytes()) {
                         Ok(sig) => sig,
                         Err(e) => {
                             let _ = slint::invoke_from_event_loop(move || {

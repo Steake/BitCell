@@ -112,6 +112,22 @@ impl Transaction {
         let serialized = bincode::serialize(self).expect("transaction serialization should never fail");
         Hash256::hash(&serialized)
     }
+    
+    /// Compute signing hash (excludes signature field)
+    /// 
+    /// This method computes a hash over the transaction data excluding the signature field.
+    /// This hash is what should be signed to create the signature.
+    pub fn signing_hash(&self) -> Hash256 {
+        let mut data = Vec::new();
+        data.extend_from_slice(&self.nonce.to_le_bytes());
+        data.extend_from_slice(self.from.as_bytes());
+        data.extend_from_slice(self.to.as_bytes());
+        data.extend_from_slice(&self.amount.to_le_bytes());
+        data.extend_from_slice(&self.gas_limit.to_le_bytes());
+        data.extend_from_slice(&self.gas_price.to_le_bytes());
+        data.extend_from_slice(&self.data);
+        Hash256::hash(&data)
+    }
 }
 
 /// Battle proof (placeholder for ZK proof)

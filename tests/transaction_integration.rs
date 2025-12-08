@@ -51,31 +51,34 @@ fn test_wallet_to_consensus_transaction_conversion() {
     // Set balance
     wallet.update_balance(&from_addr, 1_000_000);
     
-    // Create and sign wallet transaction
-    let wallet_tx = wallet.create_transaction(&from_addr, &to_addr, 100_000, 1_000).unwrap();
-    let nonce = wallet_tx.nonce;
-    let amount = wallet_tx.amount;
-    let fee = wallet_tx.fee;
+    // Create consensus transaction (without signature)
+    let nonce = 0u64;
+    let amount = 100_000u64;
+    let gas_limit = 21000u64;
+    let gas_price = 1000u64;
     
-    let signed_wallet_tx = wallet.sign_transaction(wallet_tx, &from_addr).unwrap();
-    
-    // Convert to consensus transaction
-    let consensus_tx = Transaction {
+    let mut consensus_tx = Transaction {
         nonce,
         from: from_pk.clone(),
         to: to_pk.clone(),
         amount,
-        gas_limit: 21000,
-        gas_price: fee / 21000,
+        gas_limit,
+        gas_price,
         data: Vec::new(),
-        signature: signed_wallet_tx.signature.clone(),
+        signature: bitcell_crypto::Signature::from_bytes(&[0u8; 64]).unwrap(), // Placeholder
     };
     
-    // Verify transaction signature works with consensus Transaction
-    // Note: The signature was created over the wallet transaction hash,
-    // so we verify it's still valid with the public key
-    let verified_pk = signed_wallet_tx.verify(&from_pk);
-    assert!(verified_pk.is_ok(), "Signature should verify with wallet transaction");
+    // Sign the signing hash (excludes signature field)
+    let signing_hash = consensus_tx.signing_hash();
+    let signature = wallet.sign_data(&from_addr, signing_hash.as_bytes()).unwrap();
+    consensus_tx.signature = signature;
+    
+    // Verify signature like RPC does
+    let signing_hash_verify = consensus_tx.signing_hash();
+    assert!(
+        consensus_tx.signature.verify(&from_pk, signing_hash_verify.as_bytes()).is_ok(),
+        "Signature should verify against signing hash"
+    );
 }
 
 /// Test that transactions can be serialized and deserialized
@@ -92,19 +95,8 @@ fn test_transaction_serialization() {
     let amount = 100_000u64;
     let nonce = 0u64;
     
-    // Build transaction data for signing (without signature)
-    let mut tx_data = Vec::new();
-    tx_data.extend_from_slice(&nonce.to_le_bytes());
-    tx_data.extend_from_slice(from_pk.as_bytes());
-    tx_data.extend_from_slice(to_pk.as_bytes());
-    tx_data.extend_from_slice(&amount.to_le_bytes());
-    tx_data.extend_from_slice(&gas_limit.to_le_bytes());
-    tx_data.extend_from_slice(&gas_price.to_le_bytes());
-    
-    let signature = from_sk.sign(&tx_data);
-    
-    // Create a consensus transaction
-    let tx = Transaction {
+    // Create transaction with placeholder signature first
+    let mut tx = Transaction {
         nonce,
         from: from_pk.clone(),
         to: to_pk.clone(),
@@ -112,8 +104,20 @@ fn test_transaction_serialization() {
         gas_limit,
         gas_price,
         data: Vec::new(),
-        signature,
+        signature: bitcell_crypto::Signature::from_bytes(&[0u8; 64]).unwrap(), // Placeholder
     };
+    
+    // Sign the signing hash (excludes signature)
+    let signing_hash = tx.signing_hash();
+    let signature = from_sk.sign(signing_hash.as_bytes());
+    tx.signature = signature;
+    
+    // Verify signature like RPC does
+    let signing_hash_verify = tx.signing_hash();
+    assert!(
+        tx.signature.verify(&from_pk, signing_hash_verify.as_bytes()).is_ok(),
+        "Signature should verify against signing hash"
+    );
     
     // Serialize
     let serialized = bincode::serialize(&tx).expect("Should serialize");
@@ -128,6 +132,13 @@ fn test_transaction_serialization() {
     assert_eq!(tx.amount, deserialized.amount);
     assert_eq!(tx.gas_limit, deserialized.gas_limit);
     assert_eq!(tx.gas_price, deserialized.gas_price);
+    
+    // Verify signature like RPC does after deserialization
+    let deserialized_signing_hash = deserialized.signing_hash();
+    assert!(
+        deserialized.signature.verify(&from_pk, deserialized_signing_hash.as_bytes()).is_ok(),
+        "Signature should verify against signing hash after deserialization"
+    );
 }
 
 /// Test that transaction hash is deterministic

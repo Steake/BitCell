@@ -2,7 +2,6 @@
 
 use crate::{NodeConfig, Result, MetricsRegistry, Blockchain, TransactionPool};
 use bitcell_consensus::Block;
-use bitcell_state::StateManager;
 use bitcell_network::PeerManager;
 use bitcell_crypto::SecretKey;
 use std::sync::Arc;
@@ -15,7 +14,6 @@ const MAX_TXS_PER_BLOCK: usize = 1000;
 /// Validator node
 pub struct ValidatorNode {
     pub config: NodeConfig,
-    pub state: StateManager,
     pub peers: PeerManager,
     pub metrics: MetricsRegistry,
     pub blockchain: Blockchain,
@@ -59,7 +57,6 @@ impl ValidatorNode {
         
         Ok(Self {
             config,
-            state: StateManager::new(),
             peers: PeerManager::new(),
             metrics,
             blockchain,
@@ -291,6 +288,8 @@ mod tests {
     fn test_validator_creation() {
         let config = NodeConfig::default();
         let node = ValidatorNode::new(config).unwrap();
-        assert_eq!(node.state.accounts.len(), 0);
+        let state = node.blockchain.state();
+        let state_guard = state.read().unwrap();
+        assert_eq!(state_guard.accounts.len(), 0);
     }
 }

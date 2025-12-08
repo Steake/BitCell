@@ -1,8 +1,7 @@
-///! Miner node implementation
+//! Miner node implementation
 use crate::{NodeConfig, Result, MetricsRegistry, Blockchain, TransactionPool, NetworkManager};
 use bitcell_crypto::SecretKey;
 use bitcell_ca::{Glider, GliderPattern};
-use bitcell_state::StateManager;
 use std::sync::Arc;
 use bitcell_consensus::Transaction;
 
@@ -10,7 +9,6 @@ use bitcell_consensus::Transaction;
 pub struct MinerNode {
     pub config: NodeConfig,
     pub secret_key: Arc<SecretKey>,
-    pub state: StateManager,
     pub glider_strategy: GliderPattern,
     pub metrics: MetricsRegistry,
     pub blockchain: Blockchain,
@@ -45,7 +43,6 @@ impl MinerNode {
         Ok(Self {
             config,
             secret_key,
-            state: StateManager::new(),
             glider_strategy: GliderPattern::Standard,
             metrics,
             blockchain,

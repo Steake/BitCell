@@ -681,41 +681,61 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
             
             wallet_state.set_is_loading(true);
             
-            let app_state = state.borrow();
-            if let Some(rpc_client) = &app_state.rpc_client {
-                let client = rpc_client.clone();
-                let window_weak = window.as_weak();
+            // Get addresses and their public keys to refresh
+            let (client, address_keys) = {
+                let mut app_state = state.borrow_mut();
                 
-                // Get addresses to refresh
-                let addresses: Vec<String> = if let Some(ref wallet) = app_state.wallet {
-                    wallet.all_addresses().iter().map(|a| a.to_string_formatted()).collect()
-                } else {
-                    vec![]
+                let rpc = match &app_state.rpc_client {
+                    Some(c) => c.clone(),
+                    None => {
+                        wallet_state.set_is_loading(false);
+                        wallet_state.set_status_message("RPC client not initialized".into());
+                        return;
+                    }
                 };
                 
-                tokio::spawn(async move {
-                    // Fetch balances
-                    let mut updates = Vec::new();
-                    for addr in addresses {
-                        if let Ok(balance) = client.get_balance(&addr).await {
-                            updates.push((addr, balance));
+                let keys: Vec<(String, PublicKey)> = if let Some(ref mut wallet) = app_state.wallet {
+                    let mut keys = Vec::new();
+                    for addr in wallet.all_addresses().to_vec() {
+                        if let Ok(pk) = wallet.get_public_key_for_address(&addr) {
+                            keys.push((addr.to_string_formatted(), pk));
                         }
                     }
-                    
-                    let _ = slint::invoke_from_event_loop(move || {
-                        if let Some(window) = window_weak.upgrade() {
-                            let wallet_state = window.global::<WalletState>();
-                            wallet_state.set_is_loading(false);
-                            wallet_state.set_status_message(format!("Updated {} balances", updates.len()).into());
-                            // Note: Updating the actual model requires more complex logic to map back to the wallet
-                            // For now we just verify connectivity and data fetching works
-                        }
-                    });
-                });
-            } else {
+                    keys
+                } else {
+                    Vec::new()
+                };
+                
+                (rpc, keys)
+            };
+            
+            if address_keys.is_empty() {
                 wallet_state.set_is_loading(false);
-                wallet_state.set_status_message("RPC client not initialized".into());
+                wallet_state.set_status_message("No addresses to refresh".into());
+                return;
             }
+            
+            tokio::spawn(async move {
+                // Fetch balances
+                let mut updates = Vec::new();
+                for (addr_str, pk) in address_keys {
+                    // Send public key in hex format (0x + 33 bytes hex encoded)
+                    let pk_hex = format!("0x{}", hex::encode(pk.as_bytes()));
+                    if let Ok(balance) = client.get_balance(&pk_hex).await {
+                        updates.push((addr_str, balance));
+                    }
+                }
+                
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(window) = window_weak.upgrade() {
+                        let wallet_state = window.global::<WalletState>();
+                        wallet_state.set_is_loading(false);
+                        wallet_state.set_status_message(format!("Updated {} balances", updates.len()).into());
+                        // Note: Updating the actual model requires more complex logic to map back to the wallet
+                        // For now we just verify connectivity and data fetching works
+                    }
+                });
+            });
         });
     }
     

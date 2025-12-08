@@ -5,6 +5,7 @@
 //! Features: 60fps smooth interactions, accessibility support, no WebView
 
 use bitcell_wallet::{Chain, Mnemonic, Wallet, WalletConfig};
+use bitcell_crypto::PublicKey;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -43,6 +44,25 @@ fn parse_chain(chain: &str) -> Chain {
         "ethereum" | "eth" => Chain::Ethereum,
         _ => Chain::BitCell,
     }
+}
+
+/// Parse a PublicKey from hex address string
+/// 
+/// Addresses are stored as hex-encoded compressed public keys (0x prefix optional)
+fn parse_public_key(address: &str) -> Result<PublicKey, String> {
+    let hex_str = address.strip_prefix("0x").unwrap_or(address);
+    let bytes = hex::decode(hex_str)
+        .map_err(|e| format!("Invalid hex: {}", e))?;
+    
+    if bytes.len() != 33 {
+        return Err(format!("Invalid public key length: expected 33 bytes, got {}", bytes.len()));
+    }
+    
+    let mut pk_bytes = [0u8; 33];
+    pk_bytes.copy_from_slice(&bytes);
+    
+    PublicKey::from_bytes(pk_bytes)
+        .map_err(|e| format!("Invalid public key: {}", e))
 }
 
 /// Format chain for display
@@ -460,6 +480,7 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
             let to_address = to_address.to_string();
             
             // Async nonce fetch and transaction preparation
+            let state_clone = state.clone();
             tokio::spawn(async move {
                 // Get nonce from node
                 let nonce = match rpc_client.get_transaction_count(&from_address).await {
@@ -482,30 +503,168 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                     Err(_) => DEFAULT_GAS_PRICE, // Use default if unavailable
                 };
                 
-                // Calculate fee (simple estimate)
-                let fee = gas_price.saturating_mul(21000);
+                // Gas limit for simple transfer
+                let gas_limit = 21000u64;
                 
-                // For now, display transaction details and inform user signing requires wallet unlock
-                // In production, this would integrate with hardware wallet or secure key management
-                let tx_info = format!(
-                    "Transaction prepared:\n\
-                     From: {}\n\
-                     To: {}\n\
-                     Amount: {} units\n\
-                     Fee: {} units\n\
-                     Nonce: {}\n\n\
-                     Hardware wallet signing coming soon. \
-                     Use the CLI or Admin console with HSM for secure signing.",
-                    from_address, to_address, amount_units, fee, nonce
-                );
-                
-                let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(window) = window_weak.upgrade() {
-                        let ws = window.global::<WalletState>();
-                        ws.set_is_loading(false);
-                        ws.set_status_message(tx_info.into());
+                // Parse addresses as PublicKeys
+                let from_pk = match parse_public_key(&from_address) {
+                    Ok(pk) => pk,
+                    Err(e) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message(format!("Invalid sender address: {}", e).into());
+                            }
+                        });
+                        return;
                     }
-                });
+                };
+                
+                let to_pk = match parse_public_key(&to_address) {
+                    Ok(pk) => pk,
+                    Err(e) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message(format!("Invalid recipient address: {}", e).into());
+                            }
+                        });
+                        return;
+                    }
+                };
+                
+                // Get wallet for signing
+                let mut app_state = state_clone.borrow_mut();
+                let wallet = match &mut app_state.wallet {
+                    Some(w) => w,
+                    None => {
+                        drop(app_state);
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message("Wallet not loaded".into());
+                            }
+                        });
+                        return;
+                    }
+                };
+                
+                // Check wallet is unlocked
+                if !wallet.is_unlocked() {
+                    drop(app_state);
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(window) = window_weak.upgrade() {
+                            let ws = window.global::<WalletState>();
+                            ws.set_is_loading(false);
+                            ws.set_status_message("Wallet is locked. Please unlock to send transactions.".into());
+                        }
+                    });
+                    return;
+                }
+                
+                // Find the wallet address to get the secret key
+                let wallet_addr = match wallet.all_addresses().iter().find(|a| a.to_string_formatted() == from_address) {
+                    Some(a) => a.clone(),
+                    None => {
+                        drop(app_state);
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message("Sender address not found in wallet".into());
+                            }
+                        });
+                        return;
+                    }
+                };
+                
+                // Get the secret key for signing
+                let secret_key = match wallet.get_secret_key(&wallet_addr) {
+                    Ok(sk) => sk,
+                    Err(e) => {
+                        drop(app_state);
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message(format!("Failed to get signing key: {}", e).into());
+                            }
+                        });
+                        return;
+                    }
+                };
+                
+                drop(app_state); // Release borrow
+                
+                // Create transaction with placeholder signature
+                let placeholder_sig = bitcell_crypto::Signature::from_bytes([0u8; 64])
+                    .expect("placeholder signature");
+                
+                let mut tx = bitcell_consensus::Transaction {
+                    nonce,
+                    from: from_pk,
+                    to: to_pk,
+                    amount: amount_units,
+                    gas_limit,
+                    gas_price,
+                    data: Vec::new(),
+                    signature: placeholder_sig,
+                };
+                
+                // Compute signing hash and sign
+                let signing_hash = tx.signing_hash();
+                let signature = secret_key.sign(signing_hash.as_bytes());
+                tx.signature = signature;
+                
+                // Serialize transaction
+                let tx_bytes = match bincode::serialize(&tx) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message(format!("Failed to serialize transaction: {}", e).into());
+                            }
+                        });
+                        return;
+                    }
+                };
+                
+                // Send transaction via RPC
+                match rpc_client.send_raw_transaction_bytes(&tx_bytes).await {
+                    Ok(tx_hash) => {
+                        let success_msg = format!(
+                            "Transaction sent successfully!\n\
+                             Transaction hash: {}\n\
+                             Amount: {} CELL\n\
+                             Fee: {} CELL",
+                            tx_hash,
+                            amount_units as f64 / 100_000_000.0,
+                            (gas_limit * gas_price) as f64 / 100_000_000.0
+                        );
+                        
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message(success_msg.into());
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message(format!("Failed to send transaction: {}", e).into());
+                            }
+                        });
+                    }
+                }
             });
         });
     }

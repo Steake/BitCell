@@ -398,6 +398,20 @@ impl Wallet {
         self.sign_transaction(tx, from)
     }
 
+    /// Get the secret key for an address
+    /// 
+    /// This allows signing transactions outside the wallet's transaction system.
+    /// The wallet must be unlocked to access secret keys.
+    pub fn get_secret_key(&mut self, address: &Address) -> Result<SecretKey> {
+        if !self.is_unlocked() {
+            return Err(Error::WalletLocked);
+        }
+        
+        let path = DerivationPath::for_chain(address.chain(), address.index());
+        let key = self.derive_key(&path)?;
+        Ok(key.secret_key.clone())
+    }
+
     /// Get transaction history
     pub fn history(&self) -> &TransactionHistory {
         &self.history

@@ -122,7 +122,13 @@ async fn main() {
             // Or we can modify NodeConfig to hold the secret key? No, NodeConfig is serializable.
             
             // Let's update ValidatorNode::new to take the secret key as an argument.
-            let mut node = ValidatorNode::with_key(config, secret_key.clone());
+            let mut node = match ValidatorNode::with_key(config, secret_key.clone()) {
+                Ok(node) => node,
+                Err(e) => {
+                    eprintln!("Error initializing validator node: {}", e);
+                    std::process::exit(1);
+                }
+            };
             
             // Start metrics server on port + 2 to avoid conflict with P2P port (30333) and RPC port (30334)
             let metrics_port = port + 2;
@@ -191,7 +197,13 @@ async fn main() {
             
             println!("Miner Public Key: {:?}", secret_key.public_key());
             
-            let mut node = MinerNode::with_key(config, secret_key.clone());
+            let mut node = match MinerNode::with_key(config, secret_key.clone()) {
+                Ok(node) => node,
+                Err(e) => {
+                    eprintln!("Error initializing miner node: {}", e);
+                    std::process::exit(1);
+                }
+            };
             
             let metrics_port = port + 2;
 
@@ -259,7 +271,13 @@ async fn main() {
             println!("Full Node Public Key: {:?}", secret_key.public_key());
 
             // Reuse ValidatorNode for now as FullNode logic is similar (just no voting)
-            let mut node = ValidatorNode::with_key(config, secret_key.clone());
+            let mut node = match ValidatorNode::with_key(config, secret_key.clone()) {
+                Ok(node) => node,
+                Err(e) => {
+                    eprintln!("Error initializing full node: {}", e);
+                    std::process::exit(1);
+                }
+            };
             
             let metrics_port = port + 2;
 

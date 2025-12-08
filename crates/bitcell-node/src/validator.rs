@@ -26,7 +26,7 @@ pub struct ValidatorNode {
 }
 
 impl ValidatorNode {
-    pub fn new(config: NodeConfig) -> Self {
+    pub fn new(config: NodeConfig) -> crate::Result<Self> {
         let secret_key = if let Some(seed) = &config.key_seed {
             println!("Generating validator key from seed: {}", seed);
             let hash = bitcell_crypto::Hash256::hash(seed.as_bytes());
@@ -37,18 +37,18 @@ impl ValidatorNode {
         Self::with_key(config, secret_key)
     }
 
-    pub fn with_key(config: NodeConfig, secret_key: Arc<SecretKey>) -> Self {
+    pub fn with_key(config: NodeConfig, secret_key: Arc<SecretKey>) -> crate::Result<Self> {
         let metrics = MetricsRegistry::new();
         
         // Create blockchain with or without persistent storage based on config
         let blockchain = if let Some(ref data_path) = config.data_dir {
             // Ensure data directory exists
             std::fs::create_dir_all(data_path)
-                .expect("Failed to create data directory");
+                .map_err(|e| crate::Error::Config(format!("Failed to create data directory: {}", e)))?;
             
             println!("📦 Using persistent storage at: {}", data_path.display());
             Blockchain::with_storage(secret_key.clone(), metrics.clone(), data_path)
-                .expect("Failed to initialize blockchain with storage")
+                .map_err(|e| crate::Error::Config(format!("Failed to initialize blockchain with storage: {}", e)))?
         } else {
             println!("⚠️  Using in-memory storage (data will not persist)");
             Blockchain::new(secret_key.clone(), metrics.clone())
@@ -57,7 +57,7 @@ impl ValidatorNode {
         let tournament_manager = Arc::new(crate::tournament::TournamentManager::new(metrics.clone()));
         let network = Arc::new(crate::network::NetworkManager::new(secret_key.public_key(), metrics.clone()));
         
-        Self {
+        Ok(Self {
             config,
             state: StateManager::new(),
             peers: PeerManager::new(),
@@ -67,7 +67,7 @@ impl ValidatorNode {
             secret_key,
             tournament_manager,
             network,
-        }
+        })
     }
 
     pub async fn start(&mut self) -> Result<()> {
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn test_validator_creation() {
         let config = NodeConfig::default();
-        let node = ValidatorNode::new(config);
+        let node = ValidatorNode::new(config).unwrap();
         assert_eq!(node.state.accounts.len(), 0);
     }
 }

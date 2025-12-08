@@ -398,6 +398,13 @@ impl Wallet {
         self.sign_transaction(tx, from)
     }
 
+    /// Get the public key for an address
+    pub fn get_public_key_for_address(&mut self, address: &Address) -> Result<PublicKey> {
+        let path = DerivationPath::for_chain(address.chain(), address.index());
+        let key = self.derive_key(&path)?;
+        Ok(key.public_key.clone())
+    }
+
     /// Get transaction history
     pub fn history(&self) -> &TransactionHistory {
         &self.history

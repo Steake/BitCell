@@ -155,8 +155,6 @@ fn test_multi_chain_transaction_flow() {
 ```
 
 **Test Suite 4: RPC Integration**
-
-**Test Suite 4: RPC Integration**
 ```rust
 #[tokio::test]
 async fn test_rpc_communication() {

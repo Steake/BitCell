@@ -57,6 +57,36 @@ fn chain_display_name(chain: Chain) -> &'static str {
     }
 }
 
+/// Parse address string to PublicKey
+/// For BitCell addresses, the address is the hex-encoded public key with optional prefix
+fn parse_address_to_pubkey(address: &str) -> Result<bitcell_crypto::PublicKey, String> {
+    // Remove common prefixes
+    let address = address.trim();
+    let address = if address.starts_with("0x") {
+        &address[2..]
+    } else if address.starts_with("BC1") || address.starts_with("bc1") {
+        // BitCell address format - for now, just strip prefix
+        // In a real implementation, this would decode the address properly
+        &address[3..]
+    } else {
+        address
+    };
+    
+    // Decode hex to bytes
+    let bytes = hex::decode(address)
+        .map_err(|e| format!("Invalid hex in address: {}", e))?;
+    
+    if bytes.len() != 33 {
+        return Err(format!("Address must be 33 bytes (compressed public key), got {}", bytes.len()));
+    }
+    
+    let mut key_bytes = [0u8; 33];
+    key_bytes.copy_from_slice(&bytes);
+    
+    bitcell_crypto::PublicKey::from_bytes(key_bytes)
+        .map_err(|e| format!("Invalid public key: {}", e))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
@@ -459,7 +489,10 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
             let window_weak = window.as_weak();
             let to_address = to_address.to_string();
             
-            // Async nonce fetch and transaction preparation
+            // Capture state for async operation
+            let state_clone = state.clone();
+            
+            // Async nonce fetch and transaction creation
             tokio::spawn(async move {
                 // Get nonce from node
                 let nonce = match rpc_client.get_transaction_count(&from_address).await {
@@ -482,30 +515,146 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                     Err(_) => DEFAULT_GAS_PRICE, // Use default if unavailable
                 };
                 
-                // Calculate fee (simple estimate)
-                let fee = gas_price.saturating_mul(21000);
+                // Gas limit for simple transfer
+                let gas_limit = 21000u64;
                 
-                // For now, display transaction details and inform user signing requires wallet unlock
-                // In production, this would integrate with hardware wallet or secure key management
-                let tx_info = format!(
-                    "Transaction prepared:\n\
-                     From: {}\n\
-                     To: {}\n\
-                     Amount: {} units\n\
-                     Fee: {} units\n\
-                     Nonce: {}\n\n\
-                     Hardware wallet signing coming soon. \
-                     Use the CLI or Admin console with HSM for secure signing.",
-                    from_address, to_address, amount_units, fee, nonce
-                );
-                
-                let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(window) = window_weak.upgrade() {
-                        let ws = window.global::<WalletState>();
-                        ws.set_is_loading(false);
-                        ws.set_status_message(tx_info.into());
+                // Parse addresses to PublicKey format
+                let from_pk = match parse_address_to_pubkey(&from_address) {
+                    Ok(pk) => pk,
+                    Err(e) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message(format!("Invalid from address: {}", e).into());
+                            }
+                        });
+                        return;
                     }
-                });
+                };
+                
+                let to_pk = match parse_address_to_pubkey(&to_address) {
+                    Ok(pk) => pk,
+                    Err(e) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message(format!("Invalid to address: {}", e).into());
+                            }
+                        });
+                        return;
+                    }
+                };
+                
+                // Get the secret key for signing
+                let secret_key = {
+                    let app_state = state_clone.borrow();
+                    if let Some(ref wallet) = app_state.wallet {
+                        // Get the address object to derive the key
+                        let addresses = wallet.all_addresses();
+                        let from_addr_obj = match addresses.iter().find(|a| a.to_string_formatted() == from_address) {
+                            Some(a) => a,
+                            None => {
+                                drop(app_state);
+                                let _ = slint::invoke_from_event_loop(move || {
+                                    if let Some(window) = window_weak.upgrade() {
+                                        let ws = window.global::<WalletState>();
+                                        ws.set_is_loading(false);
+                                        ws.set_status_message("From address not found in wallet".into());
+                                    }
+                                });
+                                return;
+                            }
+                        };
+                        
+                        // For BitCell, the address format is the hex-encoded public key
+                        // The wallet derives keys from the mnemonic seed
+                        // We need to get the secret key for this address
+                        match wallet.get_secret_key_for_address(from_addr_obj) {
+                            Ok(sk) => sk,
+                            Err(e) => {
+                                drop(app_state);
+                                let _ = slint::invoke_from_event_loop(move || {
+                                    if let Some(window) = window_weak.upgrade() {
+                                        let ws = window.global::<WalletState>();
+                                        ws.set_is_loading(false);
+                                        ws.set_status_message(format!("Failed to get secret key: {}", e).into());
+                                    }
+                                });
+                                return;
+                            }
+                        }
+                    } else {
+                        drop(app_state);
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message("No wallet loaded".into());
+                            }
+                        });
+                        return;
+                    }
+                };
+                
+                // Create consensus transaction (without signature initially)
+                let mut tx = bitcell_consensus::Transaction {
+                    nonce,
+                    from: from_pk,
+                    to: to_pk,
+                    amount: amount_units,
+                    gas_limit,
+                    gas_price,
+                    data: vec![],
+                    signature: bitcell_crypto::Signature::from_bytes([0u8; 64]).unwrap(), // Placeholder
+                };
+                
+                // Compute signing hash (hash of transaction WITHOUT signature field)
+                let signing_hash = tx.signing_hash();
+                
+                // Sign the transaction
+                tx.signature = secret_key.sign(signing_hash.as_bytes());
+                
+                // Serialize transaction
+                let tx_bytes = match bincode::serialize(&tx) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message(format!("Failed to serialize transaction: {}", e).into());
+                            }
+                        });
+                        return;
+                    }
+                };
+                
+                // Send transaction via RPC
+                match rpc_client.send_raw_transaction_bytes(&tx_bytes).await {
+                    Ok(tx_hash) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message(format!(
+                                    "Transaction sent successfully!\nHash: {}", 
+                                    tx_hash
+                                ).into());
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(window) = window_weak.upgrade() {
+                                let ws = window.global::<WalletState>();
+                                ws.set_is_loading(false);
+                                ws.set_status_message(format!("Failed to send transaction: {}", e).into());
+                            }
+                        });
+                    }
+                }
             });
         });
     }

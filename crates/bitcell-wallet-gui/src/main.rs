@@ -572,31 +572,22 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                         }
                     };
                     
-                    // Create wallet transaction
-                    let wallet_tx = match bitcell_wallet::TransactionBuilder::new(chain)
-                        .from(&from_address)
-                        .to_str(&to_address)
-                        .amount(amount_units)
-                        .fee(gas_price.saturating_mul(gas_limit))
-                        .nonce(nonce)
-                        .build()
-                    {
-                        Ok(tx) => tx,
-                        Err(e) => {
-                            let _ = slint::invoke_from_event_loop(move || {
-                                if let Some(window) = window_weak.upgrade() {
-                                    let ws = window.global::<WalletState>();
-                                    ws.set_is_loading(false);
-                                    ws.set_status_message(format!("Failed to build transaction: {}", e).into());
-                                }
-                            });
-                            return;
-                        }
+                    // Create consensus transaction (without signature first)
+                    let mut consensus_tx = bitcell_consensus::Transaction {
+                        nonce,
+                        from: from_pk.clone(),
+                        to: to_pk.clone(),
+                        amount: amount_units,
+                        gas_limit,
+                        gas_price,
+                        data: Vec::new(),
+                        signature: bitcell_crypto::Signature::from_bytes(&[0u8; 64]).unwrap(), // Placeholder
                     };
                     
-                    // Sign the transaction
-                    let signed_wallet_tx = match wallet.sign_transaction(wallet_tx, &from_address) {
-                        Ok(tx) => tx,
+                    // Sign the transaction hash
+                    let tx_hash = consensus_tx.hash();
+                    let signature = match wallet.sign_data(&from_address, tx_hash.as_bytes()) {
+                        Ok(sig) => sig,
                         Err(e) => {
                             let _ = slint::invoke_from_event_loop(move || {
                                 if let Some(window) = window_weak.upgrade() {
@@ -609,17 +600,8 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                         }
                     };
                     
-                    // Convert to consensus Transaction
-                    let consensus_tx = bitcell_consensus::Transaction {
-                        nonce,
-                        from: from_pk,
-                        to: to_pk,
-                        amount: amount_units,
-                        gas_limit,
-                        gas_price,
-                        data: Vec::new(),
-                        signature: signed_wallet_tx.signature.clone(),
-                    };
+                    // Update transaction with real signature
+                    consensus_tx.signature = signature;
                     
                     // Serialize the transaction
                     match bincode::serialize(&consensus_tx) {

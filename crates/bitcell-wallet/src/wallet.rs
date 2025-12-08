@@ -404,6 +404,17 @@ impl Wallet {
         let key = self.derive_key(&path)?;
         Ok(key.public_key.clone())
     }
+    
+    /// Sign data with the key for an address
+    pub fn sign_data(&mut self, address: &Address, data: &[u8]) -> Result<bitcell_crypto::Signature> {
+        if !self.is_unlocked() {
+            return Err(Error::WalletLocked);
+        }
+        
+        let path = DerivationPath::for_chain(address.chain(), address.index());
+        let key = self.derive_key(&path)?;
+        Ok(key.secret_key.sign(data))
+    }
 
     /// Get transaction history
     pub fn history(&self) -> &TransactionHistory {

@@ -1,7 +1,6 @@
 //! BitCell node binary
 
 use bitcell_node::{NodeConfig, ValidatorNode, MinerNode};
-use bitcell_crypto::SecretKey;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 

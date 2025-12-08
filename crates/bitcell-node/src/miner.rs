@@ -1,5 +1,4 @@
 ///! Miner node implementation
-
 use crate::{NodeConfig, Result, MetricsRegistry, Blockchain, TransactionPool, NetworkManager};
 use bitcell_crypto::SecretKey;
 use bitcell_ca::{Glider, GliderPattern};

@@ -5,11 +5,10 @@
 ///! - Block validation including signature, VRF, and transaction verification
 ///! - Transaction indexing for efficient lookups
 ///! - State management with Merkle tree root computation
-
 use crate::{Result, MetricsRegistry};
 use bitcell_consensus::{Block, BlockHeader, Transaction, BattleProof};
 use bitcell_crypto::{Hash256, PublicKey, SecretKey};
-use bitcell_economics::{COIN, INITIAL_BLOCK_REWARD, HALVING_INTERVAL, MAX_HALVINGS};
+use bitcell_economics::{INITIAL_BLOCK_REWARD, HALVING_INTERVAL, MAX_HALVINGS};
 use bitcell_state::StateManager;
 use std::sync::{Arc, RwLock};
 use std::collections::HashMap;

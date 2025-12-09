@@ -168,6 +168,24 @@ impl HsmConfig {
         }
     }
     
+    /// Create configuration for Azure Key Vault
+    pub fn azure(vault_url: &str, client_id: &str, client_secret: &str, key_name: &str) -> Self {
+        Self {
+            provider: HsmProvider::AzureKeyVault,
+            endpoint: vault_url.to_string(),
+            credentials: HsmCredentials {
+                token: None,
+                access_key: Some(client_id.to_string()),
+                secret_key: Some(client_secret.to_string()),
+                client_cert: None,
+                client_key: None,
+            },
+            default_key: key_name.to_string(),
+            timeout_secs: 30,
+            audit_logging: true,
+        }
+    }
+    
     /// Create configuration for mock HSM (testing only)
     pub fn mock(key_name: &str) -> Self {
         Self {
@@ -280,7 +298,14 @@ impl HsmClient {
                 }
             }
             HsmProvider::AzureKeyVault => {
-                return Err(HsmError::InvalidConfig("Azure Key Vault not yet implemented".into()));
+                #[cfg(feature = "azure-hsm")]
+                {
+                    Arc::new(AzureKeyVaultBackend::connect(&config).await?)
+                }
+                #[cfg(not(feature = "azure-hsm"))]
+                {
+                    return Err(HsmError::InvalidConfig("Azure Key Vault support not compiled in".into()));
+                }
             }
             HsmProvider::GoogleCloudHsm => {
                 return Err(HsmError::InvalidConfig("Google Cloud HSM not yet implemented".into()));
@@ -542,4 +567,35 @@ mod tests {
         assert_eq!(config.provider, HsmProvider::AwsCloudHsm);
         assert_eq!(config.credentials.access_key, Some("AKIAIOSFODNN7EXAMPLE".to_string()));
     }
+    
+    #[tokio::test]
+    async fn test_hsm_config_azure() {
+        let config = HsmConfig::azure(
+            "https://my-vault.vault.azure.net",
+            "client-id-123",
+            "client-secret-456",
+            "my-key",
+        );
+        
+        assert_eq!(config.provider, HsmProvider::AzureKeyVault);
+        assert_eq!(config.endpoint, "https://my-vault.vault.azure.net");
+        assert_eq!(config.credentials.access_key, Some("client-id-123".to_string()));
+        assert_eq!(config.credentials.secret_key, Some("client-secret-456".to_string()));
+    }
 }
+
+// HSM provider implementations
+#[cfg(feature = "vault")]
+mod vault;
+#[cfg(feature = "vault")]
+pub use vault::VaultBackend;
+
+#[cfg(feature = "aws-hsm")]
+mod aws;
+#[cfg(feature = "aws-hsm")]
+pub use aws::AwsHsmBackend;
+
+#[cfg(feature = "azure-hsm")]
+mod azure;
+#[cfg(feature = "azure-hsm")]
+pub use azure::AzureKeyVaultBackend;

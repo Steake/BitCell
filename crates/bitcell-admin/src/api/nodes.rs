@@ -8,7 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::AppState;
+use crate::{AppState, auth::AuthUser};
 use super::NodeInfo;
 
 #[derive(Debug, Serialize)]
@@ -47,20 +47,38 @@ fn validate_node_id(id: &str) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
 
 /// List all registered nodes
 pub async fn list_nodes(
+    user: AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<NodesResponse>, (StatusCode, Json<ErrorResponse>)> {
     let nodes = state.process.list_nodes();
     let total = nodes.len();
+
+    state.audit.log_success(
+        user.claims.sub,
+        user.claims.username,
+        "list_nodes".to_string(),
+        "nodes".to_string(),
+        None,
+    );
 
     Ok(Json(NodesResponse { nodes, total }))
 }
 
 /// Get information about a specific node
 pub async fn get_node(
+    user: AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<NodeResponse>, (StatusCode, Json<ErrorResponse>)> {
     validate_node_id(&id)?;
+
+    state.audit.log_success(
+        user.claims.sub,
+        user.claims.username,
+        "get_node".to_string(),
+        id.clone(),
+        None,
+    );
 
     match state.process.get_node(&id) {
         Some(node) => Ok(Json(NodeResponse { node })),
@@ -75,6 +93,7 @@ pub async fn get_node(
 
 /// Start a node
 pub async fn start_node(
+    user: AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Json(req): Json<StartNodeRequest>,
@@ -84,6 +103,13 @@ pub async fn start_node(
     // Config is not supported yet
     if req.config.is_some() {
         tracing::warn!("Node '{}': Rejected start request with unsupported config", id);
+        state.audit.log_failure(
+            user.claims.sub,
+            user.claims.username,
+            "start_node".to_string(),
+            id.clone(),
+            "Custom config is not supported yet".to_string(),
+        );
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -95,19 +121,36 @@ pub async fn start_node(
     match state.process.start_node(&id) {
         Ok(node) => {
             tracing::info!("Started node '{}' successfully", id);
+            state.audit.log_success(
+                user.claims.sub,
+                user.claims.username,
+                "start_node".to_string(),
+                id.clone(),
+                None,
+            );
             Ok(Json(NodeResponse { node }))
         }
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: format!("Failed to start node '{}': {}", id, e),
-            }),
-        )),
+        Err(e) => {
+            state.audit.log_failure(
+                user.claims.sub,
+                user.claims.username,
+                "start_node".to_string(),
+                id.clone(),
+                e.to_string(),
+            );
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to start node '{}': {}", id, e),
+                }),
+            ))
+        }
     }
 }
 
 /// Stop a node
 pub async fn stop_node(
+    user: AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<NodeResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -116,19 +159,36 @@ pub async fn stop_node(
     match state.process.stop_node(&id) {
         Ok(node) => {
             tracing::info!("Stopped node '{}' successfully", id);
+            state.audit.log_success(
+                user.claims.sub,
+                user.claims.username,
+                "stop_node".to_string(),
+                id.clone(),
+                None,
+            );
             Ok(Json(NodeResponse { node }))
         }
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: format!("Failed to stop node '{}': {}", id, e),
-            }),
-        )),
+        Err(e) => {
+            state.audit.log_failure(
+                user.claims.sub,
+                user.claims.username,
+                "stop_node".to_string(),
+                id.clone(),
+                e.to_string(),
+            );
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to stop node '{}': {}", id, e),
+                }),
+            ))
+        }
     }
 }
 
 /// Delete a node
 pub async fn delete_node(
+    user: AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
@@ -137,14 +197,30 @@ pub async fn delete_node(
     match state.process.delete_node(&id) {
         Ok(_) => {
             tracing::info!("Deleted node '{}' successfully", id);
+            state.audit.log_success(
+                user.claims.sub,
+                user.claims.username,
+                "delete_node".to_string(),
+                id.clone(),
+                None,
+            );
             Ok(Json(serde_json::json!({ "message": format!("Node '{}' deleted", id) })))
         }
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: format!("Failed to delete node '{}': {}", id, e),
-            }),
-        )),
+        Err(e) => {
+            state.audit.log_failure(
+                user.claims.sub,
+                user.claims.username,
+                "delete_node".to_string(),
+                id.clone(),
+                e.to_string(),
+            );
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to delete node '{}': {}", id, e),
+                }),
+            ))
+        }
     }
 }
 
@@ -160,11 +236,20 @@ fn default_lines() -> usize {
 
 /// Get logs for a specific node
 pub async fn get_node_logs(
+    user: AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     axum::extract::Query(params): axum::extract::Query<LogParams>,
 ) -> Result<String, (StatusCode, String)> {
     validate_node_id(&id).map_err(|e| (e.0, e.1.error.clone()))?;
+
+    state.audit.log_success(
+        user.claims.sub,
+        user.claims.username,
+        "get_node_logs".to_string(),
+        id.clone(),
+        None,
+    );
 
     // Get log file path
     let log_path = state.process.get_log_path(&id)

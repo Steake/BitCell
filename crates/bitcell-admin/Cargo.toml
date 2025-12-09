@@ -56,6 +56,11 @@ chrono = { version = "0.4", features = ["serde"] }
 # Sync primitives
 parking_lot = "0.12"
 
+# JWT and authentication
+jsonwebtoken = "9.2"
+bcrypt = "0.15"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
 # BitCell dependencies
 bitcell-node = { path = "../bitcell-node" }
 bitcell-consensus = { path = "../bitcell-consensus" }

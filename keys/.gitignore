@@ -1,0 +1,16 @@
+# Ignore actual key files (these are large and should be distributed separately)
+*.bin
+
+# Keep metadata and documentation
+!metadata.json
+!README.md
+
+# Ignore ceremony intermediate files
+ceremony/*.bin
+ceremony/*.log
+ceremony/contributions/
+ceremony/temp/
+
+# Keep ceremony documentation and attestations
+!ceremony/attestations/
+!ceremony/verification/

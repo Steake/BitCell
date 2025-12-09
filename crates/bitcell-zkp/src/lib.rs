@@ -19,11 +19,14 @@ pub mod state_constraints;
 pub mod merkle_gadget;
 // Production-ready Poseidon-based Merkle verification
 pub mod poseidon_merkle;
+// Key management for trusted setup ceremony
+pub mod key_management;
 
 pub use battle_circuit::BattleCircuit;
 pub use state_circuit::StateCircuit;
 pub use merkle_gadget::{MerklePathGadget, MERKLE_DEPTH};
 pub use poseidon_merkle::{PoseidonMerkleGadget, POSEIDON_MERKLE_DEPTH};
+pub use key_management::{KeyMetadata, KeyType};
 
 use serde::{Deserialize, Serialize};
 

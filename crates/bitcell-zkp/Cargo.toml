@@ -23,7 +23,9 @@ thiserror.workspace = true
 ark-crypto-primitives.workspace = true
 ark-snark.workspace = true
 sha2.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
 criterion.workspace = true
+tempfile = "3.8"

@@ -1,0 +1,22 @@
+{
+  "circuit": "BattleCircuit",
+  "version": "1.0.0",
+  "proving_key_hash": "pending_ceremony",
+  "verification_key_hash": "pending_ceremony",
+  "proving_key_size": 0,
+  "verification_key_size": 0,
+  "num_participants": 0,
+  "ceremony_date": "pending",
+  "circuit_parameters": {
+    "grid_size": 64,
+    "battle_steps": 10,
+    "constraints": "~6.7M",
+    "public_inputs": ["commitment_a", "commitment_b", "winner"]
+  },
+  "ipfs_proving_key": null,
+  "ipfs_verification_key": null,
+  "arweave_proving_key": null,
+  "arweave_verification_key": null,
+  "status": "pending_ceremony",
+  "notes": "Keys will be generated during the BitCell trusted setup ceremony. See docs/CEREMONY.md for details."
+}

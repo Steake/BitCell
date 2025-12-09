@@ -11,10 +11,12 @@ use crate::{Account, BondState};
 const CF_BLOCKS: &str = "blocks";
 const CF_HEADERS: &str = "headers";
 const CF_TRANSACTIONS: &str = "transactions";
+const CF_TX_BY_SENDER: &str = "tx_by_sender";
 const CF_ACCOUNTS: &str = "accounts";
 const CF_BONDS: &str = "bonds";
 const CF_STATE_ROOTS: &str = "state_roots";
 const CF_CHAIN_INDEX: &str = "chain_index";
+const CF_SNAPSHOTS: &str = "snapshots";
 
 /// Persistent storage manager
 pub struct StorageManager {
@@ -32,10 +34,12 @@ impl StorageManager {
             CF_BLOCKS,
             CF_HEADERS,
             CF_TRANSACTIONS,
+            CF_TX_BY_SENDER,
             CF_ACCOUNTS,
             CF_BONDS,
             CF_STATE_ROOTS,
             CF_CHAIN_INDEX,
+            CF_SNAPSHOTS,
         ];
         
         let db = DB::open_cf(&opts, path, cfs)?;
@@ -159,6 +163,299 @@ impl StorageManager {
         let cf = self.db.cf_handle(CF_STATE_ROOTS)
             .ok_or_else(|| "State roots column family not found".to_string())?;
         self.db.get_cf(cf, height.to_be_bytes()).map_err(|e| e.to_string())
+    }
+
+    /// Store a transaction with indexing
+    ///
+    /// Stores transaction data and creates indexes for O(1) lookup by hash and sender.
+    /// Uses atomic WriteBatch to ensure consistency.
+    ///
+    /// # Arguments
+    /// * `tx_hash` - Transaction hash (32 bytes)
+    /// * `sender` - Sender public key/address
+    /// * `tx_data` - Serialized transaction data
+    /// * `block_height` - Height of block containing this transaction
+    ///
+    /// # Returns
+    /// * `Ok(())` on success, error message on failure
+    pub fn store_transaction(
+        &self,
+        tx_hash: &[u8],
+        sender: &[u8],
+        tx_data: &[u8],
+        block_height: u64,
+    ) -> Result<(), String> {
+        let cf_tx = self.db.cf_handle(CF_TRANSACTIONS)
+            .ok_or_else(|| "Transactions column family not found".to_string())?;
+        let cf_sender = self.db.cf_handle(CF_TX_BY_SENDER)
+            .ok_or_else(|| "Tx by sender column family not found".to_string())?;
+
+        let mut batch = WriteBatch::default();
+        
+        // Store transaction by hash
+        batch.put_cf(cf_tx, tx_hash, tx_data);
+        
+        // Create sender index: sender||height||tx_hash -> tx_hash
+        // This allows range queries for all transactions from a sender
+        let mut sender_key = Vec::with_capacity(sender.len() + 8 + tx_hash.len());
+        sender_key.extend_from_slice(sender);
+        sender_key.extend_from_slice(&block_height.to_be_bytes());
+        sender_key.extend_from_slice(tx_hash);
+        batch.put_cf(cf_sender, sender_key, tx_hash);
+
+        self.db.write(batch).map_err(|e| e.to_string())
+    }
+
+    /// Get transaction by hash
+    ///
+    /// O(1) lookup of transaction data by hash.
+    ///
+    /// # Arguments
+    /// * `tx_hash` - Transaction hash
+    ///
+    /// # Returns
+    /// * `Ok(Some(data))` if found, `Ok(None)` if not found, or error
+    pub fn get_transaction(&self, tx_hash: &[u8]) -> Result<Option<Vec<u8>>, String> {
+        let cf = self.db.cf_handle(CF_TRANSACTIONS)
+            .ok_or_else(|| "Transactions column family not found".to_string())?;
+        self.db.get_cf(cf, tx_hash).map_err(|e| e.to_string())
+    }
+
+    /// Get transactions by sender
+    ///
+    /// Returns all transaction hashes for a given sender.
+    /// Uses range query on the sender index for efficient retrieval.
+    ///
+    /// # Arguments
+    /// * `sender` - Sender public key/address
+    /// * `limit` - Maximum number of transactions to return (0 = no limit)
+    ///
+    /// # Returns
+    /// * Vector of transaction hashes
+    pub fn get_transactions_by_sender(
+        &self,
+        sender: &[u8],
+        limit: usize,
+    ) -> Result<Vec<Vec<u8>>, String> {
+        let cf = self.db.cf_handle(CF_TX_BY_SENDER)
+            .ok_or_else(|| "Tx by sender column family not found".to_string())?;
+
+        let mut tx_hashes = Vec::new();
+        
+        // Iterate with prefix
+        let iter = self.db.prefix_iterator_cf(cf, sender);
+        
+        for item in iter {
+            let (key, value) = item.map_err(|e| e.to_string())?;
+            
+            // Key format is: sender||height(8)||tx_hash
+            // Verify exact sender match by checking if key length >= sender.len() + 8
+            // and that the next 8 bytes after sender are valid height bytes
+            if key.len() < sender.len() + 8 {
+                continue; // Invalid key format
+            }
+            
+            // Check if sender portion matches exactly
+            // This ensures we don't match longer senders that share a prefix
+            if &key[0..sender.len()] != sender {
+                break; // No longer matching our sender prefix
+            }
+            
+            // Verify this is an exact match by checking that at sender.len() we have
+            // height data (8 bytes), not more sender data
+            // We do this by ensuring the key has the expected structure
+            let expected_min_len = sender.len() + 8; // sender + height
+            if key.len() < expected_min_len {
+                continue;
+            }
+            
+            tx_hashes.push(value.to_vec());
+            
+            if limit > 0 && tx_hashes.len() >= limit {
+                break;
+            }
+        }
+
+        Ok(tx_hashes)
+    }
+
+    /// Store multiple transactions atomically
+    ///
+    /// Batch operation for storing multiple transactions with their indexes.
+    /// More efficient than calling store_transaction multiple times.
+    ///
+    /// # Arguments
+    /// * `transactions` - Vector of (tx_hash, sender, tx_data, block_height) tuples
+    ///
+    /// # Returns
+    /// * `Ok(())` on success, error on failure
+    pub fn store_transactions_batch(
+        &self,
+        transactions: Vec<(&[u8], &[u8], &[u8], u64)>,
+    ) -> Result<(), String> {
+        let cf_tx = self.db.cf_handle(CF_TRANSACTIONS)
+            .ok_or_else(|| "Transactions column family not found".to_string())?;
+        let cf_sender = self.db.cf_handle(CF_TX_BY_SENDER)
+            .ok_or_else(|| "Tx by sender column family not found".to_string())?;
+
+        let mut batch = WriteBatch::default();
+        
+        for (tx_hash, sender, tx_data, block_height) in transactions {
+            // Store transaction by hash
+            batch.put_cf(cf_tx, tx_hash, tx_data);
+            
+            // Create sender index
+            let mut sender_key = Vec::with_capacity(sender.len() + 8 + tx_hash.len());
+            sender_key.extend_from_slice(sender);
+            sender_key.extend_from_slice(&block_height.to_be_bytes());
+            sender_key.extend_from_slice(tx_hash);
+            batch.put_cf(cf_sender, sender_key, tx_hash);
+        }
+
+        self.db.write(batch).map_err(|e| e.to_string())
+    }
+
+    /// Create a state snapshot at a given height
+    ///
+    /// Snapshots capture the complete state at a specific block height,
+    /// enabling fast state recovery without replaying all blocks.
+    ///
+    /// # Arguments
+    /// * `height` - Block height for this snapshot
+    /// * `state_root` - State root hash at this height
+    /// * `accounts_data` - Serialized account state data
+    ///
+    /// # Returns
+    /// * `Ok(())` on success, error on failure
+    pub fn create_snapshot(
+        &self,
+        height: u64,
+        state_root: &[u8],
+        accounts_data: &[u8],
+    ) -> Result<(), String> {
+        let cf = self.db.cf_handle(CF_SNAPSHOTS)
+            .ok_or_else(|| "Snapshots column family not found".to_string())?;
+        let cf_index = self.db.cf_handle(CF_CHAIN_INDEX)
+            .ok_or_else(|| "Chain index column family not found".to_string())?;
+
+        let mut batch = WriteBatch::default();
+        
+        // Create snapshot key: "snapshot_" + height
+        let snapshot_key = format!("snapshot_{}", height);
+        
+        // Store snapshot data with metadata: height(8) | root_len(4) | state_root | accounts_data
+        let mut snapshot_data = Vec::new();
+        snapshot_data.extend_from_slice(&height.to_be_bytes());
+        snapshot_data.extend_from_slice(&(state_root.len() as u32).to_be_bytes());
+        snapshot_data.extend_from_slice(state_root);
+        snapshot_data.extend_from_slice(accounts_data);
+        
+        batch.put_cf(cf, snapshot_key.as_bytes(), &snapshot_data);
+        
+        // Update latest snapshot height in index
+        batch.put_cf(cf_index, b"latest_snapshot", height.to_be_bytes());
+
+        self.db.write(batch).map_err(|e| e.to_string())
+    }
+
+    /// Get the latest snapshot
+    ///
+    /// # Returns
+    /// * `Ok(Some((height, state_root, accounts_data)))` if snapshot exists
+    /// * `Ok(None)` if no snapshots exist
+    pub fn get_latest_snapshot(&self) -> Result<Option<(u64, Vec<u8>, Vec<u8>)>, String> {
+        let cf_index = self.db.cf_handle(CF_CHAIN_INDEX)
+            .ok_or_else(|| "Chain index column family not found".to_string())?;
+        let cf_snapshots = self.db.cf_handle(CF_SNAPSHOTS)
+            .ok_or_else(|| "Snapshots column family not found".to_string())?;
+
+        // Get latest snapshot height
+        let height_bytes = match self.db.get_cf(cf_index, b"latest_snapshot")
+            .map_err(|e| e.to_string())? {
+            Some(bytes) => bytes,
+            None => return Ok(None),
+        };
+
+        let height = u64::from_be_bytes(
+            height_bytes.as_slice().try_into()
+                .map_err(|_| "Invalid snapshot height".to_string())?
+        );
+
+        // Get snapshot data
+        let snapshot_key = format!("snapshot_{}", height);
+        let snapshot_data = match self.db.get_cf(cf_snapshots, snapshot_key.as_bytes())
+            .map_err(|e| e.to_string())? {
+            Some(data) => data,
+            None => return Ok(None),
+        };
+
+        // Parse snapshot data: height(8) | root_len(4) | state_root | accounts_data
+        if snapshot_data.len() < 12 {
+            return Err("Invalid snapshot data format".to_string());
+        }
+
+        let stored_height = u64::from_be_bytes(
+            snapshot_data[0..8].try_into()
+                .map_err(|_| "Invalid snapshot height in data".to_string())?
+        );
+        
+        let root_len = u32::from_be_bytes(
+            snapshot_data[8..12].try_into()
+                .map_err(|_| "Invalid root length in data".to_string())?
+        ) as usize;
+        
+        if snapshot_data.len() < 12 + root_len {
+            return Err("Invalid snapshot data format: root length mismatch".to_string());
+        }
+        
+        let state_root = snapshot_data[12..12 + root_len].to_vec();
+        let accounts_data = snapshot_data[12 + root_len..].to_vec();
+
+        Ok(Some((stored_height, state_root, accounts_data)))
+    }
+
+    /// Get snapshot at specific height
+    ///
+    /// # Arguments
+    /// * `height` - Block height of desired snapshot
+    ///
+    /// # Returns
+    /// * `Ok(Some((height, state_root, accounts_data)))` if snapshot exists at that height
+    /// * `Ok(None)` if no snapshot at that height
+    pub fn get_snapshot(&self, height: u64) -> Result<Option<(u64, Vec<u8>, Vec<u8>)>, String> {
+        let cf = self.db.cf_handle(CF_SNAPSHOTS)
+            .ok_or_else(|| "Snapshots column family not found".to_string())?;
+
+        let snapshot_key = format!("snapshot_{}", height);
+        let snapshot_data = match self.db.get_cf(cf, snapshot_key.as_bytes())
+            .map_err(|e| e.to_string())? {
+            Some(data) => data,
+            None => return Ok(None),
+        };
+
+        // Parse snapshot data: height(8) | root_len(4) | state_root | accounts_data
+        if snapshot_data.len() < 12 {
+            return Err("Invalid snapshot data format".to_string());
+        }
+
+        let stored_height = u64::from_be_bytes(
+            snapshot_data[0..8].try_into()
+                .map_err(|_| "Invalid snapshot height in data".to_string())?
+        );
+        
+        let root_len = u32::from_be_bytes(
+            snapshot_data[8..12].try_into()
+                .map_err(|_| "Invalid root length in data".to_string())?
+        ) as usize;
+        
+        if snapshot_data.len() < 12 + root_len {
+            return Err("Invalid snapshot data format: root length mismatch".to_string());
+        }
+        
+        let state_root = snapshot_data[12..12 + root_len].to_vec();
+        let accounts_data = snapshot_data[12 + root_len..].to_vec();
+
+        Ok(Some((stored_height, state_root, accounts_data)))
     }
 
     /// Prune old blocks (keep last N blocks) - Simple version
@@ -381,5 +678,285 @@ mod tests {
         
         storage.store_header(42, b"hash", b"header").unwrap();
         assert_eq!(storage.get_latest_height().unwrap(), Some(42));
+    }
+
+    #[test]
+    fn test_transaction_storage_and_retrieval() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = StorageManager::new(temp_dir.path()).unwrap();
+        
+        let tx_hash = b"tx_hash_123456789012345678901234";
+        let sender = b"sender_address_123456789012345";
+        let tx_data = b"transaction_data";
+        let block_height = 100u64;
+        
+        // Store transaction
+        storage.store_transaction(tx_hash, sender, tx_data, block_height).unwrap();
+        
+        // Retrieve by hash
+        let retrieved = storage.get_transaction(tx_hash).unwrap();
+        assert_eq!(retrieved.as_deref(), Some(tx_data.as_slice()));
+        
+        // Non-existent transaction
+        let not_found = storage.get_transaction(b"nonexistent_hash_123456789012").unwrap();
+        assert_eq!(not_found, None);
+    }
+
+    #[test]
+    fn test_transactions_by_sender() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = StorageManager::new(temp_dir.path()).unwrap();
+        
+        let sender = b"sender_address_123456789012345";
+        let tx_hash1 = b"tx_hash_1_123456789012345678901";
+        let tx_hash2 = b"tx_hash_2_123456789012345678901";
+        let tx_hash3 = b"tx_hash_3_123456789012345678901";
+        
+        // Store multiple transactions from same sender
+        storage.store_transaction(tx_hash1, sender, b"data1", 100).unwrap();
+        storage.store_transaction(tx_hash2, sender, b"data2", 101).unwrap();
+        storage.store_transaction(tx_hash3, sender, b"data3", 102).unwrap();
+        
+        // Retrieve all transactions by sender
+        let txs = storage.get_transactions_by_sender(sender, 0).unwrap();
+        assert_eq!(txs.len(), 3);
+        
+        // Verify hashes are present (order may vary)
+        let tx_hashes: Vec<&[u8]> = txs.iter().map(|v| v.as_slice()).collect();
+        assert!(tx_hashes.contains(&tx_hash1.as_slice()));
+        assert!(tx_hashes.contains(&tx_hash2.as_slice()));
+        assert!(tx_hashes.contains(&tx_hash3.as_slice()));
+        
+        // Test limit
+        let limited = storage.get_transactions_by_sender(sender, 2).unwrap();
+        assert_eq!(limited.len(), 2);
+    }
+
+    #[test]
+    fn test_batch_transaction_storage() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = StorageManager::new(temp_dir.path()).unwrap();
+        
+        let sender1 = b"sender1_address_12345678901234";  // Same length as sender2
+        let sender2 = b"sender2_address_12345678901234";  // Same length as sender1
+        let tx_hash1 = b"tx_hash_1_123456789012345678901";
+        let tx_hash2 = b"tx_hash_2_123456789012345678901";
+        let tx_hash3 = b"tx_hash_3_123456789012345678901";
+        
+        let batch = vec![
+            (tx_hash1.as_slice(), sender1.as_slice(), b"data1".as_slice(), 100u64),
+            (tx_hash2.as_slice(), sender2.as_slice(), b"data2".as_slice(), 101u64),
+            (tx_hash3.as_slice(), sender1.as_slice(), b"data3".as_slice(), 102u64),
+        ];
+        
+        // Store batch
+        storage.store_transactions_batch(batch).unwrap();
+        
+        // Verify all stored
+        assert_eq!(storage.get_transaction(tx_hash1).unwrap().as_deref(), Some(b"data1".as_slice()));
+        assert_eq!(storage.get_transaction(tx_hash2).unwrap().as_deref(), Some(b"data2".as_slice()));
+        assert_eq!(storage.get_transaction(tx_hash3).unwrap().as_deref(), Some(b"data3".as_slice()));
+        
+        // Verify sender indexes
+        let sender1_txs = storage.get_transactions_by_sender(sender1, 0).unwrap();
+        assert_eq!(sender1_txs.len(), 2);
+        
+        let sender2_txs = storage.get_transactions_by_sender(sender2, 0).unwrap();
+        assert_eq!(sender2_txs.len(), 1);
+    }
+
+    #[test]
+    fn test_snapshot_creation_and_retrieval() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = StorageManager::new(temp_dir.path()).unwrap();
+        
+        let height = 1000u64;
+        let state_root = b"state_root_hash_12345678901234";
+        let accounts_data = b"serialized_accounts_data";
+        
+        // Create snapshot
+        storage.create_snapshot(height, state_root, accounts_data).unwrap();
+        
+        // Retrieve latest snapshot
+        let snapshot = storage.get_latest_snapshot().unwrap();
+        assert!(snapshot.is_some());
+        
+        let (snap_height, snap_root, snap_data) = snapshot.unwrap();
+        assert_eq!(snap_height, height);
+        assert_eq!(snap_root.as_slice(), state_root);
+        assert_eq!(snap_data.as_slice(), accounts_data);
+        
+        // Retrieve by specific height
+        let specific = storage.get_snapshot(height).unwrap();
+        assert!(specific.is_some());
+        
+        let (h, r, d) = specific.unwrap();
+        assert_eq!(h, height);
+        assert_eq!(r.as_slice(), state_root);
+        assert_eq!(d.as_slice(), accounts_data);
+    }
+
+    #[test]
+    fn test_multiple_snapshots() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = StorageManager::new(temp_dir.path()).unwrap();
+        
+        // Create multiple snapshots
+        storage.create_snapshot(1000, b"root1___________________________", b"data1").unwrap();
+        storage.create_snapshot(2000, b"root2___________________________", b"data2").unwrap();
+        storage.create_snapshot(3000, b"root3___________________________", b"data3").unwrap();
+        
+        // Latest should be 3000
+        let latest = storage.get_latest_snapshot().unwrap().unwrap();
+        assert_eq!(latest.0, 3000);
+        
+        // Should be able to retrieve older snapshots by height
+        let snap1 = storage.get_snapshot(1000).unwrap().unwrap();
+        assert_eq!(snap1.0, 1000);
+        assert_eq!(snap1.2.as_slice(), b"data1");
+        
+        let snap2 = storage.get_snapshot(2000).unwrap().unwrap();
+        assert_eq!(snap2.0, 2000);
+        assert_eq!(snap2.2.as_slice(), b"data2");
+    }
+
+    #[test]
+    fn test_account_persistence() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = StorageManager::new(temp_dir.path()).unwrap();
+        
+        let address = [1u8; 33];
+        let account = Account {
+            balance: 1000,
+            nonce: 5,
+        };
+        
+        storage.store_account(&address, &account).unwrap();
+        
+        let retrieved = storage.get_account(&address).unwrap();
+        assert!(retrieved.is_some());
+        
+        let retrieved_account = retrieved.unwrap();
+        assert_eq!(retrieved_account.balance, 1000);
+        assert_eq!(retrieved_account.nonce, 5);
+    }
+
+    #[test]
+    fn test_bond_persistence() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = StorageManager::new(temp_dir.path()).unwrap();
+        
+        let miner_id = [2u8; 33];
+        let bond = BondState {
+            amount: 5000,
+            status: crate::BondStatus::Active,
+            locked_epoch: 0,
+        };
+        
+        storage.store_bond(&miner_id, &bond).unwrap();
+        
+        let retrieved = storage.get_bond(&miner_id).unwrap();
+        assert!(retrieved.is_some());
+        
+        let retrieved_bond = retrieved.unwrap();
+        assert_eq!(retrieved_bond.amount, 5000);
+        assert_eq!(retrieved_bond.status, crate::BondStatus::Active);
+    }
+
+    #[test]
+    fn test_pruning_with_snapshots() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = StorageManager::new(temp_dir.path()).unwrap();
+        
+        // Create blocks and snapshots
+        for height in 0..100 {
+            let hash = format!("hash_{}", height);
+            let header = format!("header_{}", height);
+            storage.store_header(height, hash.as_bytes(), header.as_bytes()).unwrap();
+            
+            // Create snapshot every 10 blocks
+            if height % 10 == 0 {
+                let state_root = format!("root_{}", height);
+                let accounts = format!("accounts_{}", height);
+                storage.create_snapshot(height, state_root.as_bytes(), accounts.as_bytes()).unwrap();
+            }
+        }
+        
+        // Prune old blocks, keeping last 20
+        storage.prune_old_blocks(20).unwrap();
+        
+        // Old blocks should be gone
+        assert_eq!(storage.get_header_by_height(50).unwrap(), None);
+        
+        // Recent blocks should exist
+        assert!(storage.get_header_by_height(90).unwrap().is_some());
+        
+        // Snapshots should still exist even for pruned blocks
+        let snap = storage.get_snapshot(70).unwrap();
+        assert!(snap.is_some());
+    }
+
+    #[test]
+    fn test_concurrent_transaction_indexing() {
+        use std::sync::Arc;
+        use std::thread;
+        
+        let temp_dir = TempDir::new().unwrap();
+        let storage = Arc::new(StorageManager::new(temp_dir.path()).unwrap());
+        
+        let mut handles = vec![];
+        
+        // Spawn multiple threads writing transactions
+        for thread_id in 0..5 {
+            let storage_clone = Arc::clone(&storage);
+            let handle = thread::spawn(move || {
+                for i in 0..10 {
+                    let tx_hash = format!("tx_{}_{:032}", thread_id, i);
+                    let sender = format!("sender_{:034}", thread_id);  // Fixed length
+                    let tx_data = format!("data_{}_{}", thread_id, i);
+                    
+                    storage_clone.store_transaction(
+                        tx_hash.as_bytes(),
+                        sender.as_bytes(),
+                        tx_data.as_bytes(),
+                        (thread_id * 10 + i) as u64,
+                    ).unwrap();
+                }
+            });
+            handles.push(handle);
+        }
+        
+        // Wait for all threads
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        
+        // Verify all transactions were stored
+        for thread_id in 0..5 {
+            let sender = format!("sender_{:034}", thread_id);  // Fixed length
+            let txs = storage.get_transactions_by_sender(sender.as_bytes(), 0).unwrap();
+            assert_eq!(txs.len(), 10);
+        }
+    }
+
+    #[test]
+    fn test_state_root_tracking() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = StorageManager::new(temp_dir.path()).unwrap();
+        
+        // Store state roots for multiple heights
+        for height in 0..10 {
+            let root = format!("state_root_{:032}", height);
+            storage.store_state_root(height, root.as_bytes()).unwrap();
+        }
+        
+        // Verify all stored
+        for height in 0..10 {
+            let root = storage.get_state_root(height).unwrap();
+            assert!(root.is_some());
+            
+            let expected = format!("state_root_{:032}", height);
+            assert_eq!(root.unwrap().as_slice(), expected.as_bytes());
+        }
     }
 }

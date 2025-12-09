@@ -96,6 +96,9 @@ use ark_std::rand::thread_rng;
 impl BattleCircuit {
     /// Setup the circuit and generate proving/verifying keys
     ///
+    /// Note: This generates keys with random parameters. For production use,
+    /// use `load_ceremony_keys()` to load keys from the trusted setup ceremony.
+    ///
     /// Returns an error if the circuit setup fails (e.g., due to constraint system issues).
     pub fn setup() -> crate::Result<(ProvingKey<ark_bn254::Bn254>, VerifyingKey<ark_bn254::Bn254>)> {
         let rng = &mut thread_rng();
@@ -110,6 +113,65 @@ impl BattleCircuit {
             rng,
         )
         .map_err(|e| crate::Error::ProofGeneration(format!("Circuit setup failed: {}", e)))
+    }
+
+    /// Load proving key from ceremony output
+    ///
+    /// # Arguments
+    /// * `path` - Path to the proving key file (default: "keys/battle/proving_key.bin")
+    ///
+    /// # Returns
+    /// The proving key for this circuit
+    ///
+    /// # Example
+    /// ```no_run
+    /// use bitcell_zkp::BattleCircuit;
+    ///
+    /// let pk = BattleCircuit::load_proving_key("keys/battle/proving_key.bin")?;
+    /// # Ok::<(), bitcell_zkp::Error>(())
+    /// ```
+    pub fn load_proving_key(path: &str) -> crate::Result<ProvingKey<ark_bn254::Bn254>> {
+        crate::key_management::load_proving_key(path)
+    }
+
+    /// Load verification key from ceremony output
+    ///
+    /// # Arguments
+    /// * `path` - Path to the verification key file (default: "keys/battle/verification_key.bin")
+    ///
+    /// # Returns
+    /// The verification key for this circuit
+    ///
+    /// # Example
+    /// ```no_run
+    /// use bitcell_zkp::BattleCircuit;
+    ///
+    /// let vk = BattleCircuit::load_verification_key("keys/battle/verification_key.bin")?;
+    /// # Ok::<(), bitcell_zkp::Error>(())
+    /// ```
+    pub fn load_verification_key(path: &str) -> crate::Result<VerifyingKey<ark_bn254::Bn254>> {
+        crate::key_management::load_verification_key(path)
+    }
+
+    /// Load both proving and verification keys from ceremony outputs
+    ///
+    /// Uses default key paths: "keys/battle/proving_key.bin" and "keys/battle/verification_key.bin"
+    ///
+    /// # Returns
+    /// Tuple of (proving_key, verification_key)
+    ///
+    /// # Example
+    /// ```no_run
+    /// use bitcell_zkp::BattleCircuit;
+    ///
+    /// let (pk, vk) = BattleCircuit::load_ceremony_keys()?;
+    /// # Ok::<(), bitcell_zkp::Error>(())
+    /// ```
+    pub fn load_ceremony_keys() -> crate::Result<(ProvingKey<ark_bn254::Bn254>, VerifyingKey<ark_bn254::Bn254>)> {
+        let (pk_path, vk_path) = crate::key_management::default_key_paths(crate::KeyType::Battle);
+        let pk = Self::load_proving_key(&pk_path)?;
+        let vk = Self::load_verification_key(&vk_path)?;
+        Ok((pk, vk))
     }
 
     /// Generate a proof for this circuit instance

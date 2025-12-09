@@ -291,7 +291,7 @@ impl BatchVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BattleCircuit, StateCircuit};
+    use crate::BattleCircuit;
     use ark_ff::One;
 
     #[test]

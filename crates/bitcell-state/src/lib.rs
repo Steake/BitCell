@@ -5,15 +5,18 @@
 //! - Bond management
 //! - State Merkle tree
 //! - Nullifier set
+//! - Key image tracking for double-spend prevention
 //! - Persistent storage with RocksDB
 
 pub mod account;
 pub mod bonds;
 pub mod storage;
+pub mod key_images;
 
 pub use account::{Account, AccountState};
 pub use bonds::{BondState, BondStatus};
 pub use storage::{StorageManager, PruningStats};
+pub use key_images::KeyImageRegistry;
 
 use bitcell_crypto::Hash256;
 use std::collections::HashMap;

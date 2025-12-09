@@ -12,6 +12,15 @@ use curve25519_dalek::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
 
+/// Minimum ring size for CLSAG signatures
+pub const MIN_RING_SIZE: usize = 11;
+
+/// Maximum ring size for CLSAG signatures
+pub const MAX_RING_SIZE: usize = 64;
+
+/// Default ring size for CLSAG signatures
+pub const DEFAULT_RING_SIZE: usize = 16;
+
 /// CLSAG public key (Ristretto point)
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct ClsagPublicKey([u8; 32]);
@@ -65,7 +74,7 @@ impl ClsagSecretKey {
 }
 
 /// Key image for double-spending detection
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct KeyImage([u8; 32]);
 
 impl KeyImage {
@@ -82,7 +91,7 @@ impl KeyImage {
 }
 
 /// CLSAG ring signature
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ClsagSignature {
     key_image: KeyImage,
     #[serde(with = "scalar_serde")]
@@ -149,6 +158,23 @@ mod scalar_vec_serde {
 }
 
 impl ClsagSignature {
+    /// Validate ring size is within acceptable bounds
+    fn validate_ring_size(ring_size: usize) -> Result<()> {
+        if ring_size < MIN_RING_SIZE {
+            return Err(Error::RingSignature(format!(
+                "Ring size {} is below minimum {}",
+                ring_size, MIN_RING_SIZE
+            )));
+        }
+        if ring_size > MAX_RING_SIZE {
+            return Err(Error::RingSignature(format!(
+                "Ring size {} exceeds maximum {}",
+                ring_size, MAX_RING_SIZE
+            )));
+        }
+        Ok(())
+    }
+
     /// Sign a message with a ring of public keys
     pub fn sign(
         secret_key: &ClsagSecretKey,
@@ -158,6 +184,9 @@ impl ClsagSignature {
         if ring.is_empty() {
             return Err(Error::RingSignature("Empty ring".to_string()));
         }
+
+        // Validate ring size
+        Self::validate_ring_size(ring.len())?;
 
         let signer_pk = secret_key.public_key();
         let pi = ring
@@ -239,6 +268,10 @@ impl ClsagSignature {
     /// Verify the ring signature
     pub fn verify(&self, ring: &[ClsagPublicKey], message: &[u8]) -> Result<()> {
         let n = ring.len();
+        
+        // Validate ring size
+        Self::validate_ring_size(n)?;
+        
         if self.s.len() != n {
             return Err(Error::RingSignature("Invalid signature length".to_string()));
         }
@@ -327,26 +360,23 @@ mod tests {
 
     #[test]
     fn test_clsag_sign_and_verify() {
-        let sk1 = ClsagSecretKey::generate();
-        let sk2 = ClsagSecretKey::generate();
-        let sk3 = ClsagSecretKey::generate();
-
-        let ring = vec![sk1.public_key(), sk2.public_key(), sk3.public_key()];
+        // Generate a ring of minimum size
+        let sks: Vec<ClsagSecretKey> = (0..MIN_RING_SIZE).map(|_| ClsagSecretKey::generate()).collect();
+        let ring: Vec<ClsagPublicKey> = sks.iter().map(|sk| sk.public_key()).collect();
 
         let message = b"tournament commitment";
-        let sig = ClsagSignature::sign(&sk2, &ring, message).unwrap();
+        let sig = ClsagSignature::sign(&sks[5], &ring, message).unwrap();
 
         assert!(sig.verify(&ring, message).is_ok());
     }
 
     #[test]
     fn test_clsag_wrong_message() {
-        let sk1 = ClsagSecretKey::generate();
-        let sk2 = ClsagSecretKey::generate();
+        // Generate a ring of minimum size
+        let sks: Vec<ClsagSecretKey> = (0..MIN_RING_SIZE).map(|_| ClsagSecretKey::generate()).collect();
+        let ring: Vec<ClsagPublicKey> = sks.iter().map(|sk| sk.public_key()).collect();
 
-        let ring = vec![sk1.public_key(), sk2.public_key()];
-
-        let sig = ClsagSignature::sign(&sk1, &ring, b"original").unwrap();
+        let sig = ClsagSignature::sign(&sks[0], &ring, b"original").unwrap();
 
         // Verification with wrong message should fail
         assert!(sig.verify(&ring, b"tampered").is_err());
@@ -354,23 +384,21 @@ mod tests {
 
     #[test]
     fn test_clsag_not_in_ring() {
-        let sk1 = ClsagSecretKey::generate();
-        let sk2 = ClsagSecretKey::generate();
-        let sk3 = ClsagSecretKey::generate();
+        let sks: Vec<ClsagSecretKey> = (0..MIN_RING_SIZE).map(|_| ClsagSecretKey::generate()).collect();
+        let ring: Vec<ClsagPublicKey> = sks.iter().map(|sk| sk.public_key()).collect();
+        let sk_outsider = ClsagSecretKey::generate();
 
-        let ring = vec![sk1.public_key(), sk2.public_key()];
-
-        let result = ClsagSignature::sign(&sk3, &ring, b"message");
+        let result = ClsagSignature::sign(&sk_outsider, &ring, b"message");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_key_image_linkability() {
-        let sk = ClsagSecretKey::generate();
-        let ring = vec![sk.public_key(), ClsagSecretKey::generate().public_key()];
+        let sks: Vec<ClsagSecretKey> = (0..MIN_RING_SIZE).map(|_| ClsagSecretKey::generate()).collect();
+        let ring: Vec<ClsagPublicKey> = sks.iter().map(|sk| sk.public_key()).collect();
 
-        let sig1 = ClsagSignature::sign(&sk, &ring, b"msg1").unwrap();
-        let sig2 = ClsagSignature::sign(&sk, &ring, b"msg2").unwrap();
+        let sig1 = ClsagSignature::sign(&sks[0], &ring, b"msg1").unwrap();
+        let sig2 = ClsagSignature::sign(&sks[0], &ring, b"msg2").unwrap();
 
         // Same signer should produce same key image
         assert_eq!(sig1.key_image(), sig2.key_image());
@@ -378,12 +406,11 @@ mod tests {
 
     #[test]
     fn test_different_signers_different_key_images() {
-        let sk1 = ClsagSecretKey::generate();
-        let sk2 = ClsagSecretKey::generate();
-        let ring = vec![sk1.public_key(), sk2.public_key()];
+        let sks: Vec<ClsagSecretKey> = (0..MIN_RING_SIZE).map(|_| ClsagSecretKey::generate()).collect();
+        let ring: Vec<ClsagPublicKey> = sks.iter().map(|sk| sk.public_key()).collect();
 
-        let sig1 = ClsagSignature::sign(&sk1, &ring, b"msg").unwrap();
-        let sig2 = ClsagSignature::sign(&sk2, &ring, b"msg").unwrap();
+        let sig1 = ClsagSignature::sign(&sks[0], &ring, b"msg").unwrap();
+        let sig2 = ClsagSignature::sign(&sks[1], &ring, b"msg").unwrap();
 
         // Different signers should have different key images
         assert_ne!(sig1.key_image(), sig2.key_image());
@@ -391,16 +418,64 @@ mod tests {
 
     #[test]
     fn test_wrong_ring() {
-        let sk1 = ClsagSecretKey::generate();
-        let sk2 = ClsagSecretKey::generate();
-        let sk3 = ClsagSecretKey::generate();
+        let sks: Vec<ClsagSecretKey> = (0..MIN_RING_SIZE + 2).map(|_| ClsagSecretKey::generate()).collect();
+        let ring1: Vec<ClsagPublicKey> = sks[0..MIN_RING_SIZE].iter().map(|sk| sk.public_key()).collect();
+        let ring2: Vec<ClsagPublicKey> = sks[1..MIN_RING_SIZE + 1].iter().map(|sk| sk.public_key()).collect();
 
-        let ring1 = vec![sk1.public_key(), sk2.public_key()];
-        let ring2 = vec![sk1.public_key(), sk3.public_key()];
-
-        let sig = ClsagSignature::sign(&sk1, &ring1, b"msg").unwrap();
+        let sig = ClsagSignature::sign(&sks[0], &ring1, b"msg").unwrap();
 
         // Verification with different ring should fail
         assert!(sig.verify(&ring2, b"msg").is_err());
+    }
+
+    #[test]
+    fn test_ring_size_too_small() {
+        let sks: Vec<ClsagSecretKey> = (0..10).map(|_| ClsagSecretKey::generate()).collect();
+        let ring: Vec<ClsagPublicKey> = sks.iter().map(|sk| sk.public_key()).collect();
+
+        // Ring size 10 is below minimum of 11
+        let result = ClsagSignature::sign(&sks[0], &ring, b"msg");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("below minimum"));
+    }
+
+    #[test]
+    fn test_ring_size_too_large() {
+        let sks: Vec<ClsagSecretKey> = (0..65).map(|_| ClsagSecretKey::generate()).collect();
+        let ring: Vec<ClsagPublicKey> = sks.iter().map(|sk| sk.public_key()).collect();
+
+        // Ring size 65 exceeds maximum of 64
+        let result = ClsagSignature::sign(&sks[0], &ring, b"msg");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("exceeds maximum"));
+    }
+
+    #[test]
+    fn test_ring_size_minimum() {
+        let sks: Vec<ClsagSecretKey> = (0..MIN_RING_SIZE).map(|_| ClsagSecretKey::generate()).collect();
+        let ring: Vec<ClsagPublicKey> = sks.iter().map(|sk| sk.public_key()).collect();
+
+        let sig = ClsagSignature::sign(&sks[0], &ring, b"msg").unwrap();
+        assert!(sig.verify(&ring, b"msg").is_ok());
+    }
+
+    #[test]
+    fn test_ring_size_default() {
+        let sks: Vec<ClsagSecretKey> = (0..DEFAULT_RING_SIZE).map(|_| ClsagSecretKey::generate()).collect();
+        let ring: Vec<ClsagPublicKey> = sks.iter().map(|sk| sk.public_key()).collect();
+
+        let sig = ClsagSignature::sign(&sks[5], &ring, b"msg").unwrap();
+        assert!(sig.verify(&ring, b"msg").is_ok());
+    }
+
+    #[test]
+    fn test_ring_size_maximum() {
+        let sks: Vec<ClsagSecretKey> = (0..MAX_RING_SIZE).map(|_| ClsagSecretKey::generate()).collect();
+        let ring: Vec<ClsagPublicKey> = sks.iter().map(|sk| sk.public_key()).collect();
+
+        let sig = ClsagSignature::sign(&sks[10], &ring, b"msg").unwrap();
+        assert!(sig.verify(&ring, b"msg").is_ok());
     }
 }

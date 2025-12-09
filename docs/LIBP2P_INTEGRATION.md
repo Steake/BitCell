@@ -161,6 +161,8 @@ pub struct CompactBlock {
     pub header: BlockHeader,           // Full header (~200 bytes)
     pub short_tx_ids: Vec<[u8; 8]>,   // 8-byte short IDs
     pub prefilled_txs: Vec<Transaction>, // Coinbase + critical txs
+    pub battle_proofs: Vec<BattleProof>, // Preserved from original
+    pub signature: Signature,            // Preserved from original
 }
 ```
 
@@ -170,6 +172,7 @@ pub struct CompactBlock {
    - Include full header
    - Include first transaction (coinbase/reward)
    - Replace other transactions with 8-byte short IDs
+   - Preserve battle proofs and signature
 3. Broadcast compact block
 4. Receiving nodes reconstruct block from mempool
 5. If transactions are missing, request full block

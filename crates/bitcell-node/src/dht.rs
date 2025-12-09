@@ -47,6 +47,10 @@ pub struct CompactBlock {
     pub short_tx_ids: Vec<[u8; 8]>,
     /// Prefilled transactions (coinbase/critical txs)
     pub prefilled_txs: Vec<Transaction>,
+    /// Battle proofs (preserved from original block)
+    pub battle_proofs: Vec<bitcell_consensus::BattleProof>,
+    /// Block signature (preserved from original block)
+    pub signature: bitcell_crypto::Signature,
 }
 
 impl CompactBlock {
@@ -73,6 +77,8 @@ impl CompactBlock {
             header: block.header.clone(),
             short_tx_ids,
             prefilled_txs,
+            battle_proofs: block.battle_proofs.clone(),
+            signature: block.signature,
         }
     }
     
@@ -100,8 +106,8 @@ impl CompactBlock {
         Some(Block {
             header: self.header.clone(),
             transactions,
-            battle_proofs: vec![], // TODO: Handle battle proofs
-            signature: bitcell_crypto::Signature::from_bytes([0u8; 64]),
+            battle_proofs: self.battle_proofs.clone(),
+            signature: self.signature,
         })
     }
 }

@@ -8,15 +8,457 @@ use axum::{
     Router,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::mpsc;
 use tokio::time;
 use crate::rpc::RpcState;
-use serde_json::json;
+
+/// Maximum subscriptions per client
+const MAX_SUBSCRIPTIONS_PER_CLIENT: usize = 100;
+
+/// Rate limit: max messages per second per client
+const RATE_LIMIT_PER_SEC: usize = 100;
+
+/// Client connection heartbeat interval
+const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 
 pub fn ws_router() -> Router<RpcState> {
     Router::new()
+        .route("/", get(json_rpc_handler))
         .route("/battles", get(battles_handler))
         .route("/blocks", get(blocks_handler))
+}
+
+/// JSON-RPC subscription request
+#[derive(Debug, Deserialize)]
+struct SubscriptionRequest {
+    jsonrpc: String,
+    id: Value,
+    method: String,
+    params: Option<Vec<Value>>,
+}
+
+/// JSON-RPC subscription response
+#[derive(Debug, Serialize)]
+struct SubscriptionResponse {
+    jsonrpc: String,
+    id: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<JsonRpcError>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonRpcError {
+    code: i32,
+    message: String,
+}
+
+/// Subscription notification
+#[derive(Debug, Serialize)]
+struct SubscriptionNotification {
+    jsonrpc: String,
+    method: String,
+    params: SubscriptionParams,
+}
+
+#[derive(Debug, Serialize)]
+struct SubscriptionParams {
+    subscription: String,
+    result: Value,
+}
+
+/// Subscription type
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum SubscriptionType {
+    NewHeads,
+    Logs(LogFilter),
+    PendingTransactions,
+}
+
+/// Log filter for subscriptions
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Default)]
+struct LogFilter {
+    #[serde(default)]
+    address: Option<Vec<String>>,
+    #[serde(default)]
+    topics: Option<Vec<Option<Vec<String>>>>,
+}
+
+/// Subscription manager
+struct SubscriptionManager {
+    subscriptions: Arc<RwLock<HashMap<String, (SubscriptionType, mpsc::UnboundedSender<Value>)>>>,
+    next_id: Arc<RwLock<u64>>,
+}
+
+impl SubscriptionManager {
+    fn new() -> Self {
+        Self {
+            subscriptions: Arc::new(RwLock::new(HashMap::new())),
+            next_id: Arc::new(RwLock::new(1)),
+        }
+    }
+
+    fn subscribe(&self, sub_type: SubscriptionType, tx: mpsc::UnboundedSender<Value>) -> String {
+        let mut next_id = self.next_id.write();
+        let id = *next_id;
+        *next_id += 1;
+        drop(next_id);
+
+        let sub_id = format!("0x{:x}", id);
+        self.subscriptions.write().insert(sub_id.clone(), (sub_type, tx));
+        sub_id
+    }
+
+    fn unsubscribe(&self, sub_id: &str) -> bool {
+        self.subscriptions.write().remove(sub_id).is_some()
+    }
+
+    fn broadcast(&self, sub_type: &SubscriptionType, data: Value) {
+        let subs = self.subscriptions.read();
+        for (sub_id, (stype, tx)) in subs.iter() {
+            if matches_subscription(stype, sub_type) {
+                let notification = json!({
+                    "jsonrpc": "2.0",
+                    "method": "eth_subscription",
+                    "params": {
+                        "subscription": sub_id,
+                        "result": data.clone()
+                    }
+                });
+                let _ = tx.send(notification);
+            }
+        }
+    }
+}
+
+fn matches_subscription(actual: &SubscriptionType, expected: &SubscriptionType) -> bool {
+    match (actual, expected) {
+        (SubscriptionType::NewHeads, SubscriptionType::NewHeads) => true,
+        (SubscriptionType::PendingTransactions, SubscriptionType::PendingTransactions) => true,
+        (SubscriptionType::Logs(filter1), SubscriptionType::Logs(filter2)) => {
+            matches_log_filter(filter1, filter2)
+        }
+        _ => false,
+    }
+}
+
+fn matches_log_filter(filter: &LogFilter, log_event: &LogFilter) -> bool {
+    // Check address filter
+    if let Some(addresses) = &filter.address {
+        if let Some(event_addresses) = &log_event.address {
+            if !addresses.is_empty() && !event_addresses.iter().any(|a| addresses.contains(a)) {
+                return false;
+            }
+        }
+    }
+
+    // Check topic filter
+    if let Some(filter_topics) = &filter.topics {
+        if let Some(event_topics) = &log_event.topics {
+            for (i, filter_topic) in filter_topics.iter().enumerate() {
+                if let Some(topic_options) = filter_topic {
+                    if let Some(event_topic) = event_topics.get(i) {
+                        if let Some(event_topic_list) = event_topic {
+                            if !event_topic_list.iter().any(|t| topic_options.contains(t)) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    true
+}
+
+/// Handle JSON-RPC WebSocket for eth_subscribe
+async fn json_rpc_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<RpcState>,
+) -> impl IntoResponse {
+    ws.on_upgrade(|socket| handle_json_rpc_socket(socket, state))
+}
+
+async fn handle_json_rpc_socket(socket: WebSocket, state: RpcState) {
+    let (mut sender, mut receiver) = socket.split();
+    let subscription_manager = Arc::new(SubscriptionManager::new());
+    let (tx, mut rx) = mpsc::unbounded_channel::<Value>();
+    
+    let subscription_count = Arc::new(RwLock::new(0usize));
+    let message_count = Arc::new(RwLock::new(0usize));
+    let last_reset = Arc::new(RwLock::new(time::Instant::now()));
+
+    // Spawn task to send notifications to client
+    let mut send_task = {
+        let subscription_manager = subscription_manager.clone();
+        tokio::spawn(async move {
+            while let Some(notification) = rx.recv().await {
+                if let Err(e) = sender.send(Message::Text(notification.to_string())).await {
+                    tracing::debug!("Failed to send notification: {}", e);
+                    break;
+                }
+            }
+        })
+    };
+
+    // Spawn task to monitor new blocks and broadcast to subscribers
+    let mut block_monitor_task = {
+        let subscription_manager = subscription_manager.clone();
+        let state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = time::interval(Duration::from_secs(1));
+            let mut last_height = state.blockchain.height();
+
+            loop {
+                interval.tick().await;
+                let current_height = state.blockchain.height();
+                if current_height > last_height {
+                    if let Some(block) = state.blockchain.get_block(current_height) {
+                        let block_data = json!({
+                            "number": format!("0x{:x}", block.header.height),
+                            "hash": format!("0x{}", hex::encode(block.hash().as_bytes())),
+                            "parentHash": format!("0x{}", hex::encode(block.header.prev_hash.as_bytes())),
+                            "timestamp": format!("0x{:x}", block.header.timestamp),
+                            "miner": format!("0x{}", hex::encode(block.header.proposer.as_bytes())),
+                            "transactionsRoot": format!("0x{}", hex::encode(block.header.tx_root.as_bytes())),
+                            "stateRoot": format!("0x{}", hex::encode(block.header.state_root.as_bytes())),
+                        });
+                        subscription_manager.broadcast(&SubscriptionType::NewHeads, block_data);
+                    }
+                    last_height = current_height;
+                }
+            }
+        })
+    };
+
+    // Spawn task to monitor pending transactions
+    let mut pending_tx_monitor_task = {
+        let subscription_manager = subscription_manager.clone();
+        let state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = time::interval(Duration::from_millis(500));
+            let mut last_tx_count = 0;
+
+            loop {
+                interval.tick().await;
+                let current_count = state.tx_pool.pending_count();
+                if current_count > last_tx_count {
+                    // Get new transactions (simplified - in production would track which txs are new)
+                    let pending_txs = state.tx_pool.get_pending_transactions();
+                    for tx in pending_txs.iter().skip(last_tx_count) {
+                        let tx_hash = format!("0x{}", hex::encode(tx.hash().as_bytes()));
+                        subscription_manager.broadcast(&SubscriptionType::PendingTransactions, json!(tx_hash));
+                    }
+                }
+                last_tx_count = current_count;
+            }
+        })
+    };
+
+    // Handle incoming messages
+    loop {
+        tokio::select! {
+            msg = receiver.next() => {
+                match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        // Rate limiting check
+                        {
+                            let now = time::Instant::now();
+                            let mut last_reset_guard = last_reset.write();
+                            if now.duration_since(*last_reset_guard) >= Duration::from_secs(1) {
+                                *message_count.write() = 0;
+                                *last_reset_guard = now;
+                            }
+                        }
+
+                        {
+                            let mut count = message_count.write();
+                            *count += 1;
+                            if *count > RATE_LIMIT_PER_SEC {
+                                let error_msg = json!({
+                                    "jsonrpc": "2.0",
+                                    "id": null,
+                                    "error": {
+                                        "code": -32005,
+                                        "message": "Rate limit exceeded"
+                                    }
+                                });
+                                let _ = tx.send(error_msg);
+                                tracing::warn!("Client exceeded rate limit");
+                                continue;
+                            }
+                        }
+
+                        match serde_json::from_str::<SubscriptionRequest>(&text) {
+                            Ok(req) => {
+                                let response = handle_subscription_request(
+                                    req,
+                                    &subscription_manager,
+                                    tx.clone(),
+                                    &subscription_count,
+                                ).await;
+                                
+                                let _ = tx.send(serde_json::to_value(response).unwrap_or(json!({})));
+                            }
+                            Err(e) => {
+                                tracing::debug!("Invalid JSON-RPC request: {}", e);
+                                let error_response = SubscriptionResponse {
+                                    jsonrpc: "2.0".to_string(),
+                                    id: Value::Null,
+                                    result: None,
+                                    error: Some(JsonRpcError {
+                                        code: -32700,
+                                        message: "Parse error".to_string(),
+                                    }),
+                                };
+                                let _ = tx.send(serde_json::to_value(error_response).unwrap_or(json!({})));
+                            }
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | None => {
+                        tracing::debug!("WebSocket closed");
+                        break;
+                    }
+                    Some(Ok(Message::Ping(_))) => {
+                        // Handled automatically by axum
+                    }
+                    Some(Err(e)) => {
+                        tracing::error!("WebSocket error: {}", e);
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    // Cleanup
+    send_task.abort();
+    block_monitor_task.abort();
+    pending_tx_monitor_task.abort();
+}
+
+async fn handle_subscription_request(
+    req: SubscriptionRequest,
+    subscription_manager: &SubscriptionManager,
+    tx: mpsc::UnboundedSender<Value>,
+    subscription_count: &Arc<RwLock<usize>>,
+) -> SubscriptionResponse {
+    if req.jsonrpc != "2.0" {
+        return SubscriptionResponse {
+            jsonrpc: "2.0".to_string(),
+            id: req.id,
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32600,
+                message: "Invalid Request".to_string(),
+            }),
+        };
+    }
+
+    match req.method.as_str() {
+        "eth_subscribe" => {
+            let count = *subscription_count.read();
+            if count >= MAX_SUBSCRIPTIONS_PER_CLIENT {
+                return SubscriptionResponse {
+                    jsonrpc: "2.0".to_string(),
+                    id: req.id,
+                    result: None,
+                    error: Some(JsonRpcError {
+                        code: -32005,
+                        message: format!("Exceeded max subscriptions ({})", MAX_SUBSCRIPTIONS_PER_CLIENT),
+                    }),
+                };
+            }
+
+            if let Some(params) = req.params {
+                if let Some(sub_type_str) = params.get(0).and_then(|v| v.as_str()) {
+                    let sub_type = match sub_type_str {
+                        "newHeads" => Some(SubscriptionType::NewHeads),
+                        "logs" => {
+                            let filter = if params.len() > 1 {
+                                serde_json::from_value(params[1].clone()).unwrap_or_default()
+                            } else {
+                                LogFilter::default()
+                            };
+                            Some(SubscriptionType::Logs(filter))
+                        }
+                        "pendingTransactions" => Some(SubscriptionType::PendingTransactions),
+                        _ => None,
+                    };
+
+                    if let Some(sub_type) = sub_type {
+                        let sub_id = subscription_manager.subscribe(sub_type, tx);
+                        *subscription_count.write() += 1;
+                        
+                        return SubscriptionResponse {
+                            jsonrpc: "2.0".to_string(),
+                            id: req.id,
+                            result: Some(json!(sub_id)),
+                            error: None,
+                        };
+                    }
+                }
+            }
+
+            SubscriptionResponse {
+                jsonrpc: "2.0".to_string(),
+                id: req.id,
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32602,
+                    message: "Invalid params".to_string(),
+                }),
+            }
+        }
+        "eth_unsubscribe" => {
+            if let Some(params) = req.params {
+                if let Some(sub_id) = params.get(0).and_then(|v| v.as_str()) {
+                    let success = subscription_manager.unsubscribe(sub_id);
+                    if success {
+                        let mut count = subscription_count.write();
+                        if *count > 0 {
+                            *count -= 1;
+                        }
+                    }
+                    
+                    return SubscriptionResponse {
+                        jsonrpc: "2.0".to_string(),
+                        id: req.id,
+                        result: Some(json!(success)),
+                        error: None,
+                    };
+                }
+            }
+
+            SubscriptionResponse {
+                jsonrpc: "2.0".to_string(),
+                id: req.id,
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32602,
+                    message: "Invalid params".to_string(),
+                }),
+            }
+        }
+        _ => SubscriptionResponse {
+            jsonrpc: "2.0".to_string(),
+            id: req.id,
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32601,
+                message: "Method not found".to_string(),
+            }),
+        },
+    }
 }
 
 async fn battles_handler(

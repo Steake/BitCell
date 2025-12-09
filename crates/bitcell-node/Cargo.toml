@@ -39,3 +39,4 @@ base64 = "0.21"
 
 [dev-dependencies]
 proptest.workspace = true
+tokio-tungstenite = "0.21"

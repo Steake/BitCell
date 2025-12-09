@@ -1,29 +1,39 @@
 //! ZK-SNARK circuits for BitCell
 //!
-//! Implements modular Groth16 circuits for:
+//! Implements modular circuits for:
 //! - Battle verification (CA evolution + commitment consistency)
 //! - State transition verification (Merkle updates)
 //! - Merkle tree inclusion proofs
+//! - Proof aggregation for efficient block verification
 //!
-//! Note: v0.1 provides circuit structure and basic constraints.
-//! Full CA evolution verification requires extensive constraint programming.
+//! **Proof System:**
+//! Currently uses Groth16 with batch verification and aggregation commitments.
+//! The aggregation module provides a forward-compatible API for future migration
+//! to universal SNARKs (Plonk, Halo2) or recursive schemes (Nova, Arecibo).
 
+// Groth16 circuits
 pub mod battle_circuit;
 pub mod state_circuit;
 
-// New: Full constraint implementations
+// Full constraint implementations
 pub mod battle_constraints;
 pub mod state_constraints;
 
 // Merkle tree verification gadgets
 pub mod merkle_gadget;
-// Production-ready Poseidon-based Merkle verification
 pub mod poseidon_merkle;
 
+// Proof aggregation and batch verification
+pub mod aggregation;
+
+// Circuit exports
 pub use battle_circuit::BattleCircuit;
 pub use state_circuit::StateCircuit;
 pub use merkle_gadget::{MerklePathGadget, MERKLE_DEPTH};
 pub use poseidon_merkle::{PoseidonMerkleGadget, POSEIDON_MERKLE_DEPTH};
+
+// Aggregation exports
+pub use aggregation::{ProofAggregator, BlockProofAggregator, BatchVerifier};
 
 use serde::{Deserialize, Serialize};
 

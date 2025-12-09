@@ -52,6 +52,14 @@ impl AzureKeyVaultBackend {
             .as_ref()
             .ok_or_else(|| HsmError::InvalidConfig("Azure client secret required".into()))?;
 
+        // Get tenant ID (defaults to "common" for multi-tenant apps)
+        let tenant_id = config
+            .credentials
+            .tenant_id
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or("common");
+
         // Parse vault URL from endpoint
         let vault_url = if config.endpoint.starts_with("http://") || config.endpoint.starts_with("https://") {
             config.endpoint.clone()
@@ -62,7 +70,7 @@ impl AzureKeyVaultBackend {
         // Create Azure credentials using client credentials flow
         let credential = azure_identity::ClientSecretCredential::new(
             azure_core::new_http_client(),
-            "common".to_string(), // tenant_id - should be configurable
+            tenant_id.to_string(),
             client_id.clone(),
             client_secret.clone(),
         );

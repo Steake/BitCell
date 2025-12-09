@@ -251,8 +251,18 @@ impl AwsHsmBackend {
 
     /// Parse DER-encoded ECDSA signature
     /// This is a simplified parser for SEQUENCE { INTEGER r, INTEGER s }
+    /// 
+    /// # Security Note
+    /// This is a basic implementation for demonstration. For production use,
+    /// consider using a well-tested DER parsing library like:
+    /// - `der` crate (part of RustCrypto)
+    /// - `simple_asn1` crate
+    /// - `yasna` crate
+    /// 
+    /// These libraries provide proper validation and error handling for
+    /// security-critical signature data.
     fn parse_der_signature(der: &[u8]) -> Result<Signature, bitcell_crypto::CryptoError> {
-        // Very basic DER parser - for production, use a proper DER library
+        // Very basic DER parser - validates SEQUENCE structure
         if der.len() < 8 || der[0] != 0x30 {
             return Err(bitcell_crypto::CryptoError::InvalidSignature);
         }

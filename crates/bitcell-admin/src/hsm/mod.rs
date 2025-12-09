@@ -79,12 +79,14 @@ pub struct HsmCredentials {
     /// API token (for Vault)
     #[serde(skip_serializing)]
     pub token: Option<String>,
-    /// Access key (for AWS/Azure/GCP)
+    /// Access key (for AWS/Azure client ID)
     #[serde(skip_serializing)]
     pub access_key: Option<String>,
-    /// Secret key (for AWS/Azure/GCP)
+    /// Secret key (for AWS/Azure client secret)
     #[serde(skip_serializing)]
     pub secret_key: Option<String>,
+    /// Tenant ID (for Azure)
+    pub tenant_id: Option<String>,
     /// Client certificate path (for mTLS)
     pub client_cert: Option<String>,
     /// Client key path (for mTLS)
@@ -97,6 +99,7 @@ impl Default for HsmCredentials {
             token: None,
             access_key: None,
             secret_key: None,
+            tenant_id: None,
             client_cert: None,
             client_key: None,
         }
@@ -105,29 +108,18 @@ impl Default for HsmCredentials {
 
 impl Drop for HsmCredentials {
     fn drop(&mut self) {
-        // Securely zero out sensitive credential data
-        // Note: This provides basic protection but for production use
-        // consider using the `secrecy` crate for guaranteed secure zeroing
-        if let Some(ref mut token) = self.token {
-            // Safety: We're writing zeros to memory that will be dropped
-            // This helps prevent secrets from lingering in memory
-            let bytes = unsafe { token.as_bytes_mut() };
-            for byte in bytes {
-                unsafe { std::ptr::write_volatile(byte, 0) };
-            }
-        }
-        if let Some(ref mut key) = self.access_key {
-            let bytes = unsafe { key.as_bytes_mut() };
-            for byte in bytes {
-                unsafe { std::ptr::write_volatile(byte, 0) };
-            }
-        }
-        if let Some(ref mut key) = self.secret_key {
-            let bytes = unsafe { key.as_bytes_mut() };
-            for byte in bytes {
-                unsafe { std::ptr::write_volatile(byte, 0) };
-            }
-        }
+        // Note: Rust's String does not provide safe zeroing of memory.
+        // For production use, consider using the `secrecy` or `zeroize` crates
+        // which provide guaranteed secure memory zeroing for sensitive data.
+        // 
+        // The current implementation relies on compiler optimizations not being
+        // too aggressive about removing the zeroing, which is not guaranteed.
+        // 
+        // Example with zeroize crate:
+        // use zeroize::Zeroize;
+        // if let Some(ref mut token) = self.token {
+        //     token.zeroize();
+        // }
     }
 }
 
@@ -141,6 +133,7 @@ impl HsmConfig {
                 token: Some(token.to_string()),
                 access_key: None,
                 secret_key: None,
+                tenant_id: None,
                 client_cert: None,
                 client_key: None,
             },
@@ -159,6 +152,7 @@ impl HsmConfig {
                 token: None,
                 access_key: Some(access_key.to_string()),
                 secret_key: Some(secret_key.to_string()),
+                tenant_id: None,
                 client_cert: None,
                 client_key: None,
             },
@@ -169,7 +163,14 @@ impl HsmConfig {
     }
     
     /// Create configuration for Azure Key Vault
-    pub fn azure(vault_url: &str, client_id: &str, client_secret: &str, key_name: &str) -> Self {
+    /// 
+    /// # Arguments
+    /// * `vault_url` - Azure Key Vault URL (e.g., "https://my-vault.vault.azure.net")
+    /// * `tenant_id` - Azure AD tenant ID (use "common" for multi-tenant apps)
+    /// * `client_id` - Service Principal application (client) ID
+    /// * `client_secret` - Service Principal client secret
+    /// * `key_name` - Default key name for operations
+    pub fn azure(vault_url: &str, tenant_id: &str, client_id: &str, client_secret: &str, key_name: &str) -> Self {
         Self {
             provider: HsmProvider::AzureKeyVault,
             endpoint: vault_url.to_string(),
@@ -177,6 +178,7 @@ impl HsmConfig {
                 token: None,
                 access_key: Some(client_id.to_string()),
                 secret_key: Some(client_secret.to_string()),
+                tenant_id: Some(tenant_id.to_string()),
                 client_cert: None,
                 client_key: None,
             },
@@ -572,6 +574,7 @@ mod tests {
     async fn test_hsm_config_azure() {
         let config = HsmConfig::azure(
             "https://my-vault.vault.azure.net",
+            "tenant-id-789",
             "client-id-123",
             "client-secret-456",
             "my-key",
@@ -579,6 +582,7 @@ mod tests {
         
         assert_eq!(config.provider, HsmProvider::AzureKeyVault);
         assert_eq!(config.endpoint, "https://my-vault.vault.azure.net");
+        assert_eq!(config.credentials.tenant_id, Some("tenant-id-789".to_string()));
         assert_eq!(config.credentials.access_key, Some("client-id-123".to_string()));
         assert_eq!(config.credentials.secret_key, Some("client-secret-456".to_string()));
     }

@@ -84,10 +84,18 @@ impl VaultBackend {
             mount_path,
         };
 
-        // Test connectivity
+        // Test connectivity by attempting to list keys
         if !backend.is_available().await {
+            // Provide more helpful error message
             return Err(HsmError::ConnectionFailed(
-                "Cannot connect to Vault or transit engine not available".into(),
+                format!(
+                    "Cannot connect to Vault at {}. Possible causes:\n\
+                     - Vault server is unreachable\n\
+                     - Transit secrets engine not enabled (run: vault secrets enable transit)\n\
+                     - Invalid token or insufficient permissions\n\
+                     - Network connectivity issues",
+                    vault_config.endpoint
+                )
             ));
         }
 
@@ -203,7 +211,8 @@ impl VaultBackend {
             .key_version(None) // Use latest version
             .hash_algorithm(Some(vaultrs::api::transit::HashAlgorithm::Sha256))
             .prehashed(true) // We're passing a pre-computed hash
-            .signature_algorithm(Some("pkcs1v15".to_string())) // Standard signature algorithm
+            // Note: signature_algorithm is omitted to use the default ECDSA algorithm for secp256k1
+            // "pkcs1v15" is for RSA keys, not ECDSA
             .build()
             .map_err(|e| HsmError::SigningFailed(format!("Failed to build sign request: {}", e)))?;
 

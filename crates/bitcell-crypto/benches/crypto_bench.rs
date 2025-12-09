@@ -8,6 +8,8 @@ use bitcell_crypto::{
     poseidon::{poseidon_hash_two, poseidon_hash_one, poseidon_hash_many, PoseidonParams, PoseidonHasher},
     SecretKey, PublicKey, Signature,
     MerkleTree,
+    ClsagSecretKey, ClsagPublicKey, ClsagSignature,
+    MIN_RING_SIZE, DEFAULT_RING_SIZE, MAX_RING_SIZE,
 };
 use ark_bn254::Fr;
 use ark_ff::One;
@@ -163,6 +165,77 @@ fn bench_hash_comparison(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark CLSAG ring signature operations
+fn bench_clsag_signatures(c: &mut Criterion) {
+    let mut group = c.benchmark_group("clsag");
+    
+    // Key generation
+    group.bench_function("key_generation", |b| {
+        b.iter(|| ClsagSecretKey::generate())
+    });
+    
+    // Key image computation
+    let sk = ClsagSecretKey::generate();
+    group.bench_function("key_image", |b| {
+        b.iter(|| sk.key_image())
+    });
+    
+    // Signing with various ring sizes
+    let message = b"tournament commitment";
+    
+    for ring_size in [MIN_RING_SIZE, DEFAULT_RING_SIZE, 32, MAX_RING_SIZE].iter() {
+        // Create a ring
+        let mut keys = vec![];
+        let mut ring = vec![];
+        for _ in 0..*ring_size {
+            let sk = ClsagSecretKey::generate();
+            keys.push(sk.clone());
+            ring.push(sk.public_key());
+        }
+        
+        let signer_idx = ring_size / 2;
+        
+        group.bench_with_input(
+            BenchmarkId::new("sign", ring_size),
+            ring_size,
+            |b, _| {
+                b.iter(|| {
+                    ClsagSignature::sign(
+                        black_box(&keys[signer_idx]),
+                        black_box(&ring),
+                        black_box(message),
+                    )
+                })
+            },
+        );
+    }
+    
+    // Verification with various ring sizes
+    for ring_size in [MIN_RING_SIZE, DEFAULT_RING_SIZE, 32, MAX_RING_SIZE].iter() {
+        // Create a ring
+        let mut keys = vec![];
+        let mut ring = vec![];
+        for _ in 0..*ring_size {
+            let sk = ClsagSecretKey::generate();
+            keys.push(sk.clone());
+            ring.push(sk.public_key());
+        }
+        
+        let signer_idx = ring_size / 2;
+        let sig = ClsagSignature::sign(&keys[signer_idx], &ring, message).unwrap();
+        
+        group.bench_with_input(
+            BenchmarkId::new("verify", ring_size),
+            ring_size,
+            |b, _| {
+                b.iter(|| sig.verify(black_box(&ring), black_box(message)))
+            },
+        );
+    }
+    
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_poseidon_hash,
@@ -171,6 +244,7 @@ criterion_group!(
     bench_merkle_tree,
     bench_poseidon_params,
     bench_hash_comparison,
+    bench_clsag_signatures,
 );
 
 criterion_main!(benches);

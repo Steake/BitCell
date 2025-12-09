@@ -5,15 +5,18 @@
 //! - Bond management
 //! - State Merkle tree
 //! - Nullifier set
+//! - Key image tracking for CLSAG signatures
 //! - Persistent storage with RocksDB
 
 pub mod account;
 pub mod bonds;
 pub mod storage;
+pub mod key_images;
 
 pub use account::{Account, AccountState};
 pub use bonds::{BondState, BondStatus};
 pub use storage::{StorageManager, PruningStats};
+pub use key_images::{KeyImageRegistry, KeyImageError};
 
 use bitcell_crypto::Hash256;
 use std::collections::HashMap;
@@ -47,6 +50,9 @@ pub struct StateManager {
     /// Bond states (in-memory cache)
     pub bonds: HashMap<[u8; 33], BondState>,
     
+    /// Key image registry for double-spend prevention
+    pub key_images: KeyImageRegistry,
+    
     /// State root
     pub state_root: Hash256,
     
@@ -59,6 +65,7 @@ impl StateManager {
         Self {
             accounts: HashMap::new(),
             bonds: HashMap::new(),
+            key_images: KeyImageRegistry::new(),
             state_root: Hash256::zero(),
             storage: None,
         }
@@ -69,6 +76,7 @@ impl StateManager {
         let mut manager = Self {
             accounts: HashMap::new(),
             bonds: HashMap::new(),
+            key_images: KeyImageRegistry::new(),
             state_root: Hash256::zero(),
             storage: Some(storage),
         };

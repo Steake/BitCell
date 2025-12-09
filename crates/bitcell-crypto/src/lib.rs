@@ -25,7 +25,7 @@ pub use poseidon::{
 pub use signature::{PublicKey, SecretKey, Signature};
 pub use vrf::{VrfProof, VrfOutput};
 pub use ecvrf::{EcvrfSecretKey, EcvrfPublicKey, EcvrfProof, EcvrfOutput, combine_ecvrf_outputs};
-pub use clsag::{ClsagSecretKey, ClsagPublicKey, ClsagSignature, KeyImage};
+pub use clsag::{ClsagSecretKey, ClsagPublicKey, ClsagSignature, KeyImage, RingConfig, MIN_RING_SIZE, MAX_RING_SIZE, DEFAULT_RING_SIZE};
 pub use commitment::PedersenCommitment;
 pub use merkle::MerkleTree;
 

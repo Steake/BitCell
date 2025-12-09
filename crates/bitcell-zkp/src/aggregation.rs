@@ -135,19 +135,25 @@ impl ProofAggregator {
     ///
     /// # Returns
     /// A 32-byte commitment to all proofs
-    pub fn create_aggregation_commitment(proofs: &[Groth16Proof]) -> [u8; 32] {
+    ///
+    /// # Errors
+    /// Returns an error if any proof fails to serialize, as this would create
+    /// an inconsistent commitment.
+    pub fn create_aggregation_commitment(proofs: &[Groth16Proof]) -> Result<[u8; 32]> {
         let mut hasher = Sha256::new();
         
-        for proof in proofs {
-            if let Ok(bytes) = proof.serialize() {
-                hasher.update(&bytes);
-            }
+        for (i, proof) in proofs.iter().enumerate() {
+            let bytes = proof.serialize()
+                .map_err(|e| Error::Serialization(
+                    format!("Failed to serialize proof {}: {}", i, e)
+                ))?;
+            hasher.update(&bytes);
         }
         
         let result = hasher.finalize();
         let mut output = [0u8; 32];
         output.copy_from_slice(&result);
-        output
+        Ok(output)
     }
 
     /// Verify an aggregation commitment
@@ -156,9 +162,9 @@ impl ProofAggregator {
     pub fn verify_aggregation_commitment(
         proofs: &[Groth16Proof],
         commitment: &[u8; 32],
-    ) -> bool {
-        let computed = Self::create_aggregation_commitment(proofs);
-        computed == *commitment
+    ) -> Result<bool> {
+        let computed = Self::create_aggregation_commitment(proofs)?;
+        Ok(computed == *commitment)
     }
 }
 
@@ -222,7 +228,7 @@ impl BlockProofAggregator {
         all_proofs.extend(battle_proofs.iter().map(|(p, _)| p.clone()));
         all_proofs.extend(state_proofs.iter().map(|(p, _)| p.clone()));
         
-        let commitment = ProofAggregator::create_aggregation_commitment(&all_proofs);
+        let commitment = ProofAggregator::create_aggregation_commitment(&all_proofs)?;
         
         Ok(commitment)
     }
@@ -318,10 +324,12 @@ mod tests {
         let proof = circuit.prove(&pk).expect("Proof should succeed");
         
         // Create commitment
-        let commitment = ProofAggregator::create_aggregation_commitment(&[proof.clone()]);
+        let commitment = ProofAggregator::create_aggregation_commitment(&[proof.clone()])
+            .expect("Commitment creation should succeed");
         
         // Verify commitment
-        assert!(ProofAggregator::verify_aggregation_commitment(&[proof], &commitment));
+        assert!(ProofAggregator::verify_aggregation_commitment(&[proof], &commitment)
+            .expect("Verification should succeed"));
         
         // Wrong proofs should fail
         let circuit2 = BattleCircuit::new(
@@ -333,7 +341,8 @@ mod tests {
         );
         let proof2 = circuit2.prove(&pk).expect("Proof should succeed");
         
-        assert!(!ProofAggregator::verify_aggregation_commitment(&[proof2], &commitment));
+        assert!(!ProofAggregator::verify_aggregation_commitment(&[proof2], &commitment)
+            .expect("Verification should succeed"));
     }
 
     #[test]

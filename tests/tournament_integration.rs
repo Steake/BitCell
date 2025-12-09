@@ -127,8 +127,8 @@ fn test_block_validation_flow() {
     let header = BlockHeader {
         height: 1,
         prev_hash: Hash256::from_bytes(&[0; 32]),
-        tx_root: Hash256::from_bytes(&[1; 32]),
-        state_root: Hash256::from_bytes(&[2; 32]),
+        tx_root: Hash256::from_bytes(&[2; 32]),  // Merkle root of transactions
+        state_root: Hash256::from_bytes(&[1; 32]),  // State root
         timestamp: 1000,
         proposer: sk.public_key(),
         vrf_output: [4u8; 32],

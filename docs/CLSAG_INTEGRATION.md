@@ -176,6 +176,12 @@ registry.mark_used(key_image)?;
 - **Key image lookup:** O(1), ~nanoseconds
 - **Key image storage:** 32 bytes per image
 
+### Storage Notes
+- **Current (RC2):** Key images are stored in-memory using HashSet
+- **Planned (RC2.1):** Persistence to RocksDB for durability across restarts
+- **Limitation:** Current implementation loses key image history on node restart
+- **Workaround:** During testing, use short-lived nodes or snapshot key images manually
+
 ### Performance Notes
 - Verification is O(n) in ring size (must check each member)
 - Key image tracking is O(1) using HashSet

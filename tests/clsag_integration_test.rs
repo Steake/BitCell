@@ -300,4 +300,64 @@ mod tests {
         let ki_registry = key_images.lock().unwrap();
         assert_eq!(ki_registry.len(), DEFAULT_RING_SIZE);
     }
+
+    #[test]
+    fn test_concurrent_double_spend_prevention() {
+        // Test that concurrent attempts to use the same key image are properly prevented
+        use std::sync::{Arc, Mutex};
+        use std::thread;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let sk = ClsagSecretKey::generate();
+        let mut ring = vec![sk.public_key()];
+        
+        for _ in 1..DEFAULT_RING_SIZE {
+            ring.push(ClsagSecretKey::generate().public_key());
+        }
+
+        let key_images = Arc::new(Mutex::new(KeyImageRegistry::new()));
+        let ring = Arc::new(ring);
+        let sk = Arc::new(sk);
+        let success_count = Arc::new(AtomicUsize::new(0));
+        let failure_count = Arc::new(AtomicUsize::new(0));
+        
+        let mut handles = vec![];
+        
+        // Spawn multiple threads trying to use the same key
+        for i in 0..10 {
+            let key_images = Arc::clone(&key_images);
+            let ring = Arc::clone(&ring);
+            let sk = Arc::clone(&sk);
+            let success_count = Arc::clone(&success_count);
+            let failure_count = Arc::clone(&failure_count);
+            
+            let handle = thread::spawn(move || {
+                let commitment = format!("attempt_{}_commitment", i);
+                let hash = Hash256::hash(commitment.as_bytes());
+                let sig = ClsagSignature::sign(&*sk, &ring, hash.as_bytes()).unwrap();
+                
+                // Try to atomically mark as used
+                let mut ki_registry = key_images.lock().unwrap();
+                match ki_registry.mark_used(*sig.key_image()) {
+                    Ok(()) => {
+                        success_count.fetch_add(1, Ordering::SeqCst);
+                    }
+                    Err(_) => {
+                        failure_count.fetch_add(1, Ordering::SeqCst);
+                    }
+                }
+            });
+            
+            handles.push(handle);
+        }
+
+        // Wait for all threads
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // Exactly one thread should succeed, 9 should fail
+        assert_eq!(success_count.load(Ordering::SeqCst), 1);
+        assert_eq!(failure_count.load(Ordering::SeqCst), 9);
+    }
 }

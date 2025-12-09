@@ -217,25 +217,8 @@ impl ClsagSignature {
         ring: &[ClsagPublicKey],
         message: &[u8],
     ) -> Result<Self> {
-        if ring.is_empty() {
-            return Err(Error::RingSignature("Empty ring".to_string()));
-        }
-
-        // Validate ring size
-        if ring.len() < MIN_RING_SIZE {
-            return Err(Error::RingSignature(format!(
-                "Ring size {} is below minimum {}",
-                ring.len(),
-                MIN_RING_SIZE
-            )));
-        }
-        if ring.len() > MAX_RING_SIZE {
-            return Err(Error::RingSignature(format!(
-                "Ring size {} exceeds maximum {}",
-                ring.len(),
-                MAX_RING_SIZE
-            )));
-        }
+        // Validate ring size (empty, min, max)
+        Self::validate_ring_size(ring.len())?;
 
         let signer_pk = secret_key.public_key();
         let pi = ring
@@ -367,6 +350,28 @@ impl ClsagSignature {
     /// Get the key image (for double-signing detection)
     pub fn key_image(&self) -> &KeyImage {
         &self.key_image
+    }
+
+    /// Validate ring size
+    fn validate_ring_size(size: usize) -> Result<()> {
+        if size == 0 {
+            return Err(Error::RingSignature("Empty ring".to_string()));
+        }
+        if size < MIN_RING_SIZE {
+            return Err(Error::RingSignature(format!(
+                "Ring size {} is below minimum {}",
+                size,
+                MIN_RING_SIZE
+            )));
+        }
+        if size > MAX_RING_SIZE {
+            return Err(Error::RingSignature(format!(
+                "Ring size {} exceeds maximum {}",
+                size,
+                MAX_RING_SIZE
+            )));
+        }
+        Ok(())
     }
 }
 

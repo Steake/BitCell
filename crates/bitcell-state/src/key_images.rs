@@ -45,6 +45,9 @@ impl KeyImageRegistry {
     /// This is an atomic operation that checks for double-spend and marks as used.
     /// Returns Ok(()) if the key image was new and is now marked as used.
     /// Returns Err if the key image was already used.
+    /// 
+    /// Note: HashSet::insert() returns false when the key already exists,
+    /// which we use to detect double-spend attempts.
     pub fn check_and_mark(&mut self, key_image: KeyImage) -> Result<(), KeyImageError> {
         if !self.used_images.insert(key_image) {
             return Err(KeyImageError::AlreadyUsed);

@@ -2,8 +2,8 @@
 
 /// Standard library functions available in BCL contracts
 pub mod functions {
-    /// msg.sender - Returns the address of the caller
-    pub const MSG_SENDER_ADDR: u32 = 0x10;
+    /// msg.sender - Returns the address of the caller (stored at 0x14)
+    pub const MSG_SENDER_ADDR: u32 = 0x14;
     
     /// msg.value - Returns the amount sent with the transaction
     pub const MSG_VALUE_ADDR: u32 = 0x18;

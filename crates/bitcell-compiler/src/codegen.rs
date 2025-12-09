@@ -67,8 +67,11 @@ impl CodeGenerator {
             // Compare r1 with r2, store result in r3
             self.emit(OpCode::Eq, 3, 1, 2);
             
-            // If equal (r3 == 1), jump to function
-            self.emit(OpCode::Jz, 0, 3, func_addr);
+            // If NOT equal (r3 == 0), skip to next check
+            // If equal (r3 != 0), jump to function
+            let skip_addr = (self.instructions.len() + 2) as u32;
+            self.emit(OpCode::Jz, 0, 3, skip_addr);
+            self.emit(OpCode::Jmp, 0, 0, func_addr);
         }
         
         // If no function matched, revert
@@ -142,8 +145,12 @@ impl CodeGenerator {
                                 self.emit_load_immediate(addr_reg, base_addr as u64);
                                 self.emit(OpCode::Add, addr_reg, addr_reg, key_reg as u32);
                                 
-                                // Store value at computed address
+                                // Store value at computed address (using addr_reg)
+                                // Note: ZKVM Store format is: Store rs2, rs1, offset
+                                // where mem[rs1 + offset] = rs2
+                                // Here we want mem[addr_reg] = value_reg
                                 self.emit(OpCode::Store, 0, value_reg, 0);
+                                // TODO: This needs proper addressing - currently simplified
                             }
                         }
                     }
@@ -202,15 +209,15 @@ impl CodeGenerator {
                 let cond_reg = self.alloc_temp_register();
                 self.generate_expression(condition, cond_reg)?;
                 
-                // If condition is 0, halt (revert)
-                let continue_addr = self.instructions.len() + 2;
-                self.emit(OpCode::Jz, 0, cond_reg, 0); // Jump to halt if false
+                // If condition is 0 (false), jump to halt
+                let halt_addr = (self.instructions.len() + 2) as u32;
+                self.emit(OpCode::Jz, 0, cond_reg, halt_addr);
                 
-                // Continue execution
-                let _halt_addr = self.instructions.len() + 1;
-                self.emit(OpCode::Jmp, 0, 0, continue_addr as u32);
+                // Continue execution (skip halt)
+                let continue_addr = (self.instructions.len() + 1) as u32;
+                self.emit(OpCode::Jmp, 0, 0, continue_addr);
                 
-                // Halt (revert)
+                // Halt (revert) - this is the target of the Jz above
                 self.emit(OpCode::Halt, 0, 0, 0);
                 
                 Ok(())
@@ -331,7 +338,7 @@ impl CodeGenerator {
                 if let Expression::Identifier(obj) = &**expr {
                     match (obj.as_str(), member.as_str()) {
                         ("msg", "sender") => {
-                            self.emit(OpCode::Load, dest_reg, 0, 0x10);
+                            self.emit(OpCode::Load, dest_reg, 0, 0x14);  // Updated address
                         }
                         ("msg", "value") => {
                             self.emit(OpCode::Load, dest_reg, 0, 0x18);
@@ -361,17 +368,17 @@ impl CodeGenerator {
     }
     
     fn emit_load_immediate(&mut self, reg: u8, value: u64) {
-        // Load immediate by storing to memory then loading
-        // In real implementation, we'd use a proper immediate instruction
-        let temp_addr = 0x1000 + (reg as u32 * 8);
+        // Simple immediate load by using the rs2_imm field
+        // Note: This only works for values that fit in 32 bits
+        // For larger values, would need multiple instructions
+        let value_u32 = (value & 0xFFFFFFFF) as u32;
         
-        // For simplicity, just load lower 32 bits
-        // Store value to temp memory location
-        self.emit(OpCode::Store, 0, reg, temp_addr);
-        
-        // Actually, let's just add 0 to get the value in
-        // This is a hack - real implementation needs proper immediate support
-        self.emit(OpCode::Add, reg, 0, value as u32);
+        // Load by adding immediate to register 0 (assuming it's zero)
+        // This is a simplification - real implementation would:
+        // 1. Use a proper immediate load instruction, or
+        // 2. Initialize r0 to 0 and add immediate
+        // 3. Or use a two-instruction sequence for full 64-bit values
+        self.emit(OpCode::Add, reg, reg, value_u32);
     }
     
     fn alloc_register(&mut self) -> u8 {

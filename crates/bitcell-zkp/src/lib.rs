@@ -20,8 +20,14 @@ pub mod merkle_gadget;
 // Production-ready Poseidon-based Merkle verification
 pub mod poseidon_merkle;
 
-pub use battle_circuit::BattleCircuit;
+// Default exports point to full constraint implementations (production-ready)
+pub use battle_constraints::BattleCircuit;
+pub use battle_constraints::{GRID_SIZE, BATTLE_STEPS};
+
+// Simplified circuits available via explicit aliases for testing
+pub use battle_circuit::BattleCircuit as SimpleBattleCircuit;
 pub use state_circuit::StateCircuit;
+
 pub use merkle_gadget::{MerklePathGadget, MERKLE_DEPTH};
 pub use poseidon_merkle::{PoseidonMerkleGadget, POSEIDON_MERKLE_DEPTH};
 

@@ -84,10 +84,7 @@ impl<F: PrimeField> BattleCircuit<F> {
 
 impl<F: PrimeField> ConstraintSynthesizer<F> for BattleCircuit<F> {
     fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
-        // Allocate public inputs
-        let initial_grid_vars = allocate_grid(cs.clone(), &self.initial_grid, true)?;
-        let final_grid_vars = allocate_grid(cs.clone(), &self.final_grid, true)?;
-        
+        // Allocate public inputs (small set as per RC2-001 spec)
         let commitment_a_var = FpVar::new_input(cs.clone(), || {
             self.commitment_a.ok_or(SynthesisError::AssignmentMissing)
         })?;
@@ -96,11 +93,15 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for BattleCircuit<F> {
             self.commitment_b.ok_or(SynthesisError::AssignmentMissing)
         })?;
         
-        let winner_var = UInt8::new_input(cs.clone(), || {
+        // Winner as field element (0, 1, or 2)
+        let winner_var = FpVar::new_input(cs.clone(), || {
             self.winner.ok_or(SynthesisError::AssignmentMissing)
+                .map(|w| F::from(w as u64))
         })?;
         
-        // Allocate private witnesses
+        // Allocate private witnesses (grids and patterns are private)
+        let initial_grid_vars = allocate_grid(cs.clone(), &self.initial_grid, false)?;
+        let final_grid_vars = allocate_grid(cs.clone(), &self.final_grid, false)?;
         let pattern_a_vars = allocate_grid(cs.clone(), &self.pattern_a, false)?;
         let pattern_b_vars = allocate_grid(cs.clone(), &self.pattern_b, false)?;
         
@@ -130,7 +131,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for BattleCircuit<F> {
         verify_grid_equality(cs.clone(), &current_grid, &final_grid_vars)?;
         
         // Constraint 5: Verify winner determination based on regional energy
-        verify_winner(cs.clone(), &final_grid_vars, &winner_var)?;
+        verify_winner_fp(cs.clone(), &final_grid_vars, &winner_var)?;
         
         Ok(())
     }
@@ -325,7 +326,53 @@ fn verify_grid_equality<F: PrimeField>(
     Ok(())
 }
 
-/// Verify winner based on regional energy calculation
+/// Verify winner based on regional energy calculation (using FpVar)
+fn verify_winner_fp<F: PrimeField>(
+    _cs: ConstraintSystemRef<F>,
+    final_grid: &[Vec<UInt8<F>>],
+    winner: &FpVar<F>,
+) -> Result<(), SynthesisError> {
+    let size = final_grid.len();
+    let mid = size / 2;
+    
+    // Calculate energy in region A (top-left quadrant)  
+    let mut energy_a_bits = vec![Boolean::FALSE; 16]; // 16-bit accumulator
+    for i in 0..mid {
+        for j in 0..mid {
+            let cell_bits = final_grid[i][j].to_bits_le()?;
+            energy_a_bits = add_bits(&energy_a_bits, &cell_bits)?;
+        }
+    }
+    
+    // Calculate energy in region B (bottom-right quadrant)
+    let mut energy_b_bits = vec![Boolean::FALSE; 16];
+    for i in mid..size {
+        for j in mid..size {
+            let cell_bits = final_grid[i][j].to_bits_le()?;
+            energy_b_bits = add_bits(&energy_b_bits, &cell_bits)?;
+        }
+    }
+    
+    // Determine winner by comparing bit representations
+    let (a_wins, _) = compare_bits(&energy_a_bits, &energy_b_bits)?;
+    let (b_wins, _) = compare_bits(&energy_b_bits, &energy_a_bits)?;
+    
+    // Convert boolean to FpVar
+    let _winner_0 = Boolean::le_bits_to_fp_var(&vec![a_wins.clone()])?;
+    let winner_1 = Boolean::le_bits_to_fp_var(&vec![b_wins.clone()])?;
+    let winner_2_bool = a_wins.not().and(&b_wins.not())?;
+    let winner_2 = Boolean::le_bits_to_fp_var(&vec![winner_2_bool])?;
+    
+    // Compute: computed_winner = 0 * winner_0 + 1 * winner_1 + 2 * winner_2
+    let computed_winner = winner_1 + winner_2 * FpVar::constant(F::from(2u64));
+    
+    computed_winner.enforce_equal(winner)?;
+    
+    Ok(())
+}
+
+/// Verify winner based on regional energy calculation (legacy version using UInt8)
+#[allow(dead_code)]
 fn verify_winner<F: PrimeField>(
     _cs: ConstraintSystemRef<F>,
     final_grid: &[Vec<UInt8<F>>],
@@ -422,6 +469,82 @@ fn compare_bits<F: PrimeField>(a: &[Boolean<F>], b: &[Boolean<F>]) -> Result<(Bo
     Ok((greater, equal))
 }
 
+// Helper methods for Groth16 proof generation and verification
+use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
+use ark_snark::SNARK;
+use ark_std::rand::thread_rng;
+use ark_bn254::{Bn254, Fr};
+
+impl BattleCircuit<Fr> {
+    /// Setup the circuit and generate proving/verifying keys
+    ///
+    /// Returns an error if the circuit setup fails (e.g., due to constraint system issues).
+    pub fn setup() -> crate::Result<(ProvingKey<Bn254>, VerifyingKey<Bn254>)> {
+        let rng = &mut thread_rng();
+        
+        // Create a dummy circuit for setup with properly sized vectors
+        let dummy_grid = vec![vec![0u8; GRID_SIZE]; GRID_SIZE];
+        let dummy_pattern = vec![vec![0u8; 3]; 3];
+        
+        let circuit = Self {
+            initial_grid: Some(dummy_grid.clone()),
+            final_grid: Some(dummy_grid),
+            commitment_a: Some(Fr::from(0u64)),
+            commitment_b: Some(Fr::from(0u64)),
+            winner: Some(2),
+            pattern_a: Some(dummy_pattern.clone()),
+            pattern_b: Some(dummy_pattern),
+            nonce_a: Some(Fr::from(0u64)),
+            nonce_b: Some(Fr::from(0u64)),
+        };
+        
+        Groth16::<Bn254>::circuit_specific_setup(circuit, rng)
+            .map_err(|e| crate::Error::ProofGeneration(format!("Circuit setup failed: {}", e)))
+    }
+
+    /// Generate a proof for this circuit instance
+    pub fn prove(
+        &self,
+        pk: &ProvingKey<Bn254>,
+    ) -> crate::Result<crate::Groth16Proof> {
+        let rng = &mut thread_rng();
+        let proof = Groth16::<Bn254>::prove(pk, self.clone(), rng)
+            .map_err(|e| crate::Error::ProofGeneration(e.to_string()))?;
+        Ok(crate::Groth16Proof::new(proof))
+    }
+
+    /// Verify a proof against public inputs
+    pub fn verify(
+        vk: &VerifyingKey<Bn254>,
+        proof: &crate::Groth16Proof,
+        public_inputs: &[Fr],
+    ) -> crate::Result<bool> {
+        Groth16::<Bn254>::verify(vk, &public_inputs, &proof.proof)
+            .map_err(|_| crate::Error::ProofVerification)
+    }
+
+    /// Helper to construct public inputs from circuit values
+    /// Public inputs are: commitment_a, commitment_b, winner (as field element)
+    pub fn public_inputs(&self) -> Vec<Fr> {
+        let mut inputs = Vec::new();
+        
+        // Add commitments
+        if let Some(c) = self.commitment_a {
+            inputs.push(c);
+        }
+        if let Some(c) = self.commitment_b {
+            inputs.push(c);
+        }
+        
+        // Add winner as field element
+        if let Some(w) = self.winner {
+            inputs.push(Fr::from(w as u64));
+        }
+        
+        inputs
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -462,5 +585,61 @@ mod tests {
 
         circuit.generate_constraints(cs.clone()).unwrap();
         assert!(cs.is_satisfied().unwrap());
+    }
+    
+    #[test]
+    fn test_battle_circuit_prove_verify() {
+        // 1. Setup - generate proving and verifying keys
+        println!("Setting up circuit...");
+        let (pk, vk) = BattleCircuit::setup().expect("Circuit setup should succeed");
+        println!("Setup complete");
+
+        // Use an empty grid - it remains empty after evolution (stable state)
+        let initial_grid = vec![vec![0u8; GRID_SIZE]; GRID_SIZE];
+        let final_grid = initial_grid.clone();
+
+        // Use all-zero patterns and zero nonces for simplest commitment calculation
+        let pattern_a = vec![vec![0u8; 3]; 3];
+        let pattern_b = vec![vec![0u8; 3]; 3];
+        let nonce_a = Fr::from(0u64);
+        let nonce_b = Fr::from(0u64);
+        let commitment_a = Fr::from(0u64);
+        let commitment_b = Fr::from(0u64);
+
+        // 2. Create circuit instance with all witnesses
+        let circuit = BattleCircuit {
+            initial_grid: Some(initial_grid.clone()),
+            final_grid: Some(final_grid.clone()),
+            commitment_a: Some(commitment_a),
+            commitment_b: Some(commitment_b),
+            winner: Some(2), // Tie - both regions have 0 energy
+            pattern_a: Some(pattern_a),
+            pattern_b: Some(pattern_b),
+            nonce_a: Some(nonce_a),
+            nonce_b: Some(nonce_b),
+        };
+
+        // First verify the circuit is satisfiable
+        println!("Checking circuit satisfiability...");
+        let cs = ark_relations::r1cs::ConstraintSystem::<Fr>::new_ref();
+        circuit.clone().generate_constraints(cs.clone()).unwrap();
+        assert!(cs.is_satisfied().unwrap(), "Circuit should be satisfiable");
+        println!("Circuit is satisfiable. Num inputs: {}, Num constraints: {}", 
+            cs.num_instance_variables(), cs.num_constraints());
+
+        // 3. Generate proof
+        println!("Generating proof...");
+        let proof = circuit.prove(&pk).expect("Proof generation should succeed");
+        println!("Proof generated successfully");
+
+        // 4. Verify proof with public inputs
+        let public_inputs = circuit.public_inputs();
+        println!("Public inputs count: {}", public_inputs.len());
+        println!("Expected public inputs count: {}", cs.num_instance_variables() - 1); // -1 for the constant
+        
+        let result = BattleCircuit::verify(&vk, &proof, &public_inputs)
+            .expect("Verification should not error");
+        assert!(result, "Proof verification should succeed");
+        println!("Verification succeeded!");
     }
 }

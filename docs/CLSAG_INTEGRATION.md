@@ -328,12 +328,12 @@ assert!(ring.len() >= MIN_RING_SIZE);
 
 Planned for future releases:
 
-### RC2 (Q1 2026)
+### RC2 (Q2 2026)
 - [ ] RocksDB persistence for KeyImageRegistry
 - [ ] Merkle commitment for light client key image proofs
 - [ ] Batch verification optimization
 
-### RC3 (Q2 2026)
+### RC3 (Q3 2026)
 - [ ] Improved ring member selection algorithms
 - [ ] Ring signature aggregation
 - [ ] Zero-knowledge range proofs for amounts

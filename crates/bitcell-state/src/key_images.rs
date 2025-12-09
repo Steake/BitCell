@@ -16,7 +16,10 @@ pub enum Error {
 }
 
 /// Registry for tracking used key images to prevent double-spending
-#[derive(Debug, Clone)]
+///
+/// Note: This type intentionally does not derive Clone to prevent accidental
+/// duplication of registry state. Use Arc<Mutex<KeyImageRegistry>> for shared
+/// access across threads via the new_shared() constructor.
 pub struct KeyImageRegistry {
     used_images: HashSet<KeyImage>,
 }

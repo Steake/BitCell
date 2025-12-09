@@ -245,7 +245,7 @@ async fn handle_json_rpc_socket(socket: WebSocket, state: RpcState) {
         let state = state.clone();
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_millis(500));
-            let mut seen_txs = std::collections::HashSet::new();
+            let mut seen_txs = HashSet::new();
 
             loop {
                 interval.tick().await;
@@ -264,7 +264,7 @@ async fn handle_json_rpc_socket(socket: WebSocket, state: RpcState) {
                 // Prevent unbounded memory growth: if we have too many seen transactions,
                 // keep only the ones still in the pool
                 if seen_txs.len() > 10000 {
-                    let current_hashes: std::collections::HashSet<_> = 
+                    let current_hashes: HashSet<_> = 
                         pending_txs.iter().map(|tx| tx.hash()).collect();
                     seen_txs.retain(|hash| current_hashes.contains(hash));
                 }

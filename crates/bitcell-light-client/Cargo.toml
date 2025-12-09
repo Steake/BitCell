@@ -37,3 +37,4 @@ bytes = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+tracing-subscriber = { workspace = true }

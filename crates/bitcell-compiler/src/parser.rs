@@ -123,12 +123,14 @@ impl Parser {
                 self.advance();
                 self.expect(Token::LParen)?;
                 let key_type = self.parse_type()?;
-                // Accept both => and -> for mapping syntax
-                if self.current() == &Token::FatArrow {
-                    self.advance();
-                } else {
-                    self.expect(Token::Arrow)?;
+                // Only accept => for mapping syntax (Solidity-style)
+                if self.current() != &Token::FatArrow {
+                    return Err(CompilerError::ParserError(format!(
+                        "Expected '=>' for mapping type, found {:?}. Only '=>' is allowed for mapping types.",
+                        self.current()
+                    )));
                 }
+                self.advance();
                 let value_type = self.parse_type()?;
                 self.expect(Token::RParen)?;
                 Ok(Type::Mapping(Box::new(key_type), Box::new(value_type)))
@@ -193,6 +195,12 @@ impl Parser {
             
             if self.current() == &Token::Comma {
                 self.advance();
+                // Check for trailing comma
+                if self.current() == &Token::RParen {
+                    return Err(CompilerError::ParserError(
+                        "Trailing comma in parameter list is not allowed".to_string()
+                    ));
+                }
             }
         }
         

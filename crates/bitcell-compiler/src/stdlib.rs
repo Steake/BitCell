@@ -20,8 +20,8 @@ pub mod memory {
     /// Function selector
     pub const FUNCTION_SELECTOR: u32 = 0x10;
     
-    /// Function parameters start address
-    pub const PARAMS_START: u32 = 0x20;
+    /// Function parameters start address (after built-in variables)
+    pub const PARAMS_START: u32 = 0x30;
     
     /// Storage start address
     pub const STORAGE_START: u32 = 0x200;

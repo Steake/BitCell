@@ -246,7 +246,11 @@ Source Code → Lexer → Tokens → Parser → AST → Semantic Analyzer →
 BCL contracts use a standardized memory layout:
 
 - `0x10` - Function selector
-- `0x20-0x1FF` - Function parameters
+- `0x14` - `msg.sender` (reserved)
+- `0x18` - `msg.value` (reserved)
+- `0x20` - `block.number` (reserved)
+- `0x28` - `block.timestamp` (reserved)
+- `0x30-0x1FF` - Function parameters
 - `0x200+` - Storage variables
 - `0x1000+` - Temporary/stack memory
 

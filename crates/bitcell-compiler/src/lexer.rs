@@ -82,16 +82,24 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
             }
             
             // Comments
-            '/' if chars.clone().nth(1) == Some('/') => {
+            // Comments and division
+            '/' => {
                 chars.next();
-                chars.next();
-                while let Some(&ch) = chars.peek() {
+                if chars.peek() == Some(&'/') {
+                    // Comment - consume until end of line
                     chars.next();
-                    if ch == '\n' {
-                        line += 1;
-                        col = 1;
-                        break;
+                    while let Some(&ch) = chars.peek() {
+                        chars.next();
+                        if ch == '\n' {
+                            line += 1;
+                            col = 1;
+                            break;
+                        }
                     }
+                } else {
+                    // Division operator
+                    tokens.push(Token::Slash);
+                    col += 1;
                 }
             }
             
@@ -262,7 +270,32 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
                     if ch == '"' {
                         break;
                     }
-                    string.push(ch);
+                    if ch == '\\' {
+                        // Handle escape sequences
+                        if let Some(&next_ch) = chars.peek() {
+                            chars.next();
+                            col += 1;
+                            match next_ch {
+                                'n' => string.push('\n'),
+                                't' => string.push('\t'),
+                                'r' => string.push('\r'),
+                                '\\' => string.push('\\'),
+                                '"' => string.push('"'),
+                                '\'' => string.push('\''),
+                                '0' => string.push('\0'),
+                                _ => {
+                                    // Unknown escape, push as is
+                                    string.push('\\');
+                                    string.push(next_ch);
+                                }
+                            }
+                        } else {
+                            // Trailing backslash, treat as literal
+                            string.push('\\');
+                        }
+                    } else {
+                        string.push(ch);
+                    }
                 }
                 tokens.push(Token::String(string));
             }
@@ -279,10 +312,18 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>> {
                         break;
                     }
                 }
-                let value = num.parse::<u64>().map_err(|_| CompilerError::LexerError {
-                    line,
-                    col,
-                    message: format!("Invalid number: {}", num),
+                let value = num.parse::<u64>().map_err(|_| {
+                    let is_all_digits = num.chars().all(|c| c.is_ascii_digit());
+                    let msg = if is_all_digits {
+                        format!("Number too large (max: 18446744073709551615): {}", num)
+                    } else {
+                        format!("Invalid number: {}", num)
+                    };
+                    CompilerError::LexerError {
+                        line,
+                        col,
+                        message: msg,
+                    }
                 })?;
                 tokens.push(Token::Number(value));
             }
@@ -367,5 +408,13 @@ mod tests {
         assert_eq!(tokens[1], Token::True);
         assert_eq!(tokens[2], Token::False);
         assert_eq!(tokens[3], Token::String("hello".to_string()));
+    }
+
+    #[test]
+    fn test_tokenize_string_escapes() {
+        let tokens = tokenize(r#""Line 1\nLine 2" "Quote: \"test\"" "Tab:\there""#).unwrap();
+        assert_eq!(tokens[0], Token::String("Line 1\nLine 2".to_string()));
+        assert_eq!(tokens[1], Token::String("Quote: \"test\"".to_string()));
+        assert_eq!(tokens[2], Token::String("Tab:\there".to_string()));
     }
 }

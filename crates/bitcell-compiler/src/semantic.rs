@@ -56,15 +56,15 @@ impl SemanticAnalyzer {
             self.local_vars.insert(param.name.clone(), param.ty.clone());
         }
         
-        // Analyze function body
+        // Analyze function body with return type context
         for stmt in &func.body {
-            self.analyze_statement(stmt)?;
+            self.analyze_statement_with_return_type(stmt, &func.return_type)?;
         }
         
         Ok(())
     }
     
-    fn analyze_statement(&mut self, stmt: &Statement) -> Result<()> {
+    fn analyze_statement_with_return_type(&mut self, stmt: &Statement, expected_return: &Option<Type>) -> Result<()> {
         match stmt {
             Statement::Let { name, value } => {
                 let ty = self.type_of_expression(value)?;
@@ -97,20 +97,41 @@ impl SemanticAnalyzer {
                 }
                 
                 for stmt in then_block {
-                    self.analyze_statement(stmt)?;
+                    self.analyze_statement_with_return_type(stmt, expected_return)?;
                 }
                 
                 if let Some(else_stmts) = else_block {
                     for stmt in else_stmts {
-                        self.analyze_statement(stmt)?;
+                        self.analyze_statement_with_return_type(stmt, expected_return)?;
                     }
                 }
                 
                 Ok(())
             }
             Statement::Return { value } => {
-                if let Some(expr) = value {
-                    self.type_of_expression(expr)?;
+                match (value, expected_return) {
+                    (Some(expr), Some(expected_ty)) => {
+                        let actual_ty = self.type_of_expression(expr)?;
+                        if actual_ty != *expected_ty {
+                            return Err(CompilerError::SemanticError(format!(
+                                "Return type mismatch: expected {:?}, found {:?}",
+                                expected_ty, actual_ty
+                            )));
+                        }
+                    }
+                    (None, Some(expected_ty)) => {
+                        return Err(CompilerError::SemanticError(format!(
+                            "Function should return {:?}, but returns nothing",
+                            expected_ty
+                        )));
+                    }
+                    (Some(expr), None) => {
+                        let _ = self.type_of_expression(expr)?;
+                        return Err(CompilerError::SemanticError(
+                            "Function should not return a value".to_string(),
+                        ));
+                    }
+                    (None, None) => {}
                 }
                 Ok(())
             }
@@ -160,6 +181,16 @@ impl SemanticAnalyzer {
                                 "Arithmetic operations require uint operands".to_string(),
                             ));
                         }
+                        
+                        // Check for division by zero in constant expressions
+                        if matches!(op, BinaryOp::Div | BinaryOp::Mod) {
+                            if let Expression::Literal(Literal::Uint(0)) = &**right {
+                                return Err(CompilerError::SemanticError(
+                                    "Division by zero in constant expression".to_string(),
+                                ));
+                            }
+                        }
+                        
                         Ok(Type::Uint)
                     }
                     BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
@@ -281,5 +312,54 @@ mod tests {
         let result = analyze(&contract);
         
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_division_by_zero() {
+        let source = r#"
+            contract Test {
+                storage {
+                    value: uint;
+                }
+                
+                function compute() -> uint {
+                    let x = 10 / 0;
+                    return x;
+                }
+            }
+        "#;
+        
+        let tokens = tokenize(source).unwrap();
+        let contract = parse(tokens).unwrap();
+        let result = analyze(&contract);
+        
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("Division by zero"));
+        }
+    }
+
+    #[test]
+    fn test_return_type_mismatch() {
+        let source = r#"
+            contract Test {
+                storage {
+                    value: uint;
+                }
+                
+                function get() -> uint {
+                    return true;
+                }
+            }
+        "#;
+        
+        let tokens = tokenize(source).unwrap();
+        let contract = parse(tokens).unwrap();
+        let result = analyze(&contract);
+        
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("Return type mismatch"));
+        }
     }
 }

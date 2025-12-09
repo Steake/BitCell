@@ -210,13 +210,10 @@ impl CodeGenerator {
                 self.generate_expression(condition, cond_reg)?;
                 
                 // If condition is 0 (false), jump to halt
-                let halt_addr = (self.instructions.len() + 2) as u32;
+                let halt_addr = (self.instructions.len() + 1) as u32;
                 self.emit(OpCode::Jz, 0, cond_reg, halt_addr);
                 
-                // Continue execution (skip halt)
-                let continue_addr = (self.instructions.len() + 1) as u32;
-                self.emit(OpCode::Jmp, 0, 0, continue_addr);
-                
+                // If condition is true, skip halt and continue
                 // Halt (revert) - this is the target of the Jz above
                 self.emit(OpCode::Halt, 0, 0, 0);
                 
@@ -368,17 +365,13 @@ impl CodeGenerator {
     }
     
     fn emit_load_immediate(&mut self, reg: u8, value: u64) {
-        // Simple immediate load by using the rs2_imm field
+        // Load immediate by adding to register 0 (assuming r0 is always zero)
         // Note: This only works for values that fit in 32 bits
         // For larger values, would need multiple instructions
         let value_u32 = (value & 0xFFFFFFFF) as u32;
         
-        // Load by adding immediate to register 0 (assuming it's zero)
-        // This is a simplification - real implementation would:
-        // 1. Use a proper immediate load instruction, or
-        // 2. Initialize r0 to 0 and add immediate
-        // 3. Or use a two-instruction sequence for full 64-bit values
-        self.emit(OpCode::Add, reg, reg, value_u32);
+        // Add immediate to r0 (should be zero) to load the value
+        self.emit(OpCode::Add, reg, 0, value_u32);
     }
     
     fn alloc_register(&mut self) -> u8 {

@@ -368,7 +368,11 @@ BCL contracts use a standardized memory layout:
 | Address Range | Purpose |
 |---------------|---------|
 | `0x10` | Function selector (which function to call) |
-| `0x20-0x1FF` | Function parameters |
+| `0x14` | `msg.sender` (caller address) |
+| `0x18` | `msg.value` (transaction value) |
+| `0x20` | `block.number` (current block) |
+| `0x28` | `block.timestamp` (block time) |
+| `0x30-0x1FF` | Function parameters |
 | `0x200+` | Persistent storage variables |
 | `0x1000+` | Temporary computation space |
 

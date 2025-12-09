@@ -107,6 +107,7 @@ impl TrezorDevice {
     
     /// Send a command to the device
     #[cfg(feature = "trezor")]
+    #[allow(dead_code)] // Reserved for future full protocol implementation
     fn send_command(&self, _command: &[u8]) -> Result<Vec<u8>> {
         // This is a simplified placeholder
         // Real implementation would use Trezor's protobuf protocol
@@ -118,7 +119,8 @@ impl TrezorDevice {
     /// Get public key from device at derivation path
     #[cfg(feature = "trezor")]
     fn get_pubkey_from_device(&self, path: &str) -> Result<Vec<u8>> {
-        let _address_n = Self::parse_path(path)?;
+        #[allow(unused_variables)] // Path validation for future implementation
+        let address_n = Self::parse_path(path)?;
         
         // Real implementation would:
         // 1. Construct GetPublicKey protobuf message
@@ -133,7 +135,8 @@ impl TrezorDevice {
     /// Sign a message with the device
     #[cfg(feature = "trezor")]
     fn sign_message_with_device(&self, path: &str, _message: &[u8]) -> Result<Vec<u8>> {
-        let _address_n = Self::parse_path(path)?;
+        #[allow(unused_variables)] // Path validation for future implementation
+        let address_n = Self::parse_path(path)?;
         
         // Real implementation would:
         // 1. Construct SignMessage protobuf message

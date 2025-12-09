@@ -64,6 +64,9 @@ bitcell-network = { path = "../bitcell-network" }
 bitcell-crypto = { path = "../bitcell-crypto" }
 bitcell-ca = { path = "../bitcell-ca" }
 
+# Rate limiting
+governor = "0.6"
+
 # Unix process management
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

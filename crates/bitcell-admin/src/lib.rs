@@ -7,6 +7,7 @@
 //! - Testing utilities
 //! - Log aggregation and viewing
 //! - HSM integration for secure key management
+//! - Testnet faucet service
 
 pub mod api;
 pub mod web;
@@ -18,6 +19,7 @@ pub mod metrics_client;
 pub mod setup;
 pub mod system_metrics;
 pub mod hsm;
+pub mod faucet;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -34,6 +36,7 @@ pub use deployment::DeploymentManager;
 pub use config::ConfigManager;
 pub use process::ProcessManager;
 pub use setup::SETUP_FILE_PATH;
+pub use faucet::FaucetService;
 
 /// Administrative console server
 pub struct AdminConsole {
@@ -45,6 +48,7 @@ pub struct AdminConsole {
     metrics_client: Arc<metrics_client::MetricsClient>,
     setup: Arc<setup::SetupManager>,
     system_metrics: Arc<system_metrics::SystemMetricsCollector>,
+    faucet: Option<Arc<FaucetService>>,
 }
 
 impl AdminConsole {
@@ -70,7 +74,14 @@ impl AdminConsole {
             metrics_client: Arc::new(metrics_client::MetricsClient::new()),
             setup,
             system_metrics,
+            faucet: None,
         }
+    }
+
+    /// Enable faucet with configuration
+    pub fn with_faucet(mut self, faucet_config: faucet::FaucetConfig) -> Self {
+        self.faucet = Some(Arc::new(FaucetService::new(faucet_config)));
+        self
     }
 
     /// Get the process manager
@@ -85,7 +96,7 @@ impl AdminConsole {
 
     /// Build the application router
     fn build_router(&self) -> Router {
-        Router::new()
+        let router = Router::new()
             // Dashboard
             .route("/", get(web::dashboard::index))
             .route("/dashboard", get(web::dashboard::index))
@@ -123,6 +134,14 @@ impl AdminConsole {
             .route("/api/blocks/:height", get(api::blocks::get_block))
             .route("/api/blocks/:height/battles", get(api::blocks::get_block_battles))
 
+            // Faucet routes (if enabled)
+            .route("/faucet", get(web::faucet::faucet_page))
+            .route("/api/faucet/request", post(api::faucet::request_tokens))
+            .route("/api/faucet/info", get(api::faucet::get_info))
+            .route("/api/faucet/history", get(api::faucet::get_history))
+            .route("/api/faucet/stats", get(api::faucet::get_stats))
+            .route("/api/faucet/check", post(api::faucet::check_eligibility))
+
             // Wallet API
             .nest("/api/wallet", api::wallet::router().with_state(self.config.clone()))
 
@@ -143,7 +162,10 @@ impl AdminConsole {
                 metrics_client: self.metrics_client.clone(),
                 setup: self.setup.clone(),
                 system_metrics: self.system_metrics.clone(),
-            }))
+                faucet: self.faucet.clone(),
+            }));
+
+        router
     }
 
     /// Start the admin console server
@@ -169,6 +191,7 @@ pub struct AppState {
     pub metrics_client: Arc<metrics_client::MetricsClient>,
     pub setup: Arc<setup::SetupManager>,
     pub system_metrics: Arc<system_metrics::SystemMetricsCollector>,
+    pub faucet: Option<Arc<FaucetService>>,
 }
 
 #[cfg(test)]

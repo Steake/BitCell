@@ -49,6 +49,12 @@ impl EcvrfSecretKey {
         Self { scalar }
     }
 
+    /// Create ECVRF secret key from a scalar
+    /// Used for deterministic key derivation
+    pub fn from_scalar(scalar: Scalar) -> Self {
+        Self { scalar }
+    }
+
     /// Get the public key (x*G)
     pub fn public_key(&self) -> EcvrfPublicKey {
         let point = &self.scalar * RISTRETTO_BASEPOINT_TABLE;

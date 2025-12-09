@@ -69,16 +69,28 @@ impl StateCircuit {
     /// This loads the production proving key that was generated through a
     /// multi-party computation ceremony. The key is stored in `keys/state/proving_key.bin`.
     ///
+    /// # Expected Directory Structure
+    /// ```text
+    /// BitCell/
+    /// ├── crates/
+    /// │   └── bitcell-zkp/      <- CARGO_MANIFEST_DIR
+    /// └── keys/
+    ///     └── state/
+    ///         └── proving_key.bin
+    /// ```
+    ///
     /// # Returns
     /// * `Ok(ProvingKey)` if the key is found and successfully loaded
     /// * `Err` if the key file doesn't exist or is corrupted
     pub fn load_proving_key() -> crate::Result<ProvingKey<ark_bn254::Bn254>> {
-        let key_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir
             .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("keys/state/proving_key.bin");
+            .and_then(|p| p.parent())
+            .ok_or_else(|| crate::Error::KeyManagement(
+                "Failed to resolve repository root from crates/bitcell-zkp".to_string()
+            ))?;
+        let key_path = repo_root.join("keys/state/proving_key.bin");
         crate::key_management::load_proving_key(key_path)
     }
 
@@ -87,16 +99,28 @@ impl StateCircuit {
     /// This loads the production verification key that was generated through a
     /// multi-party computation ceremony. The key is stored in `keys/state/verification_key.bin`.
     ///
+    /// # Expected Directory Structure
+    /// ```text
+    /// BitCell/
+    /// ├── crates/
+    /// │   └── bitcell-zkp/      <- CARGO_MANIFEST_DIR
+    /// └── keys/
+    ///     └── state/
+    ///         └── verification_key.bin
+    /// ```
+    ///
     /// # Returns
     /// * `Ok(VerifyingKey)` if the key is found and successfully loaded
     /// * `Err` if the key file doesn't exist or is corrupted
     pub fn load_verification_key() -> crate::Result<VerifyingKey<ark_bn254::Bn254>> {
-        let key_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir
             .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("keys/state/verification_key.bin");
+            .and_then(|p| p.parent())
+            .ok_or_else(|| crate::Error::KeyManagement(
+                "Failed to resolve repository root from crates/bitcell-zkp".to_string()
+            ))?;
+        let key_path = repo_root.join("keys/state/verification_key.bin");
         crate::key_management::load_verification_key(key_path)
     }
 

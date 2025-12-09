@@ -67,7 +67,7 @@ criterion_group! {
     name = proof_benches;
     config = Criterion::default()
         .measurement_time(Duration::from_secs(5))
-        .sample_size(10);
+        .sample_size(100);  // Increased for more stable benchmarks
     targets = 
         bench_battle_proof_generation,
         bench_battle_proof_verification,

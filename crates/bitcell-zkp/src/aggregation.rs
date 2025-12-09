@@ -208,23 +208,23 @@ impl BlockProofAggregator {
     /// Ok(commitment) if all proofs are valid, Err otherwise
     pub fn verify_block(
         &self,
-        battle_proofs: Vec<(Groth16Proof, Vec<Fr>)>,
-        state_proofs: Vec<(Groth16Proof, Vec<Fr>)>,
+        battle_proofs: &[(Groth16Proof, Vec<Fr>)],
+        state_proofs: &[(Groth16Proof, Vec<Fr>)],
     ) -> Result<[u8; 32]> {
         // Verify all battle proofs
-        let battle_valid = self.aggregator.verify_battle_batch(battle_proofs.clone())?;
+        let battle_valid = self.aggregator.verify_battle_batch(battle_proofs.to_vec())?;
         if !battle_valid {
             return Err(Error::ProofVerification);
         }
 
         // Verify all state proofs
-        let state_valid = self.aggregator.verify_state_batch(state_proofs.clone())?;
+        let state_valid = self.aggregator.verify_state_batch(state_proofs.to_vec())?;
         if !state_valid {
             return Err(Error::ProofVerification);
         }
 
         // Create aggregation commitment
-        let mut all_proofs = Vec::new();
+        let mut all_proofs = Vec::with_capacity(battle_proofs.len() + state_proofs.len());
         all_proofs.extend(battle_proofs.iter().map(|(p, _)| p.clone()));
         all_proofs.extend(state_proofs.iter().map(|(p, _)| p.clone()));
         

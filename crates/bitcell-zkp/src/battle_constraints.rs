@@ -99,11 +99,14 @@
 /// Production deployment should use Poseidon hash for commitments to ensure
 /// cryptographic soundness and efficient in-circuit verification.
 
+// Core circuit primitives
 use ark_ff::PrimeField;
 use ark_r1cs_std::prelude::*;
 use ark_r1cs_std::fields::fp::FpVar;
 use ark_r1cs_std::bits::ToBitsGadget;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
+
+// Groth16 proof system (used in implementation methods)
 use ark_bn254::{Bn254, Fr};
 use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
 use ark_snark::SNARK;
@@ -263,7 +266,7 @@ impl BattleCircuit<Fr> {
         };
         
         Groth16::<Bn254>::circuit_specific_setup(circuit, rng)
-            .map_err(|e| crate::Error::Setup(format!("Circuit setup failed: {}", e)))
+            .map_err(|e| crate::Error::Setup(e.to_string()))
     }
 
     /// Generate a proof for this circuit instance
@@ -672,7 +675,7 @@ mod tests {
         assert!(cs.is_satisfied().unwrap());
         
         // Print constraint count for informational purposes
-        println!("Battle circuit constraints: {}", cs.num_constraints());
+        eprintln!("Battle circuit constraints: {}", cs.num_constraints());
     }
 
     #[test]
@@ -834,7 +837,7 @@ mod tests {
         circuit.generate_constraints(cs.clone()).unwrap();
         
         let num_constraints = cs.num_constraints();
-        println!("Total constraints for {}x{} grid, {} steps: {}", 
+        eprintln!("Total constraints for {}x{} grid, {} steps: {}", 
                  GRID_SIZE, GRID_SIZE, BATTLE_STEPS, num_constraints);
         
         // Sanity check: should have many constraints (millions for 64x64)

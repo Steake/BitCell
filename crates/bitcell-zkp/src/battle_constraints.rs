@@ -1,5 +1,41 @@
 /// Battle circuit constraints implementing Conway's Game of Life rules
 /// This module provides the full R1CS constraint system for verifying CA battles
+///
+/// # Protocol Specifications (RC2-001.1)
+///
+/// The BattleCircuit enforces the following protocol invariants:
+/// 1. **Conway's Rule Enforcement**: Verifies that each evolution step follows
+///    Conway's Game of Life rules (B3/S23) with toroidal wrapping.
+/// 2. **Commitment Consistency**: Proves that the initial patterns match the
+///    commitments submitted during the commit phase without revealing the patterns.
+/// 3. **Winner Determination**: Verifies that the winner is correctly determined
+///    based on regional energy in the final grid state.
+///
+/// ## Public Inputs
+/// - `initial_grid`: Flattened NxN grid at battle start (N² Fr elements)
+/// - `final_grid`: Flattened NxN grid after evolution (N² Fr elements)
+/// - `commitment_a`: Commitment to player A's pattern (Fr element)
+/// - `commitment_b`: Commitment to player B's pattern (Fr element)
+/// - `winner`: Winner ID (0=A, 1=B, 2=tie)
+///
+/// ## Private Inputs (Witnesses)
+/// - `pattern_a`: Player A's glider pattern (private)
+/// - `pattern_b`: Player B's glider pattern (private)
+/// - `nonce_a`: Random nonce for commitment A (private)
+/// - `nonce_b`: Random nonce for commitment B (private)
+///
+/// ## Circuit Configuration
+/// - **Test Configuration**: 64x64 grid, 10 evolution steps (~100K constraints)
+/// - **Production Configuration**: 1024x1024 grid, 1000 steps (~10M constraints)
+///
+/// ## Performance Target (RC2-001.4)
+/// - Proving Time: <30 seconds on 8-core CPU (production config)
+/// - Verification: <10ms
+/// - Proof Size: ~200 bytes (Groth16 compressed)
+///
+/// ## Notes
+/// The current implementation uses a simplified hash function for commitments.
+/// Production deployments should use Poseidon hash for better SNARK efficiency.
 
 use ark_ff::PrimeField;
 use ark_r1cs_std::prelude::*;

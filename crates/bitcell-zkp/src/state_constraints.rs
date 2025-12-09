@@ -1,5 +1,37 @@
 /// State transition circuit implementing Merkle tree verification
 /// This module provides R1CS constraints for verifying state updates
+///
+/// # Protocol Specifications (RC2-001.2)
+///
+/// The StateCircuit enforces the following protocol invariants:
+/// 1. **State Root Updates**: Verifies that state transitions are valid by proving
+///    knowledge of a merkle path from an old leaf to the old state root, and from
+///    a new leaf to the new state root.
+/// 2. **Nullifier Double-Spend Protection**: Derives a nullifier from the old leaf
+///    that must be unique per transaction. The consensus layer tracks used nullifiers.
+/// 3. **Merkle Proof Validation**: All merkle paths are verified in-circuit using
+///    SNARK-friendly hash functions.
+///
+/// ## Public Inputs
+/// - `old_root`: State root before transaction (Fr element)
+/// - `new_root`: State root after transaction (Fr element)
+/// - `nullifier`: Unique identifier derived from spent leaf (Fr element)
+/// - `commitment`: Commitment to new leaf value (Fr element)
+///
+/// ## Private Inputs (Witnesses)
+/// - `leaf`: Old leaf value being spent
+/// - `path`: Merkle authentication path (32 siblings)
+/// - `indices`: Path direction indicators (left/right at each level)
+/// - `new_leaf`: New leaf value after transaction
+///
+/// ## Constraint Count
+/// Approximately 40K constraints for 32-level Merkle tree with simplified hash.
+/// Production implementation should use Poseidon hash for better efficiency.
+///
+/// ## Performance Target (RC2-001.4)
+/// - Proving Time: <20 seconds on 8-core CPU
+/// - Verification: <10ms
+/// - Proof Size: ~200 bytes (Groth16 compressed)
 
 use ark_ff::PrimeField;
 use ark_r1cs_std::prelude::*;
@@ -214,25 +246,33 @@ fn compute_merkle_root<F: PrimeField>(
 }
 
 /// Hash a single field element (simplified hash function)
+/// 
+/// **TODO for Production (RC2)**: Replace with PoseidonMerkleGadget::hash_single
+/// from the poseidon_merkle module for cryptographic security.
+/// Current implementation is for testing only.
 fn hash_single<F: PrimeField>(
     _cs: ConstraintSystemRef<F>,
     input: &FpVar<F>,
 ) -> Result<FpVar<F>, SynthesisError> {
     // Simplified hash: H(x) = x^2 + x + 1
-    // In production, use Poseidon or another SNARK-friendly hash
+    // NOT cryptographically secure - for testing only
     let squared = input.square()?;
     let result = &squared + input + FpVar::one();
     Ok(result)
 }
 
 /// Hash a pair of field elements
+/// 
+/// **TODO for Production (RC2)**: Replace with PoseidonMerkleGadget::poseidon_hash
+/// from the poseidon_merkle module for cryptographic security.
+/// Current implementation is for testing only.
 fn hash_pair<F: PrimeField>(
     _cs: ConstraintSystemRef<F>,
     left: &FpVar<F>,
     right: &FpVar<F>,
 ) -> Result<FpVar<F>, SynthesisError> {
     // Simplified hash: H(x, y) = x^2 + y^2 + x*y + 1
-    // In production, use Poseidon or another SNARK-friendly hash
+    // NOT cryptographically secure - for testing only
     let left_sq = left.square()?;
     let right_sq = right.square()?;
     let product = left * right;
@@ -241,6 +281,27 @@ fn hash_pair<F: PrimeField>(
 }
 
 /// Nullifier set membership circuit
+///
+/// # Purpose
+/// This circuit proves whether a nullifier is a member of a nullifier set without
+/// revealing the merkle path. This is used to check if a nullifier has already been
+/// used (double-spend detection) while maintaining privacy.
+///
+/// ## Public Inputs
+/// - `nullifier`: The nullifier to check (Fr element)
+/// - `set_root`: Root of the nullifier set merkle tree (Fr element)
+/// - `is_member`: Boolean flag (1 if member, 0 if not)
+///
+/// ## Private Inputs
+/// - `path`: Merkle authentication path (32 siblings)
+/// - `indices`: Path direction indicators
+///
+/// ## Use Cases
+/// 1. Proving a nullifier is already used (membership proof)
+/// 2. Proving a nullifier is NOT used (non-membership proof)
+///
+/// The circuit computes the merkle root from the nullifier and path, then enforces
+/// that the roots match if and only if is_member is true.
 #[derive(Clone)]
 pub struct NullifierCircuit<F: PrimeField> {
     /// Nullifier to check (public)

@@ -11,7 +11,7 @@ use futures::{sink::SinkExt, stream::StreamExt};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -245,20 +245,29 @@ async fn handle_json_rpc_socket(socket: WebSocket, state: RpcState) {
         let state = state.clone();
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_millis(500));
-            let mut last_tx_count = 0;
+            let mut seen_txs = std::collections::HashSet::new();
 
             loop {
                 interval.tick().await;
-                let current_count = state.tx_pool.pending_count();
-                if current_count > last_tx_count {
-                    // Get new transactions (simplified - in production would track which txs are new)
-                    let pending_txs = state.tx_pool.get_pending_transactions();
-                    for tx in pending_txs.iter().skip(last_tx_count) {
-                        let tx_hash = format!("0x{}", hex::encode(tx.hash().as_bytes()));
-                        subscription_manager.broadcast(&SubscriptionType::PendingTransactions, json!(tx_hash));
+                let pending_txs = state.tx_pool.get_pending_transactions();
+                
+                // Broadcast only new transactions we haven't seen before
+                for tx in &pending_txs {
+                    let tx_hash = tx.hash();
+                    if !seen_txs.contains(&tx_hash) {
+                        let tx_hash_hex = format!("0x{}", hex::encode(tx_hash.as_bytes()));
+                        subscription_manager.broadcast(&SubscriptionType::PendingTransactions, json!(tx_hash_hex));
+                        seen_txs.insert(tx_hash);
                     }
                 }
-                last_tx_count = current_count;
+                
+                // Prevent unbounded memory growth: if we have too many seen transactions,
+                // keep only the ones still in the pool
+                if seen_txs.len() > 10000 {
+                    let current_hashes: std::collections::HashSet<_> = 
+                        pending_txs.iter().map(|tx| tx.hash()).collect();
+                    seen_txs.retain(|hash| current_hashes.contains(hash));
+                }
             }
         })
     };
@@ -458,6 +467,135 @@ async fn handle_subscription_request(
                 message: "Method not found".to_string(),
             }),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_log_filter_address_match() {
+        let filter = LogFilter {
+            address: Some(vec!["0x1234".to_string(), "0x5678".to_string()]),
+            topics: None,
+        };
+
+        let log_event1 = LogFilter {
+            address: Some(vec!["0x1234".to_string()]),
+            topics: None,
+        };
+
+        let log_event2 = LogFilter {
+            address: Some(vec!["0xabcd".to_string()]),
+            topics: None,
+        };
+
+        assert!(matches_log_filter(&filter, &log_event1));
+        assert!(!matches_log_filter(&filter, &log_event2));
+    }
+
+    #[test]
+    fn test_log_filter_empty_address() {
+        let filter = LogFilter {
+            address: Some(vec![]),
+            topics: None,
+        };
+
+        let log_event = LogFilter {
+            address: Some(vec!["0x1234".to_string()]),
+            topics: None,
+        };
+
+        // Empty address filter matches any address
+        assert!(matches_log_filter(&filter, &log_event));
+    }
+
+    #[test]
+    fn test_log_filter_no_address() {
+        let filter = LogFilter {
+            address: None,
+            topics: None,
+        };
+
+        let log_event = LogFilter {
+            address: Some(vec!["0x1234".to_string()]),
+            topics: None,
+        };
+
+        // No address filter matches any address
+        assert!(matches_log_filter(&filter, &log_event));
+    }
+
+    #[test]
+    fn test_log_filter_topic_match() {
+        let filter = LogFilter {
+            address: None,
+            topics: Some(vec![
+                Some(vec!["0xabc".to_string(), "0xdef".to_string()]),
+                None,
+                Some(vec!["0x123".to_string()]),
+            ]),
+        };
+
+        let log_event1 = LogFilter {
+            address: None,
+            topics: Some(vec![
+                Some(vec!["0xabc".to_string()]),
+                Some(vec!["0xany".to_string()]),
+                Some(vec!["0x123".to_string()]),
+            ]),
+        };
+
+        let log_event2 = LogFilter {
+            address: None,
+            topics: Some(vec![
+                Some(vec!["0xabc".to_string()]),
+                Some(vec!["0xany".to_string()]),
+                Some(vec!["0x999".to_string()]),
+            ]),
+        };
+
+        assert!(matches_log_filter(&filter, &log_event1));
+        assert!(!matches_log_filter(&filter, &log_event2));
+    }
+
+    #[test]
+    fn test_subscription_type_matching() {
+        assert!(matches_subscription(
+            &SubscriptionType::NewHeads,
+            &SubscriptionType::NewHeads
+        ));
+
+        assert!(!matches_subscription(
+            &SubscriptionType::NewHeads,
+            &SubscriptionType::PendingTransactions
+        ));
+
+        let filter1 = LogFilter {
+            address: Some(vec!["0x1234".to_string()]),
+            topics: None,
+        };
+
+        let filter2 = LogFilter {
+            address: Some(vec!["0x1234".to_string()]),
+            topics: None,
+        };
+
+        let filter3 = LogFilter {
+            address: Some(vec!["0x5678".to_string()]),
+            topics: None,
+        };
+
+        assert!(matches_subscription(
+            &SubscriptionType::Logs(filter1.clone()),
+            &SubscriptionType::Logs(filter2.clone())
+        ));
+
+        assert!(!matches_subscription(
+            &SubscriptionType::Logs(filter1),
+            &SubscriptionType::Logs(filter3)
+        ));
     }
 }
 

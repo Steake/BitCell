@@ -612,7 +612,8 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
         });
     }
     
-    // Return transaction hash
+    // Return transaction hash (use full hash for identification, not signing hash)
+    let tx_hash = tx.hash();
     Ok(json!(format!("0x{}", hex::encode(tx_hash.as_bytes()))))
 }
 

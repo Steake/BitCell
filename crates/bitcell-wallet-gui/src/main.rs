@@ -446,10 +446,10 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
             // Convert to smallest units (1 CELL = 100_000_000 units)
             let amount_units = (amount * 100_000_000.0) as u64;
             
-            // Get wallet and RPC client
-            let app_state = state.borrow();
-            
-            let (from_address, rpc_client) = {
+            // Get wallet info and secret key before async operation
+            let (from_addr_formatted, secret_key, rpc_client) = {
+                let app_state = state.borrow();
+                
                 let wallet = match &app_state.wallet {
                     Some(w) => w,
                     None => {
@@ -458,12 +458,26 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                     }
                 };
                 
+                if !wallet.is_unlocked() {
+                    wallet_state.set_status_message("Wallet is locked. Please unlock it first.".into());
+                    return;
+                }
+                
                 // Get the first address as sender
                 let addresses = wallet.all_addresses();
-                let from_addr = match addresses.iter().find(|a| a.chain() == chain) {
-                    Some(a) => a.to_string_formatted(),
+                let from_addr_obj = match addresses.iter().find(|a| a.chain() == chain) {
+                    Some(a) => a,
                     None => {
                         wallet_state.set_status_message(format!("No {} address available", chain_display_name(chain)).into());
+                        return;
+                    }
+                };
+                
+                // Get secret key for signing
+                let sk = match wallet.get_secret_key_for_address(from_addr_obj) {
+                    Ok(sk) => sk,
+                    Err(e) => {
+                        wallet_state.set_status_message(format!("Failed to get secret key: {}", e).into());
                         return;
                     }
                 };
@@ -476,11 +490,8 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                     }
                 };
                 
-                (from_addr, rpc)
+                (from_addr_obj.to_string_formatted(), sk, rpc)
             };
-            
-            // Drop app_state borrow before the async operation
-            drop(app_state);
             
             // Set loading state
             wallet_state.set_is_loading(true);
@@ -489,13 +500,10 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
             let window_weak = window.as_weak();
             let to_address = to_address.to_string();
             
-            // Capture state for async operation
-            let state_clone = state.clone();
-            
             // Async nonce fetch and transaction creation
             tokio::spawn(async move {
                 // Get nonce from node
-                let nonce = match rpc_client.get_transaction_count(&from_address).await {
+                let nonce = match rpc_client.get_transaction_count(&from_addr_formatted).await {
                     Ok(n) => n,
                     Err(e) => {
                         let _ = slint::invoke_from_event_loop(move || {
@@ -519,7 +527,7 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                 let gas_limit = 21000u64;
                 
                 // Parse addresses to PublicKey format
-                let from_pk = match parse_address_to_pubkey(&from_address) {
+                let from_pk = match parse_address_to_pubkey(&from_addr_formatted) {
                     Ok(pk) => pk,
                     Err(e) => {
                         let _ = slint::invoke_from_event_loop(move || {
@@ -547,57 +555,6 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                     }
                 };
                 
-                // Get the secret key for signing
-                let secret_key = {
-                    let app_state = state_clone.borrow();
-                    if let Some(ref wallet) = app_state.wallet {
-                        // Get the address object to derive the key
-                        let addresses = wallet.all_addresses();
-                        let from_addr_obj = match addresses.iter().find(|a| a.to_string_formatted() == from_address) {
-                            Some(a) => a,
-                            None => {
-                                drop(app_state);
-                                let _ = slint::invoke_from_event_loop(move || {
-                                    if let Some(window) = window_weak.upgrade() {
-                                        let ws = window.global::<WalletState>();
-                                        ws.set_is_loading(false);
-                                        ws.set_status_message("From address not found in wallet".into());
-                                    }
-                                });
-                                return;
-                            }
-                        };
-                        
-                        // For BitCell, the address format is the hex-encoded public key
-                        // The wallet derives keys from the mnemonic seed
-                        // We need to get the secret key for this address
-                        match wallet.get_secret_key_for_address(from_addr_obj) {
-                            Ok(sk) => sk,
-                            Err(e) => {
-                                drop(app_state);
-                                let _ = slint::invoke_from_event_loop(move || {
-                                    if let Some(window) = window_weak.upgrade() {
-                                        let ws = window.global::<WalletState>();
-                                        ws.set_is_loading(false);
-                                        ws.set_status_message(format!("Failed to get secret key: {}", e).into());
-                                    }
-                                });
-                                return;
-                            }
-                        }
-                    } else {
-                        drop(app_state);
-                        let _ = slint::invoke_from_event_loop(move || {
-                            if let Some(window) = window_weak.upgrade() {
-                                let ws = window.global::<WalletState>();
-                                ws.set_is_loading(false);
-                                ws.set_status_message("No wallet loaded".into());
-                            }
-                        });
-                        return;
-                    }
-                };
-                
                 // Create consensus transaction (without signature initially)
                 let mut tx = bitcell_consensus::Transaction {
                     nonce,
@@ -607,7 +564,7 @@ fn setup_callbacks(window: &MainWindow, state: Rc<RefCell<AppState>>) {
                     gas_limit,
                     gas_price,
                     data: vec![],
-                    signature: bitcell_crypto::Signature::from_bytes([0u8; 64]).unwrap(), // Placeholder
+                    signature: bitcell_crypto::Signature::from_bytes([0u8; 64]), // Placeholder
                 };
                 
                 // Compute signing hash (hash of transaction WITHOUT signature field)

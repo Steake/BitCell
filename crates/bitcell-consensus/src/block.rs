@@ -1,6 +1,7 @@
 //! Block structures
 
 use bitcell_crypto::{Hash256, PublicKey, Signature};
+use crate::finality::{FinalityVote, FinalityStatus};
 use serde::{Deserialize, Serialize};
 
 /// Block header
@@ -58,6 +59,13 @@ pub struct Block {
     
     /// Proposer signature
     pub signature: Signature,
+    
+    /// Finality votes collected for this block
+    pub finality_votes: Vec<FinalityVote>,
+    
+    /// Finality status of this block
+    #[serde(default)]
+    pub finality_status: FinalityStatus,
 }
 
 impl Block {

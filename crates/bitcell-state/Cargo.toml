@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 bitcell-crypto = { path = "../bitcell-crypto" }
+bitcell-ebsl = { path = "../bitcell-ebsl" }
 serde.workspace = true
 thiserror.workspace = true
 rocksdb = "0.22"

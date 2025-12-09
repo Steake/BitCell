@@ -60,8 +60,14 @@ impl AdminConsole {
         let system_metrics = Arc::new(system_metrics::SystemMetricsCollector::new());
         
         // Initialize auth with a secret key
-        // TODO: Load from environment variable or secure config
-        let auth = Arc::new(auth::AuthManager::new("bitcell-admin-jwt-secret-change-in-production"));
+        // TODO: SECURITY: Load JWT secret from environment variable or secure config
+        // Current hardcoded secret is for development only and MUST be changed for production
+        let jwt_secret = std::env::var("BITCELL_JWT_SECRET")
+            .unwrap_or_else(|_| {
+                tracing::warn!("BITCELL_JWT_SECRET not set, using default (INSECURE for production!)");
+                "bitcell-admin-jwt-secret-change-in-production".to_string()
+            });
+        let auth = Arc::new(auth::AuthManager::new(&jwt_secret));
         let audit = Arc::new(audit::AuditLogger::new());
 
         // Try to load setup state from default location

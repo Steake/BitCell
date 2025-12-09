@@ -337,27 +337,6 @@ pub async fn auth_middleware(
     Ok(next.run(request).await)
 }
 
-/// Middleware to check role permissions
-pub fn require_role(required_role: Role) -> impl Fn(Request, Next) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, AuthError>> + Send>> + Clone {
-    move |request: Request, next: Next| {
-        let required = required_role;
-        Box::pin(async move {
-            // Get claims from extensions
-            let claims = request
-                .extensions()
-                .get::<Claims>()
-                .ok_or(AuthError::InvalidToken)?;
-
-            // Check if user has required role
-            if !claims.role.can_perform(required) {
-                return Err(AuthError::InsufficientPermissions);
-            }
-
-            Ok(next.run(request).await)
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

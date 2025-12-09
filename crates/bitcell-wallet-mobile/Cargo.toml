@@ -1,0 +1,51 @@
+[package]
+name = "bitcell-wallet-mobile"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Mobile wallet SDK for BitCell blockchain with iOS/Android FFI bindings"
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+bitcell-wallet = { path = "../bitcell-wallet" }
+bitcell-crypto = { path = "../bitcell-crypto" }
+bitcell-state = { path = "../bitcell-state" }
+
+# UniFFI for cross-platform FFI bindings
+uniffi = { version = "0.28", features = ["cli"] }
+
+# Cryptography
+sha2.workspace = true
+rand.workspace = true
+zeroize.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json = "1.0"
+bincode.workspace = true
+hex.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Async runtime (for potential network operations)
+tokio = { workspace = true, optional = true }
+
+# Utilities
+parking_lot.workspace = true
+
+[build-dependencies]
+uniffi = { version = "0.28", features = ["build"] }
+
+[dev-dependencies]
+uniffi = { version = "0.28", features = ["bindgen-tests"] }
+
+[features]
+default = []
+async = ["tokio"]

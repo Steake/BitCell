@@ -1,0 +1,157 @@
+// UniFFI interface definition for BitCell Mobile Wallet SDK
+//
+// This file defines the API surface that will be exposed to iOS (Swift) and Android (Kotlin)
+
+namespace bitcell_wallet_mobile {
+    // Create wallet
+    [Throws=MobileWalletError]
+    MobileWallet create_wallet(string mnemonic_phrase, SecureStorageConfig storage_config);
+    
+    // Restore wallet
+    [Throws=MobileWalletError]
+    MobileWallet restore_wallet(string mnemonic_phrase, SecureStorageConfig storage_config);
+    
+    // Generate a new mnemonic phrase
+    [Throws=MobileWalletError]
+    string generate_mnemonic(MnemonicWordCount word_count);
+    
+    // Validate mnemonic phrase
+    boolean validate_mnemonic(string mnemonic_phrase);
+};
+
+// Mnemonic word count options
+enum MnemonicWordCount {
+    "Words12",
+    "Words18", 
+    "Words24",
+};
+
+// Biometric authentication result
+enum BiometricResult {
+    "Success",
+    "Failed",
+    "Cancelled",
+    "NotAvailable",
+    "NotEnrolled",
+};
+
+// Wallet lock state
+enum WalletLockState {
+    "Unlocked",
+    "Locked",
+    "BiometricLocked",
+};
+
+// Secure storage configuration
+dictionary SecureStorageConfig {
+    boolean use_biometric;
+    boolean use_keychain; // iOS Keychain or Android Keystore
+    string app_identifier;
+};
+
+// Account information
+dictionary AccountInfo {
+    string address;
+    string balance;
+    u64 nonce;
+};
+
+// Transaction details
+dictionary TransactionDetails {
+    string from_address;
+    string to_address;
+    string amount;
+    string fee;
+    u64 nonce;
+    string? data;
+};
+
+// Signed transaction for broadcast
+dictionary SignedTransactionResult {
+    string tx_hash;
+    string raw_transaction;
+};
+
+// Backup data for wallet export
+dictionary WalletBackup {
+    string encrypted_data;
+    string backup_version;
+    u64 timestamp;
+};
+
+// Mobile Wallet SDK main interface
+interface MobileWallet {
+    // Wallet management
+    [Throws=MobileWalletError]
+    void lock();
+    
+    [Throws=MobileWalletError]
+    void unlock(string password);
+    
+    [Throws=MobileWalletError]
+    void unlock_with_biometric();
+    
+    WalletLockState get_lock_state();
+    
+    boolean is_locked();
+    
+    // Account management
+    [Throws=MobileWalletError]
+    AccountInfo get_account_info();
+    
+    [Throws=MobileWalletError]
+    string get_address();
+    
+    [Throws=MobileWalletError]
+    string get_public_key();
+    
+    // Transaction operations
+    [Throws=MobileWalletError]
+    SignedTransactionResult sign_transaction(TransactionDetails tx_details);
+    
+    [Throws=MobileWalletError]
+    string sign_message(string message);
+    
+    // Backup and restore
+    [Throws=MobileWalletError]
+    WalletBackup create_backup(string password);
+    
+    [Throws=MobileWalletError]
+    void restore_from_backup(WalletBackup backup, string password);
+    
+    [Throws=MobileWalletError]
+    string export_mnemonic(string password);
+    
+    // Security operations
+    [Throws=MobileWalletError]
+    void change_password(string old_password, string new_password);
+    
+    [Throws=MobileWalletError]
+    void enable_biometric(boolean enable);
+    
+    boolean is_biometric_enabled();
+    
+    // Utility methods
+    string get_wallet_version();
+    
+    [Throws=MobileWalletError]
+    void clear_secure_storage();
+};
+
+// Error types
+[Error]
+enum MobileWalletError {
+    "InvalidMnemonic",
+    "InvalidPassword",
+    "WalletLocked",
+    "InsufficientBalance",
+    "InvalidAddress",
+    "TransactionError",
+    "SigningError",
+    "StorageError",
+    "BiometricError",
+    "BackupError",
+    "CryptoError",
+    "SerializationError",
+    "NotImplemented",
+};

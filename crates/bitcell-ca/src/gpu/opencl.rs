@@ -5,13 +5,13 @@ use crate::gpu::{GpuEvolver, GpuError, GpuDeviceInfo, GpuBackend};
 
 #[cfg(feature = "opencl")]
 use opencl3::{
-    device::{Device, CL_DEVICE_TYPE_GPU},
+    device::{Device, CL_DEVICE_TYPE_GPU, get_all_devices},
     context::Context,
     command_queue::{CommandQueue, CL_QUEUE_PROFILING_ENABLE},
     memory::{Buffer, CL_MEM_READ_ONLY, CL_MEM_WRITE_ONLY},
     program::Program,
     kernel::{Kernel, ExecuteKernel},
-    types::{cl_uchar, CL_BLOCKING, CL_NON_BLOCKING},
+    types::{cl_uchar, CL_BLOCKING},
 };
 
 /// OpenCL kernel source for CA evolution
@@ -94,34 +94,34 @@ pub struct OpenCLEvolver {
 impl OpenCLEvolver {
     /// Create a new OpenCL evolver
     pub fn new() -> Result<Self, GpuError> {
-        // Find a GPU device
-        let device = Device::new(
-            Device::get_all_devices(CL_DEVICE_TYPE_GPU)
-                .map_err(|e| GpuError::InitializationFailed(format!("Failed to get GPU devices: {}", e)))?
-                .first()
-                .ok_or_else(|| GpuError::NotAvailable)?
-                .id()
-        );
+        // Find all GPU devices
+        let device_ids = get_all_devices(CL_DEVICE_TYPE_GPU)
+            .map_err(|e| GpuError::InitializationFailed(format!("Failed to get GPU devices: {:?}", e)))?;
+        
+        let device_id = device_ids.first()
+            .ok_or_else(|| GpuError::NotAvailable)?;
+        
+        let device = Device::new(*device_id);
         
         let device_name = device.name()
-            .map_err(|e| GpuError::InitializationFailed(format!("Failed to get device name: {}", e)))?;
+            .map_err(|e| GpuError::InitializationFailed(format!("Failed to get device name: {:?}", e)))?;
         
         let device_memory = device.global_mem_size()
-            .map_err(|e| GpuError::InitializationFailed(format!("Failed to get device memory: {}", e)))?;
+            .map_err(|e| GpuError::InitializationFailed(format!("Failed to get device memory: {:?}", e)))?;
         
         let compute_units = device.max_compute_units()
-            .map_err(|e| GpuError::InitializationFailed(format!("Failed to get compute units: {}", e)))?;
+            .map_err(|e| GpuError::InitializationFailed(format!("Failed to get compute units: {:?}", e)))?;
         
         // Create context and command queue
         let context = Context::from_device(&device)
-            .map_err(|e| GpuError::InitializationFailed(format!("Failed to create context: {}", e)))?;
+            .map_err(|e| GpuError::InitializationFailed(format!("Failed to create context: {:?}", e)))?;
         
         let queue = CommandQueue::create_default(&context, CL_QUEUE_PROFILING_ENABLE)
-            .map_err(|e| GpuError::InitializationFailed(format!("Failed to create command queue: {}", e)))?;
+            .map_err(|e| GpuError::InitializationFailed(format!("Failed to create command queue: {:?}", e)))?;
         
         // Build the program
         let program = Program::create_and_build_from_source(&context, OPENCL_KERNEL, "")
-            .map_err(|e| GpuError::InitializationFailed(format!("Failed to build OpenCL program: {}", e)))?;
+            .map_err(|e| GpuError::InitializationFailed(format!("Failed to build OpenCL program: {:?}", e)))?;
         
         let device_info = GpuDeviceInfo {
             backend: GpuBackend::OpenCL,
@@ -164,35 +164,45 @@ impl GpuEvolver for OpenCLEvolver {
         let src_data: Vec<cl_uchar> = src.cells.iter().map(|c| c.state).collect();
         
         // Create OpenCL buffers
-        let src_buffer = Buffer::<cl_uchar>::create(&self.context, CL_MEM_READ_ONLY, num_cells, std::ptr::null_mut())
-            .map_err(|_| GpuError::MemoryAllocationFailed)?;
+        let mut src_buffer = unsafe {
+            Buffer::<cl_uchar>::create(&self.context, CL_MEM_READ_ONLY, num_cells, std::ptr::null_mut())
+                .map_err(|_| GpuError::MemoryAllocationFailed)?
+        };
         
-        let dst_buffer = Buffer::<cl_uchar>::create(&self.context, CL_MEM_WRITE_ONLY, num_cells, std::ptr::null_mut())
-            .map_err(|_| GpuError::MemoryAllocationFailed)?;
+        let dst_buffer = unsafe {
+            Buffer::<cl_uchar>::create(&self.context, CL_MEM_WRITE_ONLY, num_cells, std::ptr::null_mut())
+                .map_err(|_| GpuError::MemoryAllocationFailed)?
+        };
         
         // Upload src data to GPU
-        self.queue.enqueue_write_buffer(&src_buffer, CL_BLOCKING, 0, &src_data, &[])
-            .map_err(|e| GpuError::MemoryTransferFailed(format!("Upload failed: {}", e)))?;
+        unsafe {
+            self.queue.enqueue_write_buffer(&mut src_buffer, CL_BLOCKING, 0, &src_data, &[])
+                .map_err(|e| GpuError::MemoryTransferFailed(format!("Upload failed: {:?}", e)))?;
+        }
         
         // Create and execute kernel
         let kernel = Kernel::create(&self.program, "evolve_ca")
-            .map_err(|e| GpuError::KernelExecutionFailed(format!("Kernel creation failed: {}", e)))?;
+            .map_err(|e| GpuError::KernelExecutionFailed(format!("Kernel creation failed: {:?}", e)))?;
         
-        let kernel_event = ExecuteKernel::new(&kernel)
-            .set_arg(&src_buffer)
-            .set_arg(&dst_buffer)
-            .set_arg(&(size as u32))
-            .set_global_work_sizes(&[size, size])
-            .enqueue_nd_range(&self.queue)
-            .map_err(|e| GpuError::KernelExecutionFailed(format!("Kernel execution failed: {}", e)))?;
+        let kernel_event = unsafe {
+            ExecuteKernel::new(&kernel)
+                .set_arg(&src_buffer)
+                .set_arg(&dst_buffer)
+                .set_arg(&(size as u32))
+                .set_global_work_sizes(&[size, size])
+                .enqueue_nd_range(&self.queue)
+                .map_err(|e| GpuError::KernelExecutionFailed(format!("Kernel execution failed: {:?}", e)))?
+        };
         
         kernel_event.wait()
-            .map_err(|e| GpuError::KernelExecutionFailed(format!("Kernel wait failed: {}", e)))?;
+            .map_err(|e| GpuError::KernelExecutionFailed(format!("Kernel wait failed: {:?}", e)))?;
         
         // Download result from GPU
         let mut dst_data = vec![0u8; num_cells];
-        self.queue.enqueue_read_buffer(&dst_buffer, CL_BLOCKING, 0, &mut dst_data, &[])
-            .map_err(|e| GpuError::MemoryTransferFailed(format!("Download failed: {}", e)))?;
+        unsafe {
+            self.queue.enqueue_read_buffer(&dst_buffer, CL_BLOCKING, 0, &mut dst_data, &[])
+                .map_err(|e| GpuError::MemoryTransferFailed(format!("Download failed: {:?}", e)))?;
+        }
         
         // Update dst grid
         for (i, &state) in dst_data.iter().enumerate() {
@@ -210,7 +220,7 @@ impl GpuEvolver for OpenCLEvolver {
 /// Check if OpenCL is available
 #[cfg(feature = "opencl")]
 pub fn is_available() -> bool {
-    Device::get_all_devices(CL_DEVICE_TYPE_GPU)
+    get_all_devices(CL_DEVICE_TYPE_GPU)
         .map(|devices| !devices.is_empty())
         .unwrap_or(false)
 }

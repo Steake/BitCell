@@ -89,7 +89,6 @@ impl AdminConsole {
             // Dashboard
             .route("/", get(web::dashboard::index))
             .route("/dashboard", get(web::dashboard::index))
-            .route("/explorer", get(web::explorer::index))
 
             // API endpoints
             .route("/api/nodes", get(api::nodes::list_nodes))
@@ -123,13 +122,6 @@ impl AdminConsole {
             .route("/api/blocks", get(api::blocks::list_blocks))
             .route("/api/blocks/:height", get(api::blocks::get_block))
             .route("/api/blocks/:height/battles", get(api::blocks::get_block_battles))
-
-            // Explorer API
-            .route("/api/transactions/:hash", get(api::explorer::get_transaction))
-            .route("/api/accounts/:address", get(api::explorer::get_account))
-            .route("/api/accounts/:address/transactions", get(api::explorer::get_account_transactions))
-            .route("/api/accounts/:address/trust", get(api::explorer::get_trust_score))
-            .route("/api/search", get(api::explorer::search))
 
             // Wallet API
             .nest("/api/wallet", api::wallet::router().with_state(self.config.clone()))

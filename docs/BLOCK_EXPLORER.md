@@ -1,183 +1,235 @@
 # BitCell Block Explorer
 
+A SvelteKit-based block explorer for the BitCell blockchain that connects to live node RPC endpoints.
+
 ## Overview
 
-The BitCell Block Explorer is a comprehensive web-based interface for viewing and exploring blockchain data, including blocks, transactions, accounts, and tournament battle visualizations.
+The BitCell Block Explorer is a modern, client-side web application built with SvelteKit that provides real-time blockchain data visualization. Unlike the previous implementation, this explorer:
+
+- **No mock data**: All information comes directly from BitCell node RPC endpoints
+- **Real-time updates**: Connects to live blockchain nodes
+- **Client-side only (SPA)**: No server-side rendering required
+- **Modern framework**: Built with Svelte for optimal performance
 
 ## Features
 
 ### 🔍 Search Functionality
-- **Universal Search Bar**: Search by:
+- Universal search bar supporting:
   - Block height (numeric)
-  - Block hash (0x + hex characters - currently 16 for mock, typically 64 in production)
   - Transaction hash (0x + 64 hex characters)
   - Account address (0x + 40 hex characters)
 
 ### ⛓️ Block Explorer
-- **Recent Blocks List**: View the most recent blocks with:
-  - Block height
-  - Block hash
-  - Proposer address
+- Recent blocks list with real-time updates
+- Block details with:
+  - Block header information
+  - Transaction list
+  - Proposer information
   - Timestamp
-  - Transaction count
-  - Battle count
-
-- **Block Details**: Click on any block to view:
-  - Full block header information
-  - Previous block hash
-  - State root and transaction root
-  - List of transactions
-  - Link to battle replay visualization
 
 ### 💸 Transaction Explorer
-- **Transaction Details**: View complete transaction information:
-  - Transaction hash
-  - Block height
-  - From/To addresses (clickable to view account details)
+- Transaction details including:
+  - From/To addresses
   - Amount transferred
   - Transaction fee
-  - Nonce
-  - Status (confirmed/pending)
-  - Timestamp
+  - Block confirmation
+  - Status
 
 ### 👤 Account Explorer
-- **Account Information**:
+- Account information:
   - Balance (in CELL tokens)
-  - Transaction count
-  - Current nonce
-  - Trust score (for miners)
+  - Transaction count (nonce)
+  - Transaction history
 
-- **Trust Score Visualization**:
-  - Visual meter showing trust score (0-100%)
-  - Detailed EBSL metrics:
-    - Belief, disbelief, uncertainty values
-    - Positive and negative evidence counters
-    - Total blocks proposed
-    - Slashing events count
-  - Account status (active/banned)
+### 🛡️ Trust Score Display
+- EBSL (Evidence-Based Subjective Logic) metrics
+- Miner statistics
+- Battle history
 
-- **Transaction History**:
-  - Recent transactions for the account
-  - Sent/Received indication
-  - Click to view transaction details
+## Architecture
 
-### ⚔️ Tournament Battle Visualization
-- Integrated with the main dashboard
-- View CA battle replays for any block
-- Step-by-step grid visualization
-- Energy tracking for both gliders
-- Winner determination
+### Frontend (SvelteKit)
+Location: `crates/bitcell-explorer/`
 
-## API Endpoints
+- **Framework**: SvelteKit (static adapter)
+- **Build**: Vite
+- **Type checking**: TypeScript/JSDoc
+- **Styling**: CSS with custom cyberpunk theme
 
-### Block Endpoints
-- `GET /api/blocks` - List recent blocks
-- `GET /api/blocks/:height` - Get block details
-- `GET /api/blocks/:height/battles` - Get battle visualization data
+### RPC Integration
+The explorer communicates with BitCell nodes via JSON-RPC 2.0:
 
-### Transaction Endpoints
-- `GET /api/transactions/:hash` - Get transaction details
-- `GET /api/accounts/:address/transactions` - Get transaction history for an account
-
-### Account Endpoints
-- `GET /api/accounts/:address` - Get account information
-- `GET /api/accounts/:address/trust` - Get trust score details
-
-### Search Endpoint
-- `GET /api/search?q=<query>` - Search for blocks, transactions, or accounts
-
-## Usage
-
-### Accessing the Explorer
-
-1. Start the BitCell admin console:
-   ```bash
-   cargo run --package bitcell-admin
-   ```
-
-2. Navigate to the explorer:
-   ```
-   http://127.0.0.1:8080/explorer
-   ```
-
-3. Or access from the dashboard:
-   ```
-   http://127.0.0.1:8080/
-   ```
-
-### Search Examples
-
-**Search by block height:**
-```
-123
+```javascript
+// Example: Get current block number
+const result = await rpcCall('eth_blockNumber');
 ```
 
-**Search by transaction hash:**
-```
-0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
-```
-
-**Search by address:**
-```
-0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb8
-```
-
-### Viewing Battle Replays
-
-1. Navigate to a block detail
-2. Click "View Battle Replay" 
-3. Use the playback controls to:
-   - Play/pause the animation
-   - Seek to specific frames
-   - Adjust playback speed
-
-## Design
-
-The block explorer features a cyberpunk-inspired interface with:
-- Matrix-style green text on black background
-- Neon glow effects
-- Animated scanlines
-- Responsive grid layouts
-- Modal dialogs for detailed views
+### RPC Methods Used
+- `eth_blockNumber` - Get current block height
+- `eth_getBlockByNumber` - Get block details
+- `eth_getTransactionByHash` - Get transaction details
+- `eth_getBalance` - Get account balance
+- `eth_getTransactionCount` - Get account nonce
+- `bitcell_getNodeInfo` - Get node information
+- `bitcell_getTournamentState` - Get tournament state
+- `bitcell_getBattleReplay` - Get battle replay data
+- `bitcell_getMinerStats` - Get miner statistics
 
 ## Development
 
-### Adding New Explorer Features
+### Prerequisites
+- Node.js 18+ and npm
+- A running BitCell node with RPC enabled
 
-1. **API Endpoint**: Add new endpoint in `crates/bitcell-admin/src/api/explorer.rs`
-2. **UI Component**: Update `crates/bitcell-admin/src/web/explorer.rs`
-3. **Route**: Register route in `crates/bitcell-admin/src/lib.rs`
+### Setup
 
-### Mock Data
+```bash
+cd crates/bitcell-explorer
 
-The current implementation uses mock data for demonstration. To integrate with real blockchain data:
+# Install dependencies
+npm install
 
-1. Replace mock responses in `api/explorer.rs` with actual blockchain queries
-2. Connect to `StateManager` for account data
-3. Connect to `Blockchain` for block/transaction data
-4. Connect to EBSL system for trust scores
+# Start development server
+npm run dev
+```
 
-## Screenshots
+The explorer will be available at `http://localhost:5173`
 
-See the PR description for screenshots of:
-- Explorer main page
-- Account detail modal with trust score
-- Transaction detail modal
-- Battle visualization
+### Configuration
+
+Edit `vite.config.js` to change the RPC endpoint:
+
+```javascript
+server: {
+  proxy: {
+    '/rpc': {
+      target: 'http://localhost:9545',  // Your node RPC port
+      changeOrigin: true
+    }
+  }
+}
+```
+
+### Building for Production
+
+```bash
+npm run build
+```
+
+The built files will be in the `build/` directory and can be served by any static web server.
+
+## Deployment
+
+### Serve with Node
+The explorer is designed to be integrated with the admin console. The built static files should be served from the admin console's web server.
+
+### Standalone Deployment
+You can also deploy the explorer as a standalone application:
+
+1. Build the application: `npm run build`
+2. Serve the `build/` directory with any web server (nginx, Apache, etc.)
+3. Configure the web server to proxy `/rpc` requests to your BitCell node
+
+Example nginx configuration:
+
+```nginx
+server {
+    listen 80;
+    server_name explorer.bitcell.dev;
+    
+    root /path/to/bitcell-explorer/build;
+    index index.html;
+    
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    
+    location /rpc {
+        proxy_pass http://localhost:9545/rpc;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+## Security
+
+### Input Validation
+- All user input is validated using regex patterns
+- Hex strings are verified for valid characters
+- Length checks prevent buffer overflows
+
+### XSS Protection
+- All dynamic content is properly escaped
+- No use of `innerHTML` with user data
+- Svelte's built-in escaping protects against XSS
+
+### Accessibility
+- ARIA labels on all interactive elements
+- Keyboard navigation support
+- Focus indicators for all focusable elements
+- Semantic HTML structure
+
+## Testing
+
+```bash
+# Run type checking
+npm run check
+
+# Run development server with hot reload
+npm run dev
+```
+
+## Troubleshooting
+
+### Connection Issues
+If the explorer cannot connect to the node:
+
+1. Verify the node is running: `curl http://localhost:9545/rpc`
+2. Check the proxy configuration in `vite.config.js`
+3. Ensure CORS is enabled on the node if accessing directly
+
+### Build Issues
+If the build fails:
+
+1. Delete `node_modules` and reinstall: `rm -rf node_modules && npm install`
+2. Clear SvelteKit cache: `rm -rf .svelte-kit`
+3. Check Node.js version: `node --version` (should be 18+)
+
+## Migration from Old Explorer
+
+The previous explorer (inline HTML in bitcell-admin) has been removed. Key differences:
+
+### Old Explorer (Removed)
+- ❌ Mock data only
+- ❌ Inline HTML/JS in Rust files
+- ❌ No real blockchain connectivity
+- ❌ Security issues (XSS vulnerabilities)
+
+### New Explorer
+- ✅ Real RPC connections
+- ✅ Separate SvelteKit application
+- ✅ Live blockchain data
+- ✅ Proper input validation and XSS protection
+- ✅ Better accessibility
+- ✅ Modern framework with hot reload
 
 ## Future Enhancements
 
-- Real-time updates via WebSocket
-- Advanced filtering and sorting options
+- WebSocket support for real-time updates
+- Battle visualization with canvas rendering
+- Advanced filtering and sorting
 - Export functionality (CSV, JSON)
-- Analytics and statistics dashboards
 - Network topology visualization
 - Mempool viewer
-- Contract explorer (when smart contracts are added)
+- Multi-language support
 
 ## Related Documentation
 
-- [Admin Console](../README.md)
-- [EBSL Trust System](EBSL.md)
-- [Battle Visualization](CA_BATTLES.md)
-- [API Reference](API.md)
+- [Admin Console](../crates/bitcell-admin/README.md)
+- [RPC API](./RPC_API.md)
+- [EBSL Trust System](./EBSL.md)
+- [Battle Visualization](./CA_BATTLES.md)

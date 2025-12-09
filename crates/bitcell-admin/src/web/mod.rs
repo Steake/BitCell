@@ -1,7 +1,6 @@
 //! Web interface module
 
 pub mod dashboard;
-pub mod explorer;
 
 use tera::Tera;
 use std::sync::OnceLock;

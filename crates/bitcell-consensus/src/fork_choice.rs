@@ -90,9 +90,11 @@ mod tests {
                 vrf_output: [0u8; 32],
                 vrf_proof: vec![],
                 work,
+                aggregation_commitment: [0u8; 32],
             },
             transactions: vec![],
             battle_proofs: vec![],
+            state_proofs: vec![],
             signature: sk.sign(b"test"),
         }
     }

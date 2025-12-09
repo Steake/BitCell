@@ -32,6 +32,10 @@ pub struct BlockHeader {
     
     /// Block work (deterministic)
     pub work: u64,
+    
+    /// Aggregated proof commitment (32 bytes)
+    /// SHA-256 hash of all battle and state proofs in block
+    pub aggregation_commitment: [u8; 32],
 }
 
 impl BlockHeader {
@@ -55,6 +59,9 @@ pub struct Block {
     
     /// Battle proofs (one per tournament battle)
     pub battle_proofs: Vec<BattleProof>,
+    
+    /// State transition proofs
+    pub state_proofs: Vec<StateProof>,
     
     /// Proposer signature
     pub signature: Signature,
@@ -131,6 +138,25 @@ pub struct BattleProof {
     pub public_inputs: Vec<u8>,
 }
 
+/// State transition proof
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StateProof {
+    /// Old state root
+    pub old_root: [u8; 32],
+    
+    /// New state root
+    pub new_root: [u8; 32],
+    
+    /// Nullifier
+    pub nullifier: [u8; 32],
+    
+    /// Proof data (Groth16 proof)
+    pub proof: Vec<u8>,
+    
+    /// Public inputs
+    pub public_inputs: Vec<u8>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,6 +175,7 @@ mod tests {
             vrf_output: [0u8; 32],
             vrf_proof: vec![],
             work: 1000,
+            aggregation_commitment: [0u8; 32],
         };
 
         let hash1 = header.hash();

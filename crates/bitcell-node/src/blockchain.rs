@@ -90,12 +90,14 @@ impl Blockchain {
             vrf_output: [0u8; 32],
             vrf_proof: vec![],
             work: 0,
+            aggregation_commitment: [0u8; 32],
         };
         
         Block {
             header,
             transactions: vec![],
             battle_proofs: vec![],
+            state_proofs: vec![],
             signature: secret_key.sign(&[0u8; 32]),
         }
     }
@@ -244,6 +246,7 @@ impl Blockchain {
             vrf_output: *vrf_output.as_bytes(),
             vrf_proof: vrf_proof_bytes,
             work: battle_proofs.len() as u64 * 1000, // Simplified work calculation
+            aggregation_commitment: [0u8; 32], // TODO: Compute from battle_proofs
         };
         
         // Sign the block
@@ -254,6 +257,7 @@ impl Blockchain {
             header,
             transactions,
             battle_proofs,
+            state_proofs: vec![], // TODO: Add state proofs
             signature,
         };
         

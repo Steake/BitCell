@@ -121,22 +121,28 @@ fn test_bond_requirements() {
 #[test]
 fn test_block_validation_flow() {
     // Test basic block structure and validation
+    use bitcell_crypto::SecretKey;
+    
+    let sk = SecretKey::generate();
     let header = BlockHeader {
         height: 1,
         prev_hash: Hash256::from_bytes(&[0; 32]),
-        state_root: Hash256::from_bytes(&[1; 32]),
-        tournament_root: Hash256::from_bytes(&[2; 32]),
+        tx_root: Hash256::from_bytes(&[1; 32]),
+        state_root: Hash256::from_bytes(&[2; 32]),
         timestamp: 1000,
-        proposer: Hash256::from_bytes(&[3; 32]),
-        vrf_output: Hash256::from_bytes(&[4; 32]),
+        proposer: sk.public_key(),
+        vrf_output: [4u8; 32],
         vrf_proof: vec![0; 64],
         work: 1000,
+        aggregation_commitment: [0u8; 32],
     };
     
     let block = Block {
         header: header.clone(),
         transactions: vec![],
         battle_proofs: vec![],
+        state_proofs: vec![],
+        signature: sk.sign(b"test"),
     };
     
     assert_eq!(block.header.height, 1);

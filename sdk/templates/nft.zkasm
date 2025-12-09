@@ -1,0 +1,220 @@
+# BitCell NFT (Non-Fungible Token) Contract Template
+# ERC-721-like NFT implementation for ZKVM
+#
+# Features:
+# - Mint unique tokens with IDs
+# - Transfer ownership of tokens
+# - Track token ownership
+# - Query owner of token
+# - Approve transfers
+#
+# Memory Layout:
+# 0x0000-0x00FF: Contract metadata
+# 0x0100-0x01FF: Contract owner and config
+# 0x0200-0x02FF: Total minted counter
+# 0x0300+:       Token ownership (token_id -> owner_address)
+# 0x8000+:       Approval mappings
+
+# Entry point
+# r1 = function selector
+#   0 = mint(to_address, token_id)
+#   1 = transfer(from, to, token_id)
+#   2 = owner_of(token_id)
+#   3 = approve(spender, token_id)
+#   4 = get_approved(token_id)
+
+LOAD r1, r0, 0x10          # Load function selector
+EQ r4, r1, 0               # Check if mint
+JZ r4, 0, check_transfer
+
+# === MINT FUNCTION ===
+# Parameters: r2=to_address, r3=token_id
+# Only contract owner can mint
+# Creates a new NFT and assigns ownership
+
+mint:
+# Load contract owner
+LOAD r5, r0, 0x100         # Owner at 0x100
+LOAD r6, r0, 0x20          # Caller at 0x20
+
+# Verify caller is owner
+EQ r7, r5, r6
+JZ r7, 0, mint_unauthorized
+
+LOAD r2, r0, 0x30          # to_address
+LOAD r3, r0, 0x40          # token_id
+
+# Calculate token ownership address = 0x300 + (token_id * 8)
+MUL r8, r3, 8
+ADD r8, r8, 768            # 768 = 0x300
+
+# Check token doesn't already exist
+LOAD r9, r0, r8
+EQ r10, r9, 0              # r10 = 1 if token doesn't exist
+JZ r10, 0, mint_exists     # Jump if token already exists
+
+# Assign ownership
+STORE r0, r2, r8           # Store owner address
+
+# Increment total supply
+LOAD r11, r0, 0x200
+ADD r11, r11, 1
+STORE r0, r11, 0x200
+
+HALT
+
+mint_unauthorized:
+HALT
+
+mint_exists:
+HALT                        # Token already minted
+
+# === TRANSFER FUNCTION ===
+# Parameters: r2=from, r3=to, r4=token_id
+# Transfers NFT from one address to another
+# Caller must be owner or approved
+
+check_transfer:
+EQ r4, r1, 1
+JZ r4, 0, check_owner_of
+
+transfer:
+LOAD r2, r0, 0x30          # from_address
+LOAD r3, r0, 0x40          # to_address
+LOAD r5, r0, 0x50          # token_id
+LOAD r6, r0, 0x20          # caller
+
+# Calculate token ownership address
+MUL r7, r5, 8
+ADD r7, r7, 768            # 0x300
+
+# Load current owner
+LOAD r8, r0, r7
+
+# Check token exists (owner != 0)
+EQ r9, r8, 0
+JZ r9, 0, transfer_check_auth # Token exists, check auth
+
+# Token doesn't exist
+HALT
+
+transfer_check_auth:
+# Verify from == current owner
+EQ r10, r2, r8
+JZ r10, 0, transfer_unauthorized
+
+# Verify caller is owner OR approved
+EQ r11, r6, r8             # Is caller the owner?
+JZ r11, 0, transfer_exec   # If yes, execute
+
+# Check if caller is approved
+MUL r12, r5, 8
+ADD r12, r12, 32768        # 0x8000 approval base
+LOAD r13, r0, r12          # Load approved address
+EQ r14, r6, r13            # Is caller approved?
+JZ r14, 0, transfer_exec   # If yes, execute
+
+# Not authorized
+HALT
+
+transfer_exec:
+# Transfer ownership
+STORE r0, r3, r7           # Store new owner
+
+# Clear approval
+STORE r0, 0, r12           # Clear approved address
+
+HALT
+
+transfer_unauthorized:
+HALT
+
+# === OWNER_OF FUNCTION ===
+# Parameters: r2=token_id
+# Returns: owner address in r0
+
+check_owner_of:
+EQ r4, r1, 2
+JZ r4, 0, check_approve
+
+owner_of:
+LOAD r2, r0, 0x40          # token_id
+
+# Calculate ownership address
+MUL r5, r2, 8
+ADD r5, r5, 768            # 0x300
+
+# Load owner
+LOAD r6, r0, r5
+
+# Check token exists
+EQ r7, r6, 0
+JZ r7, 0, owner_of_exists
+
+# Token doesn't exist
+HALT
+
+owner_of_exists:
+# Return owner in r0
+ADD r0, r6, 0
+HALT
+
+# === APPROVE FUNCTION ===
+# Parameters: r2=spender, r3=token_id
+# Allows spender to transfer the token
+# Only token owner can approve
+
+check_approve:
+EQ r4, r1, 3
+JZ r4, 0, check_get_approved
+
+approve:
+LOAD r2, r0, 0x30          # spender
+LOAD r3, r0, 0x40          # token_id
+LOAD r5, r0, 0x20          # caller
+
+# Calculate ownership address
+MUL r6, r3, 8
+ADD r6, r6, 768            # 0x300
+LOAD r7, r0, r6            # Load owner
+
+# Verify caller is owner
+EQ r8, r5, r7
+JZ r8, 0, approve_unauthorized
+
+# Calculate approval address
+MUL r9, r3, 8
+ADD r9, r9, 32768          # 0x8000
+
+# Store approval
+STORE r0, r2, r9
+
+HALT
+
+approve_unauthorized:
+HALT
+
+# === GET_APPROVED FUNCTION ===
+# Parameters: r2=token_id
+# Returns: approved address in r0
+
+check_get_approved:
+EQ r4, r1, 4
+JZ r4, 0, unknown_function
+
+get_approved:
+LOAD r2, r0, 0x40          # token_id
+
+# Calculate approval address
+MUL r5, r2, 8
+ADD r5, r5, 32768          # 0x8000
+
+# Load approved address
+LOAD r6, r0, r5
+
+# Return in r0
+ADD r0, r6, 0
+HALT
+
+unknown_function:
+HALT

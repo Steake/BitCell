@@ -1,0 +1,147 @@
+# Simple Voting Contract
+# Demonstrates proposal creation, voting, and result tallying
+
+# Memory Layout:
+# 0x100: owner_address
+# 0x108: proposal_deadline (block number)
+# 0x110: proposal_yes_votes
+# 0x118: proposal_no_votes
+# 0x120: proposal_state (0=none, 1=active, 2=passed, 3=failed)
+# 0x200+: voter_has_voted mapping (address -> 1 if voted)
+
+# Function selector:
+#   0 = create_proposal(deadline)
+#   1 = vote(choice)  -- 1 for yes, 0 for no
+#   2 = finalize()
+#   3 = get_results()
+
+LOAD r1, r0, 0x10
+EQ r4, r1, 0
+JZ r4, 0, check_vote
+
+# === CREATE_PROPOSAL ===
+create_proposal:
+  # Check caller is owner
+  LOAD r5, r0, 0x100       # owner
+  LOAD r6, r0, 0x20        # caller
+  EQ r7, r5, r6
+  JZ r7, 0, owner_ok
+  HALT
+  
+owner_ok:
+  # Check no active proposal
+  LOAD r8, r0, 0x120       # state
+  EQ r9, r8, 0
+  JZ r9, 0, no_active
+  HALT
+  
+no_active:
+  LOAD r10, r0, 0x30       # deadline
+  STORE r0, r10, 0x108     # Store deadline
+  STORE r0, 0, 0x110       # Reset yes votes
+  STORE r0, 0, 0x118       # Reset no votes
+  STORE r0, 1, 0x120       # State = active
+  HALT
+
+# === VOTE ===
+check_vote:
+EQ r4, r1, 1
+JZ r4, 0, check_finalize
+
+vote:
+  # Check proposal is active
+  LOAD r5, r0, 0x120
+  EQ r6, r5, 1
+  JZ r6, 0, is_active
+  HALT
+  
+is_active:
+  # Check deadline not passed
+  LOAD r7, r0, 0x108       # deadline
+  LOAD r8, r0, 0x80        # current block
+  LT r9, r8, r7
+  JZ r9, 0, before_deadline
+  HALT
+  
+before_deadline:
+  # Check hasn't voted
+  LOAD r10, r0, 0x20       # caller
+  MUL r11, r10, 8
+  ADD r11, r11, 512        # voter record address
+  LOAD r12, r0, r11
+  EQ r13, r12, 0
+  JZ r13, 0, not_voted
+  HALT
+  
+not_voted:
+  # Mark as voted
+  STORE r0, 1, r11
+  
+  # Load choice (1=yes, 0=no)
+  LOAD r14, r0, 0x30
+  
+  # Update vote count
+  EQ r15, r14, 1
+  JZ r15, 0, vote_yes
+  
+vote_no:
+  LOAD r16, r0, 0x118      # no_votes
+  ADD r16, r16, 1
+  STORE r0, r16, 0x118
+  HALT
+  
+vote_yes:
+  LOAD r17, r0, 0x110      # yes_votes
+  ADD r17, r17, 1
+  STORE r0, r17, 0x110
+  HALT
+
+# === FINALIZE ===
+check_finalize:
+EQ r4, r1, 2
+JZ r4, 0, check_get_results
+
+finalize:
+  # Check proposal is active
+  LOAD r5, r0, 0x120
+  EQ r6, r5, 1
+  JZ r6, 0, can_finalize
+  HALT
+  
+can_finalize:
+  # Check deadline passed
+  LOAD r7, r0, 0x108       # deadline
+  LOAD r8, r0, 0x80        # current block
+  GE r9, r8, r7
+  JZ r9, 0, deadline_passed
+  HALT
+  
+deadline_passed:
+  # Compare votes
+  LOAD r10, r0, 0x110      # yes_votes
+  LOAD r11, r0, 0x118      # no_votes
+  GT r12, r10, r11
+  JZ r12, 0, proposal_passed
+  
+proposal_failed:
+  STORE r0, 3, 0x120       # state = failed
+  HALT
+  
+proposal_passed:
+  STORE r0, 2, 0x120       # state = passed
+  HALT
+
+# === GET_RESULTS ===
+check_get_results:
+EQ r4, r1, 3
+JZ r4, 0, unknown_function
+
+get_results:
+  # Return: state in r0, yes_votes in r1, no_votes in r2
+  LOAD r0, r0, 0x120       # state
+  LOAD r1, r0, 0x110       # yes_votes (overwrites r1!)
+  LOAD r2, r0, 0x118       # no_votes
+  HALT
+
+unknown_function:
+  HALT

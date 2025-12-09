@@ -115,8 +115,12 @@ impl StateCircuit<Fr> {
     }
 
     /// Generate a proof for this circuit instance
+    /// 
+    /// Note: The arkworks Groth16::prove API takes ownership of the circuit,
+    /// so we must clone. This is inherent to the arkworks API design.
     pub fn prove(&self, pk: &ProvingKey<Bn254>) -> crate::Result<crate::Groth16Proof> {
         let rng = &mut thread_rng();
+        // Clone required by arkworks API (takes ownership)
         let proof = Groth16::<Bn254>::prove(pk, self.clone(), rng)
             .map_err(|e| crate::Error::ProofGeneration(e.to_string()))?;
         Ok(crate::Groth16Proof::new(proof))
@@ -133,13 +137,15 @@ impl StateCircuit<Fr> {
     }
 
     /// Helper to construct public inputs in the correct order
-    pub fn public_inputs(&self) -> Vec<Fr> {
-        vec![
-            self.old_root.unwrap_or(Fr::from(0u64)),
-            self.new_root.unwrap_or(Fr::from(0u64)),
-            self.nullifier.unwrap_or(Fr::from(0u64)),
-            self.commitment.unwrap_or(Fr::from(0u64)),
-        ]
+    /// 
+    /// Returns an error if any required public input is missing
+    pub fn public_inputs(&self) -> crate::Result<Vec<Fr>> {
+        Ok(vec![
+            self.old_root.ok_or_else(|| crate::Error::Circuit("old_root is required".to_string()))?,
+            self.new_root.ok_or_else(|| crate::Error::Circuit("new_root is required".to_string()))?,
+            self.nullifier.ok_or_else(|| crate::Error::Circuit("nullifier is required".to_string()))?,
+            self.commitment.ok_or_else(|| crate::Error::Circuit("commitment is required".to_string()))?,
+        ])
     }
 }
 
@@ -351,8 +357,12 @@ impl NullifierCircuit<Fr> {
     }
 
     /// Generate a proof for this circuit instance
+    /// 
+    /// Note: The arkworks Groth16::prove API takes ownership of the circuit,
+    /// so we must clone. This is inherent to the arkworks API design.
     pub fn prove(&self, pk: &ProvingKey<Bn254>) -> crate::Result<crate::Groth16Proof> {
         let rng = &mut thread_rng();
+        // Clone required by arkworks API (takes ownership)
         let proof = Groth16::<Bn254>::prove(pk, self.clone(), rng)
             .map_err(|e| crate::Error::ProofGeneration(e.to_string()))?;
         Ok(crate::Groth16Proof::new(proof))
@@ -369,12 +379,15 @@ impl NullifierCircuit<Fr> {
     }
 
     /// Helper to construct public inputs in the correct order
-    pub fn public_inputs(&self) -> Vec<Fr> {
-        vec![
-            self.nullifier.unwrap_or(Fr::from(0u64)),
-            self.set_root.unwrap_or(Fr::from(0u64)),
-            Fr::from(if self.is_member.unwrap_or(false) { 1u64 } else { 0u64 }),
-        ]
+    /// 
+    /// Returns an error if any required public input is missing
+    pub fn public_inputs(&self) -> crate::Result<Vec<Fr>> {
+        let is_member = self.is_member.ok_or_else(|| crate::Error::Circuit("is_member is required".to_string()))?;
+        Ok(vec![
+            self.nullifier.ok_or_else(|| crate::Error::Circuit("nullifier is required".to_string()))?,
+            self.set_root.ok_or_else(|| crate::Error::Circuit("set_root is required".to_string()))?,
+            Fr::from(if is_member { 1u64 } else { 0u64 }),
+        ])
     }
 }
 
@@ -554,7 +567,7 @@ mod tests {
         let proof = circuit.prove(&pk).expect("Proof generation should succeed");
         
         // Verify proof
-        let public_inputs = circuit.public_inputs();
+        let public_inputs = circuit.public_inputs().expect("Public inputs should be valid");
         let is_valid = StateCircuit::verify(&vk, &proof, &public_inputs)
             .expect("Verification should not error");
         assert!(is_valid, "Proof should verify successfully");
@@ -596,7 +609,7 @@ mod tests {
         let circuit_1 = StateCircuit::new(old_root, new_root_1, nullifier, commitment_1)
             .with_witnesses(leaf, path.clone(), indices.clone(), new_leaf_1);
         let proof_1 = circuit_1.prove(&pk).expect("First proof should succeed");
-        let is_valid_1 = StateCircuit::verify(&vk, &proof_1, &circuit_1.public_inputs())
+        let is_valid_1 = StateCircuit::verify(&vk, &proof_1, &circuit_1.public_inputs().expect("Public inputs valid"))
             .expect("Verification should not error");
         assert!(is_valid_1, "First proof should verify");
         
@@ -616,7 +629,7 @@ mod tests {
         let circuit_2 = StateCircuit::new(old_root, new_root_2, nullifier, commitment_2)
             .with_witnesses(leaf, path, indices, new_leaf_2);
         let proof_2 = circuit_2.prove(&pk).expect("Second proof should succeed");
-        let is_valid_2 = StateCircuit::verify(&vk, &proof_2, &circuit_2.public_inputs())
+        let is_valid_2 = StateCircuit::verify(&vk, &proof_2, &circuit_2.public_inputs().expect("Public inputs valid"))
             .expect("Verification should not error");
         assert!(is_valid_2, "Second proof should verify");
         
@@ -651,7 +664,7 @@ mod tests {
         let proof = circuit.prove(&pk).expect("Proof generation should succeed");
         
         // Verify proof
-        let public_inputs = circuit.public_inputs();
+        let public_inputs = circuit.public_inputs().expect("Public inputs should be valid");
         let is_valid = NullifierCircuit::verify(&vk, &proof, &public_inputs)
             .expect("Verification should not error");
         assert!(is_valid, "Proof should verify successfully");
@@ -674,7 +687,7 @@ mod tests {
             .with_witnesses(path, indices);
         
         let proof = circuit.prove(&pk).expect("Proof should generate");
-        let is_valid = NullifierCircuit::verify(&vk, &proof, &circuit.public_inputs())
+        let is_valid = NullifierCircuit::verify(&vk, &proof, &circuit.public_inputs().expect("Public inputs valid"))
             .expect("Verification should not error");
         assert!(is_valid, "Proof should verify non-membership");
     }

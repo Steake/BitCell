@@ -147,9 +147,13 @@ impl BattleCircuit<Fr> {
 
     /// Generate a proof for this circuit instance
     /// 
-    /// This operation is expensive and can take 10-30 seconds depending on hardware
+    /// This operation is expensive and can take 10-30 seconds depending on hardware.
+    /// 
+    /// Note: The arkworks Groth16::prove API takes ownership of the circuit,
+    /// so we must clone. This is inherent to the arkworks API design.
     pub fn prove(&self, pk: &ProvingKey<Bn254>) -> crate::Result<crate::Groth16Proof> {
         let rng = &mut thread_rng();
+        // Clone required by arkworks API (takes ownership)
         let proof = Groth16::<Bn254>::prove(pk, self.clone(), rng)
             .map_err(|e| crate::Error::ProofGeneration(e.to_string()))?;
         Ok(crate::Groth16Proof::new(proof))
@@ -171,33 +175,35 @@ impl BattleCircuit<Fr> {
     /// 
     /// Public inputs are: initial_grid (flattened), final_grid (flattened), 
     /// commitment_a, commitment_b, winner
-    pub fn public_inputs(&self) -> Vec<Fr> {
+    /// 
+    /// Returns an error if any required public input is missing
+    pub fn public_inputs(&self) -> crate::Result<Vec<Fr>> {
         let mut inputs = Vec::new();
         
         // Flatten initial grid
-        if let Some(ref grid) = self.initial_grid {
-            for row in grid {
-                for &cell in row {
-                    inputs.push(Fr::from(cell as u64));
-                }
+        let initial_grid = self.initial_grid.as_ref()
+            .ok_or_else(|| crate::Error::Circuit("initial_grid is required".to_string()))?;
+        for row in initial_grid {
+            for &cell in row {
+                inputs.push(Fr::from(cell as u64));
             }
         }
         
         // Flatten final grid
-        if let Some(ref grid) = self.final_grid {
-            for row in grid {
-                for &cell in row {
-                    inputs.push(Fr::from(cell as u64));
-                }
+        let final_grid = self.final_grid.as_ref()
+            .ok_or_else(|| crate::Error::Circuit("final_grid is required".to_string()))?;
+        for row in final_grid {
+            for &cell in row {
+                inputs.push(Fr::from(cell as u64));
             }
         }
         
         // Add commitments and winner
-        inputs.push(self.commitment_a.unwrap_or(Fr::from(0u64)));
-        inputs.push(self.commitment_b.unwrap_or(Fr::from(0u64)));
-        inputs.push(Fr::from(self.winner.unwrap_or(0) as u64));
+        inputs.push(self.commitment_a.ok_or_else(|| crate::Error::Circuit("commitment_a is required".to_string()))?);
+        inputs.push(self.commitment_b.ok_or_else(|| crate::Error::Circuit("commitment_b is required".to_string()))?);
+        inputs.push(Fr::from(self.winner.ok_or_else(|| crate::Error::Circuit("winner is required".to_string()))? as u64));
         
-        inputs
+        Ok(inputs)
     }
 }
 
@@ -624,7 +630,7 @@ mod tests {
         let proof = circuit.prove(&pk).expect("Proof generation should succeed");
         
         // Verify proof
-        let public_inputs = circuit.public_inputs();
+        let public_inputs = circuit.public_inputs().expect("Public inputs should be valid");
         let is_valid = BattleCircuit::verify(&vk, &proof, &public_inputs)
             .expect("Verification should not error");
         assert!(is_valid, "Proof should verify successfully");
@@ -669,7 +675,7 @@ mod tests {
         ).with_witnesses(pattern_a, pattern_b, nonce_a, nonce_b);
         
         let proof = circuit.prove(&pk).expect("Proof should generate");
-        let is_valid = BattleCircuit::verify(&vk, &proof, &circuit.public_inputs())
+        let is_valid = BattleCircuit::verify(&vk, &proof, &circuit.public_inputs().expect("Public inputs valid"))
             .expect("Verification should not error");
         assert!(is_valid, "Proof should verify for player A win");
     }

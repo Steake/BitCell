@@ -83,10 +83,20 @@ impl CompactBlock {
     }
     
     /// Reconstruct full block from compact block and mempool
+    /// 
+    /// Note: This uses O(n*m) lookup for simplicity and correctness.
+    /// In practice, n (short_tx_ids) is small (~10-100 txs per block)
+    /// and m (mempool) is moderate (~1000-10000 txs), making this acceptable.
+    /// The transaction order is preserved by iterating short_ids in order.
+    /// 
+    /// If performance becomes an issue, we could:
+    /// - Build a short_id -> tx HashMap from mempool on first use
+    /// - Use a Bloom filter for quick negative lookups
     pub fn to_block(&self, mempool: &HashMap<Hash256, Transaction>) -> Option<Block> {
         let mut transactions = self.prefilled_txs.clone();
         
-        // Match short IDs to mempool transactions
+        // Match short IDs to mempool transactions in order
+        // This ensures the transaction order matches the original block
         for short_id in &self.short_tx_ids {
             let mut found = false;
             for (hash, tx) in mempool {
@@ -99,8 +109,16 @@ impl CompactBlock {
             }
             if !found {
                 // Missing transaction, need to request it
+                tracing::warn!("Missing transaction with short ID {:?}", short_id);
                 return None;
             }
+        }
+        
+        // Verify we have the expected number of transactions
+        let expected_count = self.prefilled_txs.len() + self.short_tx_ids.len();
+        if transactions.len() != expected_count {
+            tracing::error!("Transaction count mismatch: expected {}, got {}", expected_count, transactions.len());
+            return None;
         }
         
         Some(Block {

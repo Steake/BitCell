@@ -249,24 +249,15 @@ impl StorageManager {
             let (key, value) = item.map_err(|e| e.to_string())?;
             
             // Key format is: sender||height(8)||tx_hash
-            // Verify exact sender match by checking if key length >= sender.len() + 8
-            // and that the next 8 bytes after sender are valid height bytes
+            // Verify exact sender match and valid key structure
             if key.len() < sender.len() + 8 {
-                continue; // Invalid key format
+                continue; // Invalid key format (too short)
             }
             
             // Check if sender portion matches exactly
             // This ensures we don't match longer senders that share a prefix
             if &key[0..sender.len()] != sender {
                 break; // No longer matching our sender prefix
-            }
-            
-            // Verify this is an exact match by checking that at sender.len() we have
-            // height data (8 bytes), not more sender data
-            // We do this by ensuring the key has the expected structure
-            let expected_min_len = sender.len() + 8; // sender + height
-            if key.len() < expected_min_len {
-                continue;
             }
             
             tx_hashes.push(value.to_vec());

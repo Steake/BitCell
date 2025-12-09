@@ -12,7 +12,17 @@ serde.workspace = true
 thiserror.workspace = true
 rayon.workspace = true
 
+# GPU acceleration dependencies (optional)
+opencl3 = { version = "0.9", optional = true }
+cudarc = { version = "0.12", features = ["cuda-12050"], optional = true }
+
 [dev-dependencies]
 proptest.workspace = true
 criterion.workspace = true
+
+[features]
+default = []
+cuda = ["cudarc"]
+opencl = ["opencl3"]
+gpu = ["opencl"]  # Default GPU support uses OpenCL for broad compatibility
 

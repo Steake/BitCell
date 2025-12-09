@@ -1,9 +1,38 @@
-//! CA Grid implementation - 1024×1024 toroidal grid with 8-bit cell states
+//! CA Grid implementation - Toroidal grid with 8-bit cell states
+//! Supports configurable grid sizes: 1024×1024 (default) or 4096×4096
 
 use serde::{Deserialize, Serialize};
 
-/// Grid size constant
+/// Default grid size constant (1024×1024)
 pub const GRID_SIZE: usize = 1024;
+
+/// Large grid size constant (4096×4096)
+pub const LARGE_GRID_SIZE: usize = 4096;
+
+/// Grid size configuration
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GridSize {
+    /// Standard 1024×1024 grid
+    Standard,
+    /// Large 4096×4096 grid
+    Large,
+}
+
+impl GridSize {
+    /// Get the numeric size value
+    pub fn size(&self) -> usize {
+        match self {
+            GridSize::Standard => GRID_SIZE,
+            GridSize::Large => LARGE_GRID_SIZE,
+        }
+    }
+}
+
+impl Default for GridSize {
+    fn default() -> Self {
+        GridSize::Standard
+    }
+}
 
 /// Position on the grid
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -17,19 +46,24 @@ impl Position {
         Self { x, y }
     }
 
-    /// Wrap position to handle toroidal topology
-    pub fn wrap(&self) -> Self {
+    /// Wrap position to handle toroidal topology with given grid size
+    pub fn wrap_with_size(&self, grid_size: usize) -> Self {
         Self {
-            x: self.x % GRID_SIZE,
-            y: self.y % GRID_SIZE,
+            x: self.x % grid_size,
+            y: self.y % grid_size,
         }
     }
 
+    /// Wrap position to handle toroidal topology (standard size)
+    pub fn wrap(&self) -> Self {
+        self.wrap_with_size(GRID_SIZE)
+    }
+
     /// Get 8 neighbors (Moore neighborhood) with toroidal wrapping
-    pub fn neighbors(&self) -> [Position; 8] {
+    pub fn neighbors_with_size(&self, grid_size: usize) -> [Position; 8] {
         let x = self.x as isize;
         let y = self.y as isize;
-        let size = GRID_SIZE as isize;
+        let size = grid_size as isize;
 
         [
             Position::new(((x - 1 + size) % size) as usize, ((y - 1 + size) % size) as usize),
@@ -41,6 +75,11 @@ impl Position {
             Position::new(((x + 1) % size) as usize, (y % size) as usize),
             Position::new(((x + 1) % size) as usize, ((y + 1) % size) as usize),
         ]
+    }
+
+    /// Get 8 neighbors (Moore neighborhood) with toroidal wrapping (standard size)
+    pub fn neighbors(&self) -> [Position; 8] {
+        self.neighbors_with_size(GRID_SIZE)
     }
 }
 
@@ -76,26 +115,40 @@ impl Cell {
 pub struct Grid {
     /// Flat array of cells (row-major order)
     pub cells: Vec<Cell>,
+    /// Grid size (width/height, since it's square)
+    pub size: usize,
 }
 
 impl Grid {
-    /// Create an empty grid
+    /// Create an empty grid with standard size (1024×1024)
     pub fn new() -> Self {
+        Self::with_size(GridSize::Standard)
+    }
+
+    /// Create an empty grid with specified size
+    pub fn with_size(grid_size: GridSize) -> Self {
+        let size = grid_size.size();
         Self {
-            cells: vec![Cell::dead(); GRID_SIZE * GRID_SIZE],
+            cells: vec![Cell::dead(); size * size],
+            size,
         }
+    }
+
+    /// Get grid size
+    pub fn grid_size(&self) -> usize {
+        self.size
     }
 
     /// Get cell at position
     pub fn get(&self, pos: Position) -> Cell {
-        let pos = pos.wrap();
-        self.cells[pos.y * GRID_SIZE + pos.x]
+        let pos = pos.wrap_with_size(self.size);
+        self.cells[pos.y * self.size + pos.x]
     }
 
     /// Set cell at position
     pub fn set(&mut self, pos: Position, cell: Cell) {
-        let pos = pos.wrap();
-        self.cells[pos.y * GRID_SIZE + pos.x] = cell;
+        let pos = pos.wrap_with_size(self.size);
+        self.cells[pos.y * self.size + pos.x] = cell;
     }
 
     /// Count live cells
@@ -146,26 +199,26 @@ impl Grid {
     /// visualizing large grids at lower resolutions.
     /// 
     /// # Arguments
-    /// * `target_size` - The desired output grid size (must be > 0 and <= GRID_SIZE)
+    /// * `target_size` - The desired output grid size (must be > 0 and <= grid size)
     /// 
     /// # Returns
     /// A 2D vector of size `target_size × target_size` containing max energy values.
     /// 
     /// # Panics
-    /// Panics if `target_size` is 0 or greater than `GRID_SIZE`.
+    /// Panics if `target_size` is 0 or greater than the grid size.
     /// 
     /// # Note
-    /// When `GRID_SIZE` is not evenly divisible by `target_size`, some cells near
-    /// the edges may not be sampled. For example, with `GRID_SIZE=1024` and
+    /// When grid size is not evenly divisible by `target_size`, some cells near
+    /// the edges may not be sampled. For example, with `size=1024` and
     /// `target_size=100`, `block_size=10`, so only cells from indices 0-999 are
     /// sampled, leaving rows/columns 1000-1023 unsampled. This is acceptable for
     /// visualization purposes where approximate representation is sufficient.
     pub fn downsample(&self, target_size: usize) -> Vec<Vec<u8>> {
-        if target_size == 0 || target_size > GRID_SIZE {
-            panic!("target_size must be between 1 and {}", GRID_SIZE);
+        if target_size == 0 || target_size > self.size {
+            panic!("target_size must be between 1 and {}", self.size);
         }
 
-        let block_size = GRID_SIZE / target_size;
+        let block_size = self.size / target_size;
         let mut result = vec![vec![0u8; target_size]; target_size];
 
         for y in 0..target_size {
@@ -216,13 +269,14 @@ mod tests {
     #[test]
     fn test_toroidal_wrap() {
         let mut grid = Grid::new();
-        let pos = Position::new(GRID_SIZE - 1, GRID_SIZE - 1);
+        let grid_size = grid.grid_size();
+        let pos = Position::new(grid_size - 1, grid_size - 1);
         let cell = Cell::alive(50);
 
         grid.set(pos, cell);
 
         // Access through wraparound
-        let wrapped = Position::new(2 * GRID_SIZE - 1, 2 * GRID_SIZE - 1);
+        let wrapped = Position::new(2 * grid_size - 1, 2 * grid_size - 1);
         assert_eq!(grid.get(wrapped), cell);
     }
 
@@ -242,12 +296,14 @@ mod tests {
 
     #[test]
     fn test_neighbors_wraparound() {
+        let grid = Grid::new();
+        let grid_size = grid.grid_size();
         let pos = Position::new(0, 0);
-        let neighbors = pos.neighbors();
+        let neighbors = pos.neighbors_with_size(grid_size);
 
         // Should wrap around to the opposite side
-        assert!(neighbors.iter().any(|n| n.x == GRID_SIZE - 1));
-        assert!(neighbors.iter().any(|n| n.y == GRID_SIZE - 1));
+        assert!(neighbors.iter().any(|n| n.x == grid_size - 1));
+        assert!(neighbors.iter().any(|n| n.y == grid_size - 1));
     }
 
     #[test]

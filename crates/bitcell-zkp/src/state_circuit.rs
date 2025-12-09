@@ -45,6 +45,10 @@ impl StateCircuit {
 
     /// Setup the circuit and generate proving/verifying keys
     ///
+    /// **WARNING:** This method generates keys using insecure randomness and should
+    /// ONLY be used for testing. Production systems MUST use keys generated from a
+    /// proper multi-party trusted setup ceremony via `load_ceremony_keys()`.
+    ///
     /// Returns an error if the circuit setup fails (e.g., due to constraint system issues).
     pub fn setup() -> crate::Result<(ProvingKey<ark_bn254::Bn254>, VerifyingKey<ark_bn254::Bn254>)> {
         let rng = &mut thread_rng();
@@ -58,6 +62,56 @@ impl StateCircuit {
             rng,
         )
         .map_err(|e| crate::Error::ProofGeneration(format!("Circuit setup failed: {}", e)))
+    }
+
+    /// Load proving key from the trusted setup ceremony
+    ///
+    /// This loads the production proving key that was generated through a
+    /// multi-party computation ceremony. The key is stored in `keys/state/proving_key.bin`.
+    ///
+    /// # Returns
+    /// * `Ok(ProvingKey)` if the key is found and successfully loaded
+    /// * `Err` if the key file doesn't exist or is corrupted
+    pub fn load_proving_key() -> crate::Result<ProvingKey<ark_bn254::Bn254>> {
+        let key_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("keys/state/proving_key.bin");
+        crate::key_management::load_proving_key(key_path)
+    }
+
+    /// Load verification key from the trusted setup ceremony
+    ///
+    /// This loads the production verification key that was generated through a
+    /// multi-party computation ceremony. The key is stored in `keys/state/verification_key.bin`.
+    ///
+    /// # Returns
+    /// * `Ok(VerifyingKey)` if the key is found and successfully loaded
+    /// * `Err` if the key file doesn't exist or is corrupted
+    pub fn load_verification_key() -> crate::Result<VerifyingKey<ark_bn254::Bn254>> {
+        let key_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("keys/state/verification_key.bin");
+        crate::key_management::load_verification_key(key_path)
+    }
+
+    /// Load both proving and verification keys from the trusted setup ceremony
+    ///
+    /// Convenience method that loads both keys at once. Equivalent to calling
+    /// `load_proving_key()` and `load_verification_key()` separately.
+    ///
+    /// # Returns
+    /// * `Ok((ProvingKey, VerifyingKey))` if both keys are successfully loaded
+    /// * `Err` if either key file doesn't exist or is corrupted
+    pub fn load_ceremony_keys() -> crate::Result<(ProvingKey<ark_bn254::Bn254>, VerifyingKey<ark_bn254::Bn254>)> {
+        let pk = Self::load_proving_key()?;
+        let vk = Self::load_verification_key()?;
+        Ok((pk, vk))
     }
 
     /// Generate a proof for this circuit instance

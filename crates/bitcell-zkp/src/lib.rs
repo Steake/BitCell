@@ -19,6 +19,8 @@ pub mod state_constraints;
 pub mod merkle_gadget;
 // Production-ready Poseidon-based Merkle verification
 pub mod poseidon_merkle;
+// Key management for trusted setup ceremony
+pub mod key_management;
 
 pub use battle_circuit::BattleCircuit;
 pub use state_circuit::StateCircuit;
@@ -45,6 +47,9 @@ pub enum Error {
     
     #[error("Setup error: {0}")]
     Setup(String),
+    
+    #[error("Key management error: {0}")]
+    KeyManagement(String),
 }
 
 use ark_bn254::Bn254;

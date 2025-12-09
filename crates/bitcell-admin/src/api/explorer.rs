@@ -47,6 +47,7 @@ pub struct SearchQuery {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(tag = "type", content = "data")]
 pub enum SearchResult {
     Block { height: u64, hash: String },
     Transaction { hash: String },
@@ -208,7 +209,8 @@ pub async fn search(
         });
     }
     
-    // Check if it's a block hash (0x + 16 hex chars for our simplified mock)
+    // Check if it's a block hash (0x + 16 hex chars for simplified mock)
+    // Note: In production, block hashes would typically be 32 bytes (64 hex chars)
     if q.starts_with("0x") && q.len() == 18 {
         // Try to find block by hash
         results.push(SearchResult::Block {

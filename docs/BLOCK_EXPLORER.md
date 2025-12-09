@@ -9,7 +9,7 @@ The BitCell Block Explorer is a comprehensive web-based interface for viewing an
 ### 🔍 Search Functionality
 - **Universal Search Bar**: Search by:
   - Block height (numeric)
-  - Block hash (0x + 16 hex characters)
+  - Block hash (0x + hex characters - currently 16 for mock, typically 64 in production)
   - Transaction hash (0x + 64 hex characters)
   - Account address (0x + 40 hex characters)
 

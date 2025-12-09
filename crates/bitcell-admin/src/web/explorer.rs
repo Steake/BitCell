@@ -555,12 +555,13 @@ pub async fn index() -> impl IntoResponse {
                 
                 const result = data.results[0];
                 
-                if (result.Block) {
-                    showBlockDetail(result.Block.height);
-                } else if (result.Transaction) {
-                    showTransactionDetail(result.Transaction.hash);
-                } else if (result.Account) {
-                    showAccountDetail(result.Account.address);
+                // Handle tagged enum serialization with serde
+                if (result.type === 'Block') {
+                    showBlockDetail(result.data.height);
+                } else if (result.type === 'Transaction') {
+                    showTransactionDetail(result.data.hash);
+                } else if (result.type === 'Account') {
+                    showAccountDetail(result.data.address);
                 }
             } catch (error) {
                 console.error('Search failed:', error);

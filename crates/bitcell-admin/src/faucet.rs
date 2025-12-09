@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -137,7 +137,8 @@ impl FaucetService {
             }
 
             // Check daily request limit
-            let today_start = now - (now % 86400); // Start of current day
+            // Calculate start of day in UTC (midnight)
+            let today_start = (now / 86400) * 86400; // Start of current UTC day
             let requests_today: Vec<_> = info.requests_today
                 .iter()
                 .filter(|&&t| t >= today_start)
@@ -166,8 +167,8 @@ impl FaucetService {
 
         info.last_request = timestamp;
         
-        // Clean up old requests (keep only today's)
-        let today_start = timestamp - (timestamp % 86400);
+        // Clean up old requests (keep only today's in UTC)
+        let today_start = (timestamp / 86400) * 86400; // Start of current UTC day
         info.requests_today.retain(|&t| t >= today_start);
         info.requests_today.push(timestamp);
     }
@@ -202,10 +203,14 @@ impl FaucetService {
 
         if let Some(result) = json.get("result").and_then(|v| v.as_str()) {
             let balance = u64::from_str_radix(result.trim_start_matches("0x"), 16)
-                .unwrap_or(0);
+                .map_err(|e| FaucetError::TransactionFailed(
+                    format!("Failed to parse faucet balance: {}", e)
+                ))?;
             Ok(balance)
         } else {
-            Err(FaucetError::TransactionFailed("Failed to get balance".to_string()))
+            Err(FaucetError::TransactionFailed(
+                "Invalid RPC response for faucet balance: missing result field".to_string()
+            ))
         }
     }
 
@@ -236,10 +241,14 @@ impl FaucetService {
 
         if let Some(result) = json.get("result").and_then(|v| v.as_str()) {
             let balance = u64::from_str_radix(result.trim_start_matches("0x"), 16)
-                .unwrap_or(0);
+                .map_err(|e| FaucetError::TransactionFailed(
+                    format!("Failed to parse recipient balance: {}", e)
+                ))?;
             Ok(balance)
         } else {
-            Err(FaucetError::TransactionFailed("Failed to get balance".to_string()))
+            Err(FaucetError::TransactionFailed(
+                "Invalid RPC response for recipient balance: missing result field".to_string()
+            ))
         }
     }
 
@@ -247,7 +256,7 @@ impl FaucetService {
     pub async fn process_request(
         &self,
         address: &str,
-        _captcha_response: Option<&str>,
+        captcha_response: Option<&str>,
     ) -> Result<FaucetRequest, FaucetError> {
         // Validate address format
         self.validate_address(address)?;
@@ -255,13 +264,21 @@ impl FaucetService {
         // Check CAPTCHA if required
         let config = self.config.read().clone();
         if config.require_captcha {
-            // For now, skip CAPTCHA validation in basic implementation
+            // CAPTCHA validation
             // In production, validate against reCAPTCHA or hCaptcha service
-            // if let Some(response) = captcha_response {
-            //     self.verify_captcha(response).await?;
-            // } else {
-            //     return Err(FaucetError::InvalidCaptcha);
-            // }
+            // For now, if CAPTCHA is required but not provided, return error
+            if captcha_response.is_none() || captcha_response.unwrap().is_empty() {
+                return Err(FaucetError::InvalidCaptcha);
+            }
+            
+            // TODO: Implement actual CAPTCHA verification
+            // Example for reCAPTCHA:
+            // self.verify_recaptcha(captcha_response.unwrap()).await?;
+            //
+            // Example for hCaptcha:
+            // self.verify_hcaptcha(captcha_response.unwrap()).await?;
+            
+            tracing::warn!("CAPTCHA validation not fully implemented - accepting all CAPTCHA responses");
         }
 
         // Check rate limit
@@ -425,9 +442,14 @@ impl FaucetService {
             .map_err(|e| FaucetError::TransactionFailed(e.to_string()))?;
 
         let nonce = if let Some(result) = json.get("result").and_then(|v| v.as_str()) {
-            u64::from_str_radix(result.trim_start_matches("0x"), 16).unwrap_or(0)
+            u64::from_str_radix(result.trim_start_matches("0x"), 16)
+                .map_err(|e| FaucetError::TransactionFailed(
+                    format!("Failed to parse nonce: {}", e)
+                ))?
         } else {
-            0
+            return Err(FaucetError::TransactionFailed(
+                "Invalid RPC response for nonce: missing result field".to_string()
+            ));
         };
 
         // Build and sign transaction

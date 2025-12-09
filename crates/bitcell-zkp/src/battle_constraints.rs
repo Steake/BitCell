@@ -415,12 +415,14 @@ fn verify_winner_fp<F: PrimeField>(
     let (b_wins, _) = compare_bits(&energy_b_bits, &energy_a_bits)?;
     
     // Convert boolean to FpVar
-    let _winner_0 = Boolean::le_bits_to_fp_var(&vec![a_wins.clone()])?;
+    // winner = 0 if a_wins, 1 if b_wins, 2 if tie
+    // Since 0 * winner_0 = 0, we only need winner_1 and winner_2
     let winner_1 = Boolean::le_bits_to_fp_var(&vec![b_wins.clone()])?;
     let winner_2_bool = a_wins.not().and(&b_wins.not())?;
     let winner_2 = Boolean::le_bits_to_fp_var(&vec![winner_2_bool])?;
     
-    // Compute: computed_winner = 0 * winner_0 + 1 * winner_1 + 2 * winner_2
+    // Compute: computed_winner = 0 * a_wins + 1 * b_wins + 2 * tie
+    // Simplifies to: computed_winner = b_wins + 2 * tie
     let computed_winner = winner_1 + winner_2 * FpVar::constant(F::from(2u64));
     
     computed_winner.enforce_equal(winner)?;
@@ -459,7 +461,6 @@ fn verify_winner<F: PrimeField>(
     // Determine winner by comparing bit representations
     let (a_wins, _) = compare_bits(&energy_a_bits, &energy_b_bits)?;
     let (b_wins, _) = compare_bits(&energy_b_bits, &energy_a_bits)?;
-    let _tie = a_wins.not().and(&b_wins.not())?;
     
     let computed_winner = UInt8::conditionally_select(
         &a_wins,

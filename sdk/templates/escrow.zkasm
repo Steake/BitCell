@@ -149,7 +149,7 @@ EQ r9, r2, r3
 JZ r9, 0, refund_unauthorized
 
 # Check timeout has passed: current_block >= timeout_block
-LT r10, r7, r5             # r10 = 1 if current < timeout
+GE r10, r7, r5             # r10 = 1 if current >= timeout
 JZ r10, 0, refund_exec     # Execute if timeout passed
 
 # Timeout not reached

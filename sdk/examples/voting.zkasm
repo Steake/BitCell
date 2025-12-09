@@ -137,10 +137,10 @@ EQ r4, r1, 3
 JZ r4, 0, unknown_function
 
 get_results:
-  # Return: state in r0, yes_votes in r1, no_votes in r2
+  # Return: state in r0, yes_votes in r10, no_votes in r11
   LOAD r0, r0, 0x120       # state
-  LOAD r1, r0, 0x110       # yes_votes (overwrites r1!)
-  LOAD r2, r0, 0x118       # no_votes
+  LOAD r10, r0, 0x110      # yes_votes
+  LOAD r11, r0, 0x118      # no_votes
   HALT
 
 unknown_function:

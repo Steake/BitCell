@@ -14,9 +14,10 @@ echo ""
 
 # Check if bitcell-node is built
 if [ ! -f "$PROJECT_ROOT/target/debug/bitcell-node" ] && [ ! -f "$PROJECT_ROOT/target/release/bitcell-node" ]; then
-    echo "⚠️  BitCell node not found. Building..."
-    cd "$PROJECT_ROOT"
-    cargo build -p bitcell-node
+    echo "⚠️  BitCell node not found."
+    echo "ℹ️  Note: The node binary will be built when the node crate is implemented."
+    echo "ℹ️  For now, configuration is prepared but node won't start automatically."
+    echo ""
 fi
 
 # Clean up old testnet data

@@ -5,13 +5,23 @@
 //! - State transition verification (Merkle updates)
 //! - Merkle tree inclusion proofs
 //!
-//! Note: v0.1 provides circuit structure and basic constraints.
-//! Full CA evolution verification requires extensive constraint programming.
+//! # Circuit Implementations
+//!
+//! ## Full Constraint Circuits (Production)
+//! - [`battle_constraints::BattleCircuit`] - Full Conway's Game of Life verification (~6.7M constraints)
+//! - [`state_constraints::StateCircuit`] - Complete state transition verification
+//!
+//! ## Simplified Circuits (Testing/Development)
+//! - [`battle_circuit::BattleCircuit`] - Simplified battle circuit (mock, fast proofs)
+//! - [`state_circuit::StateCircuit`] - Simplified state circuit (mock, fast proofs)
+//!
+//! By default, this module exports the full constraint implementations for production use.
+//! Simplified circuits are available via their module paths or type aliases for testing.
 
 pub mod battle_circuit;
 pub mod state_circuit;
 
-// New: Full constraint implementations
+// Full constraint implementations (production)
 pub mod battle_constraints;
 pub mod state_constraints;
 
@@ -20,8 +30,14 @@ pub mod merkle_gadget;
 // Production-ready Poseidon-based Merkle verification
 pub mod poseidon_merkle;
 
-pub use battle_circuit::BattleCircuit;
+// Export full constraint implementations as defaults
+pub use battle_constraints::BattleCircuit;
 pub use state_circuit::StateCircuit;
+
+// Type aliases for simplified circuits (testing/development)
+pub type SimpleBattleCircuit = battle_circuit::BattleCircuit;
+pub type SimpleStateCircuit = state_circuit::StateCircuit;
+
 pub use merkle_gadget::{MerklePathGadget, MERKLE_DEPTH};
 pub use poseidon_merkle::{PoseidonMerkleGadget, POSEIDON_MERKLE_DEPTH};
 

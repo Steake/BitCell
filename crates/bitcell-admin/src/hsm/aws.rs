@@ -262,39 +262,53 @@ impl AwsHsmBackend {
     /// These libraries provide proper validation and error handling for
     /// security-critical signature data.
     fn parse_der_signature(der: &[u8]) -> Result<Signature, bitcell_crypto::CryptoError> {
-        // Very basic DER parser - validates SEQUENCE structure
+        // Validate minimum length and SEQUENCE tag
         if der.len() < 8 || der[0] != 0x30 {
+            return Err(bitcell_crypto::CryptoError::InvalidSignature);
+        }
+
+        // Validate sequence length
+        let seq_len = der[1] as usize;
+        if 2 + seq_len != der.len() {
             return Err(bitcell_crypto::CryptoError::InvalidSignature);
         }
 
         let mut pos = 2;
         
-        // Parse r
+        // Parse r - INTEGER tag
         if pos >= der.len() || der[pos] != 0x02 {
             return Err(bitcell_crypto::CryptoError::InvalidSignature);
         }
         pos += 1;
         
+        // Validate r length is within bounds
+        if pos >= der.len() {
+            return Err(bitcell_crypto::CryptoError::InvalidSignature);
+        }
         let r_len = der[pos] as usize;
         pos += 1;
         
-        if pos + r_len > der.len() {
+        if r_len == 0 || r_len > 33 || pos + r_len > der.len() {
             return Err(bitcell_crypto::CryptoError::InvalidSignature);
         }
         
         let r_bytes = &der[pos..pos + r_len];
         pos += r_len;
         
-        // Parse s
+        // Parse s - INTEGER tag
         if pos >= der.len() || der[pos] != 0x02 {
             return Err(bitcell_crypto::CryptoError::InvalidSignature);
         }
         pos += 1;
         
+        // Validate s length is within bounds
+        if pos >= der.len() {
+            return Err(bitcell_crypto::CryptoError::InvalidSignature);
+        }
         let s_len = der[pos] as usize;
         pos += 1;
         
-        if pos + s_len > der.len() {
+        if s_len == 0 || s_len > 33 || pos + s_len > der.len() {
             return Err(bitcell_crypto::CryptoError::InvalidSignature);
         }
         
@@ -303,7 +317,7 @@ impl AwsHsmBackend {
         // Combine r and s into 64-byte signature
         let mut sig = vec![0u8; 64];
         
-        // Copy r (padding with zeros if needed)
+        // Copy r (skip leading zero byte if present, pad with zeros if needed)
         let r_start = if r_bytes.len() > 32 { r_bytes.len() - 32 } else { 0 };
         let r_pad = if r_bytes.len() < 32 { 32 - r_bytes.len() } else { 0 };
         sig[r_pad..32].copy_from_slice(&r_bytes[r_start..]);

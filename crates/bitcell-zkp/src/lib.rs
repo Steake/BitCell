@@ -5,13 +5,14 @@
 //! - State transition verification (Merkle updates)
 //! - Merkle tree inclusion proofs
 //!
-//! Note: v0.1 provides circuit structure and basic constraints.
-//! Full CA evolution verification requires extensive constraint programming.
+//! This module provides both simplified circuits for testing and full constraint
+//! implementations for production use. The full constraint implementations are
+//! exported as defaults.
 
 pub mod battle_circuit;
 pub mod state_circuit;
 
-// New: Full constraint implementations
+// Full constraint implementations for production
 pub mod battle_constraints;
 pub mod state_constraints;
 
@@ -20,8 +21,15 @@ pub mod merkle_gadget;
 // Production-ready Poseidon-based Merkle verification
 pub mod poseidon_merkle;
 
-pub use battle_circuit::BattleCircuit;
-pub use state_circuit::StateCircuit;
+// Export full constraint implementations as defaults
+pub use battle_constraints::BattleCircuit;
+pub use state_constraints::{StateCircuit, NullifierCircuit};
+
+// Export simplified circuits as aliases for testing
+pub use battle_circuit::BattleCircuit as SimpleBattleCircuit;
+pub use state_circuit::StateCircuit as SimpleStateCircuit;
+
+// Export merkle gadgets
 pub use merkle_gadget::{MerklePathGadget, MERKLE_DEPTH};
 pub use poseidon_merkle::{PoseidonMerkleGadget, POSEIDON_MERKLE_DEPTH};
 

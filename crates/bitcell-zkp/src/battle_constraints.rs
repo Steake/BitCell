@@ -6,6 +6,10 @@ use ark_r1cs_std::prelude::*;
 use ark_r1cs_std::fields::fp::FpVar;
 use ark_r1cs_std::bits::ToBitsGadget;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
+use ark_bn254::{Bn254, Fr};
+use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
+use ark_snark::SNARK;
+use ark_std::rand::thread_rng;
 
 /// Size of the CA grid (must be power of 2 for efficient constraints)
 ///
@@ -79,6 +83,85 @@ impl<F: PrimeField> BattleCircuit<F> {
         self.nonce_a = Some(nonce_a);
         self.nonce_b = Some(nonce_b);
         self
+    }
+}
+
+impl BattleCircuit<Fr> {
+    /// Setup the circuit and generate proving/verifying keys
+    /// 
+    /// Note: This is an expensive operation that can take several minutes
+    /// and requires significant memory (16GB+ recommended)
+    pub fn setup() -> crate::Result<(ProvingKey<Bn254>, VerifyingKey<Bn254>)> {
+        let rng = &mut thread_rng();
+        let dummy_circuit = Self {
+            initial_grid: None,
+            final_grid: None,
+            commitment_a: None,
+            commitment_b: None,
+            winner: None,
+            pattern_a: None,
+            pattern_b: None,
+            nonce_a: None,
+            nonce_b: None,
+        };
+        
+        Groth16::<Bn254>::circuit_specific_setup(dummy_circuit, rng)
+            .map_err(|e| crate::Error::Setup(format!("BattleCircuit setup failed: {}", e)))
+    }
+
+    /// Generate a proof for this circuit instance
+    /// 
+    /// This operation is expensive and can take 10-30 seconds depending on hardware
+    pub fn prove(&self, pk: &ProvingKey<Bn254>) -> crate::Result<crate::Groth16Proof> {
+        let rng = &mut thread_rng();
+        let proof = Groth16::<Bn254>::prove(pk, self.clone(), rng)
+            .map_err(|e| crate::Error::ProofGeneration(e.to_string()))?;
+        Ok(crate::Groth16Proof::new(proof))
+    }
+
+    /// Verify a proof against public inputs
+    /// 
+    /// Verification is fast (typically <10ms)
+    pub fn verify(
+        vk: &VerifyingKey<Bn254>,
+        proof: &crate::Groth16Proof,
+        public_inputs: &[Fr],
+    ) -> crate::Result<bool> {
+        Groth16::<Bn254>::verify(vk, public_inputs, &proof.proof)
+            .map_err(|_| crate::Error::ProofVerification)
+    }
+
+    /// Helper to construct public inputs in the correct order
+    /// 
+    /// Public inputs are: initial_grid (flattened), final_grid (flattened), 
+    /// commitment_a, commitment_b, winner
+    pub fn public_inputs(&self) -> Vec<Fr> {
+        let mut inputs = Vec::new();
+        
+        // Flatten initial grid
+        if let Some(ref grid) = self.initial_grid {
+            for row in grid {
+                for &cell in row {
+                    inputs.push(Fr::from(cell as u64));
+                }
+            }
+        }
+        
+        // Flatten final grid
+        if let Some(ref grid) = self.final_grid {
+            for row in grid {
+                for &cell in row {
+                    inputs.push(Fr::from(cell as u64));
+                }
+            }
+        }
+        
+        // Add commitments and winner
+        inputs.push(self.commitment_a.unwrap_or(Fr::from(0u64)));
+        inputs.push(self.commitment_b.unwrap_or(Fr::from(0u64)));
+        inputs.push(Fr::from(self.winner.unwrap_or(0) as u64));
+        
+        inputs
     }
 }
 
@@ -462,5 +545,96 @@ mod tests {
 
         circuit.generate_constraints(cs.clone()).unwrap();
         assert!(cs.is_satisfied().unwrap());
+    }
+    
+    #[test]
+    #[ignore] // Expensive test - requires 3+ minutes for setup with 64x64 grid
+    fn test_battle_circuit_setup() {
+        let result = BattleCircuit::<Fr>::setup();
+        assert!(result.is_ok(), "BattleCircuit setup should succeed");
+        
+        let (pk, vk) = result.unwrap();
+        // Verify that keys were generated
+        assert!(pk.vk.gamma_abc_g1.len() > 0, "Proving key should be valid");
+        assert!(vk.gamma_abc_g1.len() > 0, "Verifying key should be valid");
+    }
+    
+    #[test]
+    #[ignore] // Expensive test - requires setup + proof generation (5+ min total)
+    fn test_battle_circuit_prove_verify() {
+        // Setup
+        let (pk, vk) = BattleCircuit::<Fr>::setup().expect("Setup should succeed");
+        
+        // Create a simple stable state (empty grid remains empty)
+        let initial_grid = vec![vec![0u8; GRID_SIZE]; GRID_SIZE];
+        let final_grid = initial_grid.clone();
+        
+        let pattern_a = vec![vec![0u8; 3]; 3];
+        let pattern_b = vec![vec![0u8; 3]; 3];
+        let nonce_a = Fr::from(0u64);
+        let nonce_b = Fr::from(0u64);
+        let commitment_a = Fr::from(0u64);
+        let commitment_b = Fr::from(0u64);
+        
+        let circuit = BattleCircuit::new(
+            initial_grid,
+            final_grid,
+            commitment_a,
+            commitment_b,
+            2, // Tie
+        ).with_witnesses(pattern_a, pattern_b, nonce_a, nonce_b);
+        
+        // Generate proof
+        let proof = circuit.prove(&pk).expect("Proof generation should succeed");
+        
+        // Verify proof
+        let public_inputs = circuit.public_inputs();
+        let is_valid = BattleCircuit::verify(&vk, &proof, &public_inputs)
+            .expect("Verification should not error");
+        assert!(is_valid, "Proof should verify successfully");
+    }
+    
+    #[test]
+    #[ignore] // Expensive test
+    fn test_battle_circuit_winner_determination() {
+        // This test verifies that the circuit correctly determines the winner
+        // based on regional energy in the final grid
+        let (pk, vk) = BattleCircuit::<Fr>::setup().expect("Setup should succeed");
+        
+        // Create a grid where region A (left half) has more alive cells
+        let initial_grid = vec![vec![0u8; GRID_SIZE]; GRID_SIZE];
+        let mut final_grid = vec![vec![0u8; GRID_SIZE]; GRID_SIZE];
+        
+        // Set some cells alive in left half (player A's region)
+        for i in 0..GRID_SIZE/2 {
+            for j in 0..GRID_SIZE {
+                if (i + j) % 3 == 0 {
+                    final_grid[i][j] = 255;
+                }
+            }
+        }
+        
+        let pattern_a = vec![vec![0u8; 3]; 3];
+        let pattern_b = vec![vec![0u8; 3]; 3];
+        let nonce_a = Fr::from(1u64);
+        let nonce_b = Fr::from(2u64);
+        
+        // Compute commitments (simplified scheme)
+        let commitment_a = Fr::from(1u64); // Would be computed from pattern + nonce
+        let commitment_b = Fr::from(2u64);
+        
+        // Player A wins (winner = 0)
+        let circuit = BattleCircuit::new(
+            initial_grid,
+            final_grid,
+            commitment_a,
+            commitment_b,
+            0,
+        ).with_witnesses(pattern_a, pattern_b, nonce_a, nonce_b);
+        
+        let proof = circuit.prove(&pk).expect("Proof should generate");
+        let is_valid = BattleCircuit::verify(&vk, &proof, &circuit.public_inputs())
+            .expect("Verification should not error");
+        assert!(is_valid, "Proof should verify for player A win");
     }
 }

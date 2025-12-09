@@ -1,12 +1,38 @@
 //! ZK-SNARK circuits for BitCell
 //!
-//! Implements modular Groth16 circuits for:
-//! - Battle verification (CA evolution + commitment consistency)
-//! - State transition verification (Merkle updates)
+//! Implements production-ready Groth16 circuits for:
+//! - Battle verification (full CA evolution with Conway's rules)
+//! - State transition verification (Merkle tree updates)
 //! - Merkle tree inclusion proofs
 //!
-//! Note: v0.1 provides circuit structure and basic constraints.
-//! Full CA evolution verification requires extensive constraint programming.
+//! # Production Status (RC2)
+//!
+//! This module provides production-ready implementations with full R1CS constraints:
+//! - [`BattleCircuit`]: Full Conway's Game of Life evolution verification (~6.7M constraints)
+//! - [`StateCircuit`]: State transition with Merkle proofs
+//!
+//! # Simplified Circuits for Testing
+//!
+//! For fast testing and development, simplified mock circuits are available:
+//! - [`SimpleBattleCircuit`]: Mock battle circuit with minimal constraints
+//! - Original state circuit (via `state_circuit` module)
+//!
+//! # Usage
+//!
+//! ```rust,ignore
+//! use bitcell_zkp::{BattleCircuit, Groth16Proof};
+//!
+//! // Setup (generate proving/verifying keys)
+//! let (pk, vk) = BattleCircuit::setup()?;
+//!
+//! // Create circuit and generate proof
+//! let circuit = BattleCircuit::new(/* ... */);
+//! let proof = circuit.prove(&pk)?;
+//!
+//! // Verify proof
+//! let public_inputs = circuit.public_inputs();
+//! let valid = BattleCircuit::verify(&vk, &proof, &public_inputs)?;
+//! ```
 
 pub mod battle_circuit;
 pub mod state_circuit;

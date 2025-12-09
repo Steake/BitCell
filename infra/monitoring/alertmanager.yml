@@ -1,0 +1,122 @@
+global:
+  # Slack webhook for alerts
+  slack_api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+  
+  # Default route settings
+  resolve_timeout: 5m
+
+# Templates for notifications
+templates:
+  - '/etc/alertmanager/*.tmpl'
+
+# The root route
+route:
+  # Group alerts by these labels
+  group_by: ['alertname', 'region', 'severity']
+  
+  # How long to wait before sending a notification
+  group_wait: 30s
+  
+  # How long to wait before sending updates
+  group_interval: 5m
+  
+  # How long to wait before re-sending
+  repeat_interval: 4h
+  
+  # Default receiver
+  receiver: 'team-oncall'
+  
+  # Child routes
+  routes:
+    # Critical alerts go to PagerDuty immediately
+    - match:
+        severity: critical
+      receiver: 'pagerduty-critical'
+      continue: true  # Also send to Slack
+    
+    # Warning alerts go to Slack only
+    - match:
+        severity: warning
+      receiver: 'slack-warnings'
+    
+    # Regional alerts get special handling
+    - match:
+        component: region
+      receiver: 'slack-regional'
+      group_by: ['region']
+
+# Alert receivers
+receivers:
+  # Team on-call (default)
+  - name: 'team-oncall'
+    slack_configs:
+      - channel: '#bitcell-alerts'
+        title: 'BitCell Alert: {{ .GroupLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Severity:* {{ .Labels.severity }}
+          *Component:* {{ .Labels.component }}
+          {{ end }}
+        send_resolved: true
+
+  # Critical alerts via PagerDuty
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - service_key: 'YOUR_PAGERDUTY_SERVICE_KEY'
+        description: '{{ .GroupLabels.alertname }}: {{ .Annotations.summary }}'
+        severity: '{{ .CommonLabels.severity }}'
+    slack_configs:
+      - channel: '#bitcell-critical'
+        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Time:* {{ .StartsAt }}
+          {{ end }}
+        color: 'danger'
+        send_resolved: true
+
+  # Warning alerts to Slack
+  - name: 'slack-warnings'
+    slack_configs:
+      - channel: '#bitcell-warnings'
+        title: '⚠️  Warning: {{ .GroupLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Component:* {{ .Labels.component }}
+          {{ end }}
+        color: 'warning'
+        send_resolved: true
+
+  # Regional alerts
+  - name: 'slack-regional'
+    slack_configs:
+      - channel: '#bitcell-regional'
+        title: '🌍 Regional Issue: {{ .GroupLabels.region }}'
+        text: >-
+          {{ range .Alerts }}
+          *Region:* {{ .Labels.region }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+
+# Inhibition rules - suppress certain alerts when others are firing
+inhibit_rules:
+  # If a region is down, don't alert about individual nodes in that region
+  - source_match:
+      alertname: 'RegionDown'
+    target_match:
+      alertname: 'NodeDown'
+    equal: ['region']
+  
+  # If no active miners, don't alert about chain not progressing
+  - source_match:
+      alertname: 'NoActiveMiners'
+    target_match:
+      alertname: 'ChainNotProgressing'

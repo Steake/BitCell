@@ -137,10 +137,13 @@ EQ r4, r1, 3
 JZ r4, 0, unknown_function
 
 get_results:
-  # Return: state in r0, yes_votes in r10, no_votes in r11
-  LOAD r0, r0, 0x120       # state
-  LOAD r10, r0, 0x110      # yes_votes
-  LOAD r11, r0, 0x118      # no_votes
+  # Load results first, then move to return registers
+  LOAD r10, r0, 0x120      # state
+  LOAD r11, r0, 0x110      # yes_votes
+  LOAD r12, r0, 0x118      # no_votes
+  
+  # Return: state in r10, yes_votes in r11, no_votes in r12
+  # Note: In a real implementation with ABI, these would be written to output
   HALT
 
 unknown_function:

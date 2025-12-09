@@ -290,8 +290,10 @@ The ZKVM has 32 general-purpose 64-bit registers:
 
 | Register | Alias | Description |
 |----------|-------|-------------|
-| r0       | zero  | Always zero (reads as 0, writes ignored) |
+| r0       | -     | General purpose (typically used for return values) |
 | r1-r31   | -     | General purpose registers |
+
+**Note:** Unlike some architectures, r0 is a normal register in BitCell ZKVM, not hardwired to zero.
 
 ### Register Conventions
 

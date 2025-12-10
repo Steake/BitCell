@@ -866,22 +866,19 @@ mod tests {
     #[test]
     fn test_account_persistence() {
         let temp_dir = TempDir::new().unwrap();
-        let address = [1u8; 33];
-        let account = Account {
-            balance: 1000,
-            nonce: 5,
-        };
+        let pubkey = [42u8; 33];
+        let account = Account { balance: 1000, nonce: 5 };
         
         // Store account
         {
             let storage = StorageManager::new(temp_dir.path()).unwrap();
-            storage.store_account(&address, &account).unwrap();
+            storage.store_account(&pubkey, &account).unwrap();
         }
         
         // Reopen storage and verify persistence
         {
             let storage = StorageManager::new(temp_dir.path()).unwrap();
-            let retrieved = storage.get_account(&address).unwrap().unwrap();
+            let retrieved = storage.get_account(&pubkey).unwrap().unwrap();
             assert_eq!(retrieved.balance, 1000);
             assert_eq!(retrieved.nonce, 5);
         }
@@ -890,11 +887,11 @@ mod tests {
     #[test]
     fn test_bond_persistence() {
         let temp_dir = TempDir::new().unwrap();
-        let miner_id = [2u8; 33];
+        let miner_id = [99u8; 33];
         let bond = BondState {
             amount: 5000,
             status: crate::BondStatus::Active,
-            locked_epoch: 0,
+            locked_epoch: 10,
         };
         
         // Store bond
@@ -908,7 +905,7 @@ mod tests {
             let storage = StorageManager::new(temp_dir.path()).unwrap();
             let retrieved = storage.get_bond(&miner_id).unwrap().unwrap();
             assert_eq!(retrieved.amount, 5000);
-            assert_eq!(retrieved.locked_epoch, 0);
+            assert_eq!(retrieved.locked_epoch, 10);
             assert!(retrieved.is_active());
         }
     }

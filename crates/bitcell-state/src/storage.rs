@@ -337,6 +337,12 @@ impl StorageManager {
         // Store snapshot data with metadata: height(8) | root_len(4) | state_root | accounts_data
         let mut snapshot_data = Vec::new();
         snapshot_data.extend_from_slice(&height.to_be_bytes());
+        
+        // Validate state_root length to prevent integer overflow
+        if state_root.len() > u32::MAX as usize {
+            return Err("State root too large (exceeds u32::MAX)".to_string());
+        }
+        
         snapshot_data.extend_from_slice(&(state_root.len() as u32).to_be_bytes());
         snapshot_data.extend_from_slice(state_root);
         snapshot_data.extend_from_slice(accounts_data);
@@ -390,6 +396,14 @@ impl StorageManager {
                 .map_err(|_| "Invalid snapshot height in data".to_string())?
         );
         
+        // Validate stored height matches expected height from index
+        if stored_height != height {
+            return Err(format!(
+                "Snapshot height mismatch: index says {}, data says {}",
+                height, stored_height
+            ));
+        }
+        
         let root_len = u32::from_be_bytes(
             snapshot_data[8..12].try_into()
                 .map_err(|_| "Invalid root length in data".to_string())?
@@ -433,6 +447,14 @@ impl StorageManager {
             snapshot_data[0..8].try_into()
                 .map_err(|_| "Invalid snapshot height in data".to_string())?
         );
+        
+        // Validate stored height matches requested height
+        if stored_height != height {
+            return Err(format!(
+                "Snapshot height mismatch: expected {}, got {}",
+                height, stored_height
+            ));
+        }
         
         let root_len = u32::from_be_bytes(
             snapshot_data[8..12].try_into()
@@ -809,6 +831,33 @@ mod tests {
         let snap2 = storage.get_snapshot(2000).unwrap().unwrap();
         assert_eq!(snap2.0, 2000);
         assert_eq!(snap2.2.as_slice(), b"data2");
+    }
+
+    #[test]
+    fn test_snapshot_edge_cases() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = StorageManager::new(temp_dir.path()).unwrap();
+        
+        // Test empty state_root
+        storage.create_snapshot(100, &[], b"data").unwrap();
+        let snap = storage.get_snapshot(100).unwrap().unwrap();
+        assert_eq!(snap.0, 100);
+        assert_eq!(snap.1.len(), 0);
+        assert_eq!(snap.2.as_slice(), b"data");
+        
+        // Test empty accounts_data  
+        storage.create_snapshot(101, b"root", &[]).unwrap();
+        let snap = storage.get_snapshot(101).unwrap().unwrap();
+        assert_eq!(snap.0, 101);
+        assert_eq!(snap.1.as_slice(), b"root");
+        assert_eq!(snap.2.len(), 0);
+        
+        // Test both empty
+        storage.create_snapshot(102, &[], &[]).unwrap();
+        let snap = storage.get_snapshot(102).unwrap().unwrap();
+        assert_eq!(snap.0, 102);
+        assert_eq!(snap.1.len(), 0);
+        assert_eq!(snap.2.len(), 0);
     }
 
     #[test]

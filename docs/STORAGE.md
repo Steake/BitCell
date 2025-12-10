@@ -30,7 +30,8 @@ The storage layer uses separate RocksDB column families for different data types
 
 1. **Multiple Indexes**: Blocks and headers are indexed by both height and hash for O(1) lookups
 2. **Sender Index**: Transactions use a composite key (sender||height||tx_hash) for efficient range queries
-3. **Atomic Writes**: All multi-key operations use `WriteBatch` for atomicity
+3. **Atomic Writes**: Multi-key operations use `WriteBatch` for atomicity (blocks, headers, state roots, snapshots)
+   > **Note:** Transaction deletion in production pruning is not fully implemented yet. Transaction storage uses atomic batches.
 4. **Snapshots**: Variable-length snapshot format with length prefix for flexibility
 5. **Separation of Concerns**: Block data, state data, and indexes are in separate column families
 

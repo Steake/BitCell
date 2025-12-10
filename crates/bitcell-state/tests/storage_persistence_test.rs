@@ -58,11 +58,11 @@ fn test_multi_block_persistence() {
         assert!(header.is_some(), "Block {} not found", height);
     }
     
-    // Verify transactions
-    for height in 0..100 {
-        let sender = format!("sender_{:033}", height % 10);
+    // Verify transactions - check each unique sender once
+    for sender_id in 0..10 {
+        let sender = format!("sender_{:033}", sender_id);
         let txs = storage.get_transactions_by_sender(sender.as_bytes(), 0).unwrap();
-        assert!(txs.len() >= 10, "Expected at least 10 transactions for sender at height {}", height);
+        assert_eq!(txs.len(), 100, "Expected 100 transactions for sender {}", sender_id);
     }
     
     // Verify state roots

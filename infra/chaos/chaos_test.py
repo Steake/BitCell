@@ -200,11 +200,13 @@ class ChaosTestFramework:
         try:
             # This would use iptables or tc to create network partitions
             # For Docker, we can simulate by pausing containers
+            # Note: Container names from docker-compose match the service name
             nodes_group_a = ["node-us-east-1", "node-us-west-1"]
             nodes_group_b = ["node-eu-central-1", "node-ap-southeast-1"]
             
             print("Creating network partition...")
             for node in nodes_group_b:
+                # Use the actual container name from docker-compose
                 self.run_command(["docker", "pause", f"bitcell-{node}"], check=False)
             
             time.sleep(30)
@@ -212,6 +214,7 @@ class ChaosTestFramework:
             # Heal partition
             print("Healing partition...")
             for node in nodes_group_b:
+                # Use the actual container name from docker-compose
                 self.run_command(["docker", "unpause", f"bitcell-{node}"], check=False)
             
             recovered = self.wait_for_convergence(timeout=120)
@@ -290,7 +293,8 @@ class ChaosTestFramework:
         
         try:
             # Limit CPU/memory for a node
-            node = "bitcell-node-us-east-1"
+            # Use actual container name from docker-compose
+            node = "bitcell-us-east-1"
             print(f"Limiting resources for {node}...")
             
             # Update container resources

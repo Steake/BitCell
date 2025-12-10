@@ -163,7 +163,7 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: fast-ssd
+        storageClassName: ${STORAGE_CLASS:-gp2}
         resources:
           requests:
             storage: 100Gi
@@ -248,7 +248,7 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: fast-ssd
+        storageClassName: ${STORAGE_CLASS:-gp2}
         resources:
           requests:
             storage: 100Gi
@@ -321,7 +321,7 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: fast-ssd
+        storageClassName: ${STORAGE_CLASS:-gp2}
         resources:
           requests:
             storage: 100Gi

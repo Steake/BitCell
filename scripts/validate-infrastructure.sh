@@ -37,9 +37,13 @@ echo -e "\n${YELLOW}Checking infrastructure status...${NC}"
 if ! docker-compose -f "$COMPOSE_FILE" ps | grep -q "Up"; then
     echo -e "${YELLOW}! Infrastructure not running. Starting...${NC}"
     
-    # Build image first
-    echo "Building BitCell node image..."
-    docker build -f "$SCRIPT_DIR/../infra/docker/Dockerfile" -t bitcell-node:latest "$SCRIPT_DIR/.."
+    # Check if image exists, build if not
+    if ! docker images | grep -q "bitcell-node.*latest"; then
+        echo "Building BitCell node image..."
+        docker build -f "$SCRIPT_DIR/../infra/docker/Dockerfile" -t bitcell-node:latest "$SCRIPT_DIR/.."
+    else
+        echo "BitCell node image already exists, skipping build..."
+    fi
     
     # Start infrastructure
     echo "Starting infrastructure..."

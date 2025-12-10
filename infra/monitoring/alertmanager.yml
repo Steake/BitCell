@@ -1,6 +1,8 @@
 global:
   # Slack webhook for alerts
-  slack_api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+  # Configure via environment variable: SLACK_API_URL
+  # Example: export SLACK_API_URL='https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+  slack_api_url: '${SLACK_API_URL:-}'
   
   # Default route settings
   resolve_timeout: 5m
@@ -64,7 +66,7 @@ receivers:
   # Critical alerts via PagerDuty
   - name: 'pagerduty-critical'
     pagerduty_configs:
-      - service_key: 'YOUR_PAGERDUTY_SERVICE_KEY'
+      - service_key: '${PAGERDUTY_SERVICE_KEY:-}'
         description: '{{ .GroupLabels.alertname }}: {{ .Annotations.summary }}'
         severity: '{{ .CommonLabels.severity }}'
     slack_configs:

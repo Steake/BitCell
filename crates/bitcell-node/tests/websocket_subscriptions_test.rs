@@ -8,9 +8,6 @@ use std::time::Duration;
 #[tokio::test]
 async fn test_websocket_new_heads_subscription() {
     // Skip if no RPC server is running
-    // This is an integration test template
-    
-    // Connect to WebSocket
     let url = "ws://127.0.0.1:8545/ws";
     let result = connect_async(url).await;
     
@@ -253,12 +250,4 @@ async fn test_max_subscriptions_per_client() {
     }).await.ok();
     
     println!("Subscription limit hit: {}", limit_hit);
-}
-
-#[test]
-fn test_subscription_filter_matching() {
-    // Unit test for filter matching logic
-    // This would test the matches_log_filter function
-    // For now, just a placeholder
-    assert!(true);
 }

@@ -102,6 +102,8 @@ The result is the transaction hash.
 
 Subscribe to event logs with optional filtering.
 
+**Note:** The current implementation provides basic log extraction from transaction data. Full transaction receipt and event log support will be enhanced in future releases with proper EVM integration.
+
 **Request without filter:**
 ```json
 {

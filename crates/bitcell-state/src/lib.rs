@@ -300,7 +300,10 @@ impl StateManager {
             SlashingAction::Partial(percentage) => {
                 // Slash a percentage of the bond
                 if let Some(bond) = self.bonds.get_mut(&validator) {
-                    let slash_amount = (bond.amount * percentage as u64) / 100;
+                    // Use checked arithmetic to prevent overflow
+                    let slash_amount = bond.amount
+                        .saturating_mul(percentage as u64)
+                        .saturating_div(100);
                     bond.amount = bond.amount.saturating_sub(slash_amount);
                     
                     tracing::warn!(

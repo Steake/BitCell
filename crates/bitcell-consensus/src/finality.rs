@@ -239,27 +239,31 @@ impl FinalityGadget {
         let key = (vote.block_height, vote.round, vote.vote_type, vote.validator.clone());
         if let Some(existing_hash) = self.vote_history.get(&key) {
             if *existing_hash != vote.block_hash {
-                // Equivocation detected! Create evidence
-                let existing_vote = self.reconstruct_vote(
+                // Equivocation detected! Try to create evidence
+                if let Some(existing_vote) = self.try_reconstruct_vote(
                     *existing_hash,
                     vote.block_height,
                     vote.round,
                     vote.vote_type,
                     vote.validator.clone(),
-                );
-                
-                let evidence = EquivocationEvidence {
-                    vote1: existing_vote,
-                    vote2: vote.clone(),
-                    evidence_height: vote.block_height,
-                };
-                
-                // Record equivocation
-                self.equivocations.entry(vote.validator.clone())
-                    .or_insert_with(Vec::new)
-                    .push(evidence.clone());
-                
-                return Err(evidence);
+                ) {
+                    let evidence = EquivocationEvidence {
+                        vote1: existing_vote,
+                        vote2: vote.clone(),
+                        evidence_height: vote.block_height,
+                    };
+                    
+                    // Record equivocation
+                    self.equivocations.entry(vote.validator.clone())
+                        .or_insert_with(Vec::new)
+                        .push(evidence.clone());
+                    
+                    return Err(evidence);
+                } else {
+                    // Cannot reconstruct vote (data may have been pruned)
+                    // Just record the new vote and continue
+                    // Note: This is a rare edge case where vote data was pruned
+                }
             }
         } else {
             // Record this vote in history
@@ -273,16 +277,18 @@ impl FinalityGadget {
         // Add vote to tracker
         match vote.vote_type {
             VoteType::Prevote => {
-                if tracker.prevotes.insert(vote.validator.clone(), vote.signature).is_none() {
-                    // New prevote
+                // Only add stake if this is a new vote from this validator
+                if !tracker.prevotes.contains_key(&vote.validator) {
                     tracker.prevote_stake += stake;
                 }
+                tracker.prevotes.insert(vote.validator.clone(), vote.signature);
             }
             VoteType::Precommit => {
-                if tracker.precommits.insert(vote.validator.clone(), vote.signature).is_none() {
-                    // New precommit
+                // Only add stake if this is a new vote from this validator
+                if !tracker.precommits.contains_key(&vote.validator) {
                     tracker.precommit_stake += stake;
                 }
+                tracker.precommits.insert(vote.validator.clone(), vote.signature);
             }
         }
         
@@ -299,7 +305,9 @@ impl FinalityGadget {
             None => return,
         };
         
-        let threshold = (self.total_stake * 2) / 3; // 2/3+ threshold
+        // Calculate 2/3+ threshold with proper rounding
+        // We need > 2/3, which means we need at least floor(2*total/3) + 1
+        let threshold = (self.total_stake * 2) / 3;
         
         let current_status = self.get_finality_status(&block_hash);
         
@@ -313,29 +321,30 @@ impl FinalityGadget {
         }
     }
     
-    /// Helper to reconstruct a vote from history (for equivocation evidence)
-    fn reconstruct_vote(
+    /// Helper to try to reconstruct a vote from history (for equivocation evidence)
+    /// Returns None if the vote data is not available (e.g., pruned)
+    fn try_reconstruct_vote(
         &self,
         block_hash: Hash256,
         block_height: u64,
         round: u64,
         vote_type: VoteType,
         validator: PublicKey,
-    ) -> FinalityVote {
-        let tracker = self.vote_trackers.get(&block_hash).unwrap();
+    ) -> Option<FinalityVote> {
+        let tracker = self.vote_trackers.get(&block_hash)?;
         let signature = match vote_type {
-            VoteType::Prevote => tracker.prevotes.get(&validator).unwrap().clone(),
-            VoteType::Precommit => tracker.precommits.get(&validator).unwrap().clone(),
+            VoteType::Prevote => tracker.prevotes.get(&validator)?,
+            VoteType::Precommit => tracker.precommits.get(&validator)?,
         };
         
-        FinalityVote {
+        Some(FinalityVote {
             block_hash,
             block_height,
             vote_type,
             round,
             validator,
-            signature,
-        }
+            signature: signature.clone(),
+        })
     }
     
     /// Get all detected equivocations

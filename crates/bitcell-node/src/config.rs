@@ -14,6 +14,8 @@ pub struct NodeConfig {
     /// Block production interval in seconds.
     /// Defaults to 10 seconds for testing. Use 600 (10 minutes) for production.
     pub block_time_secs: u64,
+    /// Data directory for persistent storage. If None, uses in-memory storage only.
+    pub data_dir: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,6 +35,7 @@ impl Default for NodeConfig {
             bootstrap_nodes: vec![],
             key_seed: None,
             block_time_secs: 10, // Default to 10 seconds for testing
+            data_dir: None, // Default to in-memory storage for testing
         }
     }
 }

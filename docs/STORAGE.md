@@ -230,9 +230,11 @@ let stats = storage.prune_old_blocks_production(
 )?;
 
 println!("Deleted {} blocks", stats.blocks_deleted);
-println!("Deleted {} transactions", stats.transactions_deleted);
+println!("Deleted ~{} transactions (approximate)", stats.transactions_deleted);
 println!("Archived: {}", stats.archived);
 ```
+
+> **Note:** Transaction deletion count is currently approximate as the pruning implementation doesn't fully track individual transaction deletions.
 
 ## Integration with StateManager
 

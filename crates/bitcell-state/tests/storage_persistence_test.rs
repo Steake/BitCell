@@ -228,7 +228,7 @@ fn test_snapshot_based_recovery() {
         assert!(header.is_none(), "Block {} should have been pruned", height);
     }
     
-    // Recent blocks should still exist
+    // Recent blocks should still exist (blocks 799-999 since we stored 0-999)
     for height in 799..1000 {
         let header = storage.get_header_by_height(height).unwrap();
         assert!(header.is_some(), "Block {} should not have been pruned", height);

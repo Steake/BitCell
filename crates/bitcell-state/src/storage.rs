@@ -254,8 +254,11 @@ impl StorageManager {
                 continue; // Invalid key format (too short)
             }
             
-            // Check if sender portion matches exactly
-            // This ensures we don't match longer senders that share a prefix
+            // Check if sender portion matches exactly.
+            // This break is intentional: RocksDB's prefix_iterator may return keys for longer
+            // senders that share the same initial bytes (e.g., when searching for "abc", it
+            // might also return keys starting with "abcd"). We break as soon as the prefix
+            // no longer matches exactly to avoid returning transactions from other senders.
             if &key[0..sender.len()] != sender {
                 break; // No longer matching our sender prefix
             }

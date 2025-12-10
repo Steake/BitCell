@@ -150,11 +150,9 @@ JZ r9, 0, refund_unauthorized
 
 # Check timeout has passed: current_block >= timeout_block
 GE r10, r7, r5             # r10 = 1 if current >= timeout
-JZ r10, 0, refund_exec     # Execute if timeout passed
+JZ r10, 0, timeout_not_reached
 
-# Timeout not reached
-HALT
-
+# Timeout reached, proceed with refund
 refund_exec:
 # Update state to refunded (3)
 STORE r0, 3, 0x128
@@ -163,6 +161,9 @@ STORE r0, 3, 0x128
 # For template, we just update state
 
 HALT
+
+timeout_not_reached:
+HALT  # Timeout has not passed yet
 
 refund_invalid_state:
 HALT

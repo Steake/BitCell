@@ -301,7 +301,7 @@ While not enforced, these conventions improve code clarity:
 
 | Registers | Purpose |
 |-----------|---------|
-| r0        | Zero constant |
+| r0        | Return values (general purpose) |
 | r1-r4     | Function arguments |
 | r5-r15    | Temporary values |
 | r16-r25   | Saved registers (preserved across calls) |

@@ -34,14 +34,16 @@ decrement:
   
   # Check counter > 0 (prevent underflow)
   GT r6, r5, 0
-  JZ r6, 0, can_decrement
-  HALT                      # Counter is 0, can't decrement
+  JZ r6, 0, underflow_error
   
-can_decrement:
+  # Can decrement
   SUB r5, r5, 1            # Decrement
   STORE r0, r5, 0x108      # Store back
   ADD r0, r5, 0            # Return new value
   HALT
+
+underflow_error:
+  HALT                      # Counter is 0, can't decrement
 
 # === GET_COUNT ===
 check_get_count:
@@ -63,12 +65,14 @@ reset:
   LOAD r5, r0, 0x100       # Load owner
   LOAD r6, r0, 0x20        # Load caller
   EQ r7, r5, r6
-  JZ r7, 0, authorized
-  HALT                      # Unauthorized
+  JZ r7, 0, unauthorized
   
-authorized:
+  # Authorized - reset counter
   STORE r0, 0, 0x108       # Reset counter to 0
   HALT
+
+unauthorized:
+  HALT                      # Unauthorized
 
 unknown_function:
   HALT

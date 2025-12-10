@@ -25,23 +25,26 @@ create_proposal:
   LOAD r5, r0, 0x100       # owner
   LOAD r6, r0, 0x20        # caller
   EQ r7, r5, r6
-  JZ r7, 0, owner_ok
-  HALT
+  JZ r7, 0, not_owner
   
-owner_ok:
   # Check no active proposal
   LOAD r8, r0, 0x120       # state
   EQ r9, r8, 0
-  JZ r9, 0, no_active
-  HALT
+  JZ r9, 0, has_active
   
-no_active:
+  # All checks passed, create proposal
   LOAD r10, r0, 0x30       # deadline
   STORE r0, r10, 0x108     # Store deadline
   STORE r0, 0, 0x110       # Reset yes votes
   STORE r0, 0, 0x118       # Reset no votes
   STORE r0, 1, 0x120       # State = active
   HALT
+
+not_owner:
+  HALT  # Caller is not owner
+
+has_active:
+  HALT  # Active proposal already exists
 
 # === VOTE ===
 check_vote:
@@ -52,28 +55,23 @@ vote:
   # Check proposal is active
   LOAD r5, r0, 0x120
   EQ r6, r5, 1
-  JZ r6, 0, is_active
-  HALT
+  JZ r6, 0, not_active
   
-is_active:
   # Check deadline not passed
   LOAD r7, r0, 0x108       # deadline
   LOAD r8, r0, 0x80        # current block
   LT r9, r8, r7
-  JZ r9, 0, before_deadline
-  HALT
+  JZ r9, 0, deadline_passed_vote
   
-before_deadline:
   # Check hasn't voted
   LOAD r10, r0, 0x20       # caller
   MUL r11, r10, 8
   ADD r11, r11, 512        # voter record address
   LOAD r12, r0, r11
   EQ r13, r12, 0
-  JZ r13, 0, not_voted
-  HALT
+  JZ r13, 0, already_voted
   
-not_voted:
+  # All checks passed, record vote
   # Mark as voted
   STORE r0, 1, r11
   
@@ -82,19 +80,28 @@ not_voted:
   
   # Update vote count
   EQ r15, r14, 1
-  JZ r15, 0, vote_yes
-  
-vote_no:
-  LOAD r16, r0, 0x118      # no_votes
-  ADD r16, r16, 1
-  STORE r0, r16, 0x118
-  HALT
+  JZ r15, 0, vote_no
   
 vote_yes:
   LOAD r17, r0, 0x110      # yes_votes
   ADD r17, r17, 1
   STORE r0, r17, 0x110
   HALT
+  
+vote_no:
+  LOAD r16, r0, 0x118      # no_votes
+  ADD r16, r16, 1
+  STORE r0, r16, 0x118
+  HALT
+
+not_active:
+  HALT  # Proposal not active
+
+deadline_passed_vote:
+  HALT  # Deadline has passed
+
+already_voted:
+  HALT  # Already voted
 
 # === FINALIZE ===
 check_finalize:
@@ -105,31 +112,33 @@ finalize:
   # Check proposal is active
   LOAD r5, r0, 0x120
   EQ r6, r5, 1
-  JZ r6, 0, can_finalize
-  HALT
+  JZ r6, 0, not_active_finalize
   
-can_finalize:
   # Check deadline passed
   LOAD r7, r0, 0x108       # deadline
   LOAD r8, r0, 0x80        # current block
   GE r9, r8, r7
-  JZ r9, 0, deadline_passed
-  HALT
+  JZ r9, 0, deadline_not_passed
   
-deadline_passed:
   # Compare votes
   LOAD r10, r0, 0x110      # yes_votes
   LOAD r11, r0, 0x118      # no_votes
   GT r12, r10, r11
-  JZ r12, 0, proposal_passed
-  
-proposal_failed:
-  STORE r0, 3, 0x120       # state = failed
-  HALT
+  JZ r12, 0, proposal_failed
   
 proposal_passed:
   STORE r0, 2, 0x120       # state = passed
   HALT
+  
+proposal_failed:
+  STORE r0, 3, 0x120       # state = failed
+  HALT
+
+not_active_finalize:
+  HALT  # Proposal not active
+
+deadline_not_passed:
+  HALT  # Deadline has not passed yet
 
 # === GET_RESULTS ===
 check_get_results:

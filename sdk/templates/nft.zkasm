@@ -105,20 +105,31 @@ JZ r10, 0, transfer_unauthorized
 
 # Verify caller is owner OR approved
 EQ r11, r6, r8             # Is caller the owner?
-JZ r11, 0, transfer_exec   # If yes, execute
+JZ r11, 0, check_approved  # If not owner, check approval
 
+# Caller is owner, proceed with transfer
+transfer_exec:
+# Calculate approval address for clearing
+MUL r12, r5, 8
+ADD r12, r12, 32768        # 0x8000 approval base
+
+# Transfer ownership
+STORE r0, r3, r7           # Store new owner
+
+# Clear approval
+STORE r0, 0, r12           # Clear approved address
+
+HALT
+
+check_approved:
 # Check if caller is approved
 MUL r12, r5, 8
 ADD r12, r12, 32768        # 0x8000 approval base
 LOAD r13, r0, r12          # Load approved address
 EQ r14, r6, r13            # Is caller approved?
-JZ r14, 0, transfer_exec   # If yes, execute
+JZ r14, 0, transfer_unauthorized
 
-# Not authorized
-HALT
-
-transfer_exec:
-# Transfer ownership
+# Caller is approved, transfer ownership
 STORE r0, r3, r7           # Store new owner
 
 # Clear approval

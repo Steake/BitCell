@@ -34,3 +34,9 @@ criterion/
 .bitcell/
 help_output.txt
 target/
+
+# Infrastructure data
+/infra/docker/prometheus-data/
+/infra/docker/grafana-data/
+/infra/docker/alertmanager-data/
+/backups/

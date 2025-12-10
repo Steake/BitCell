@@ -866,29 +866,30 @@ mod tests {
     #[test]
     fn test_account_persistence() {
         let temp_dir = TempDir::new().unwrap();
-        let storage = StorageManager::new(temp_dir.path()).unwrap();
-        
         let address = [1u8; 33];
         let account = Account {
             balance: 1000,
             nonce: 5,
         };
         
-        storage.store_account(&address, &account).unwrap();
+        // Store account
+        {
+            let storage = StorageManager::new(temp_dir.path()).unwrap();
+            storage.store_account(&address, &account).unwrap();
+        }
         
-        let retrieved = storage.get_account(&address).unwrap();
-        assert!(retrieved.is_some());
-        
-        let retrieved_account = retrieved.unwrap();
-        assert_eq!(retrieved_account.balance, 1000);
-        assert_eq!(retrieved_account.nonce, 5);
+        // Reopen storage and verify persistence
+        {
+            let storage = StorageManager::new(temp_dir.path()).unwrap();
+            let retrieved = storage.get_account(&address).unwrap().unwrap();
+            assert_eq!(retrieved.balance, 1000);
+            assert_eq!(retrieved.nonce, 5);
+        }
     }
 
     #[test]
     fn test_bond_persistence() {
         let temp_dir = TempDir::new().unwrap();
-        let storage = StorageManager::new(temp_dir.path()).unwrap();
-        
         let miner_id = [2u8; 33];
         let bond = BondState {
             amount: 5000,
@@ -896,14 +897,20 @@ mod tests {
             locked_epoch: 0,
         };
         
-        storage.store_bond(&miner_id, &bond).unwrap();
+        // Store bond
+        {
+            let storage = StorageManager::new(temp_dir.path()).unwrap();
+            storage.store_bond(&miner_id, &bond).unwrap();
+        }
         
-        let retrieved = storage.get_bond(&miner_id).unwrap();
-        assert!(retrieved.is_some());
-        
-        let retrieved_bond = retrieved.unwrap();
-        assert_eq!(retrieved_bond.amount, 5000);
-        assert_eq!(retrieved_bond.status, crate::BondStatus::Active);
+        // Reopen storage and verify persistence
+        {
+            let storage = StorageManager::new(temp_dir.path()).unwrap();
+            let retrieved = storage.get_bond(&miner_id).unwrap().unwrap();
+            assert_eq!(retrieved.amount, 5000);
+            assert_eq!(retrieved.locked_epoch, 0);
+            assert!(retrieved.is_active());
+        }
     }
 
     #[test]

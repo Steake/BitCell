@@ -79,20 +79,18 @@ impl StateManager {
         Ok(manager)
     }
 
-    /// Get account
+    /// Get account (returns reference to cached value)
+    /// 
+    /// Note: This only checks the in-memory cache. For guaranteed up-to-date values
+    /// that may exist only in storage, use get_account_owned() instead.
     pub fn get_account(&self, pubkey: &[u8; 33]) -> Option<&Account> {
-        // Check in-memory cache first
-        if let Some(account) = self.accounts.get(pubkey) {
-            return Some(account);
-        }
-        
-        // If we have storage, try loading from disk
-        // Note: This returns None because we can't return a reference to a temporary
-        // In production, we'd need to update the cache or use a different pattern
-        None
+        self.accounts.get(pubkey)
     }
     
-    /// Get account (with storage fallback, returns owned value)
+    /// Get account with storage fallback (returns owned value)
+    /// 
+    /// This method checks both the in-memory cache and storage backend,
+    /// ensuring that persisted state is accessible even if not yet cached.
     pub fn get_account_owned(&self, pubkey: &[u8; 33]) -> Option<Account> {
         // Check in-memory cache first
         if let Some(account) = self.accounts.get(pubkey) {
@@ -102,6 +100,12 @@ impl StateManager {
         // Fallback to storage if available
         if let Some(storage) = &self.storage {
             if let Ok(Some(account)) = storage.get_account(pubkey) {
+                if tracing::enabled!(tracing::Level::TRACE) {
+                    tracing::trace!(
+                        pubkey = %hex::encode(&pubkey),
+                        "Loaded account from storage (cache miss)"
+                    );
+                }
                 return Some(account);
             }
         }
@@ -132,12 +136,18 @@ impl StateManager {
         self.recompute_root();
     }
 
-    /// Get bond state
+    /// Get bond state (returns reference to cached value)
+    /// 
+    /// Note: This only checks the in-memory cache. For guaranteed up-to-date values
+    /// that may exist only in storage, use get_bond_owned() instead.
     pub fn get_bond(&self, pubkey: &[u8; 33]) -> Option<&BondState> {
         self.bonds.get(pubkey)
     }
     
-    /// Get bond state (with storage fallback, returns owned value)
+    /// Get bond state with storage fallback (returns owned value)
+    /// 
+    /// This method checks both the in-memory cache and storage backend,
+    /// ensuring that persisted state is accessible even if not yet cached.
     pub fn get_bond_owned(&self, pubkey: &[u8; 33]) -> Option<BondState> {
         // Check in-memory cache first
         if let Some(bond) = self.bonds.get(pubkey) {
@@ -147,6 +157,12 @@ impl StateManager {
         // Fallback to storage if available
         if let Some(storage) = &self.storage {
             if let Ok(Some(bond)) = storage.get_bond(pubkey) {
+                if tracing::enabled!(tracing::Level::TRACE) {
+                    tracing::trace!(
+                        pubkey = %hex::encode(&pubkey),
+                        "Loaded bond from storage (cache miss)"
+                    );
+                }
                 return Some(bond);
             }
         }
@@ -276,6 +292,7 @@ impl Default for StateManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
     fn test_state_manager() {
@@ -291,5 +308,78 @@ mod tests {
         
         let retrieved = sm.get_account(&pubkey).unwrap();
         assert_eq!(retrieved.balance, 1000);
+    }
+
+    #[test]
+    fn test_state_manager_with_storage() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = Arc::new(StorageManager::new(temp_dir.path()).unwrap());
+        let pubkey = [1u8; 33];
+        
+        // Create state manager with storage and add an account
+        {
+            let mut sm = StateManager::with_storage(storage.clone()).unwrap();
+            let account = Account {
+                balance: 1000,
+                nonce: 5,
+            };
+            sm.update_account(pubkey, account);
+        }
+        
+        // Create new state manager with same storage and verify persistence
+        {
+            let sm = StateManager::with_storage(storage).unwrap();
+            let retrieved = sm.get_account_owned(&pubkey).unwrap();
+            assert_eq!(retrieved.balance, 1000);
+            assert_eq!(retrieved.nonce, 5);
+        }
+    }
+
+    #[test]
+    fn test_bond_persistence_with_storage() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = Arc::new(StorageManager::new(temp_dir.path()).unwrap());
+        let miner_id = [42u8; 33];
+        
+        // Create state manager with storage and add a bond
+        {
+            let mut sm = StateManager::with_storage(storage.clone()).unwrap();
+            let bond = BondState {
+                amount: 5000,
+                status: BondStatus::Active,
+                locked_epoch: 10,
+            };
+            sm.update_bond(miner_id, bond);
+        }
+        
+        // Create new state manager with same storage and verify persistence
+        {
+            let sm = StateManager::with_storage(storage).unwrap();
+            let retrieved = sm.get_bond_owned(&miner_id).unwrap();
+            assert_eq!(retrieved.amount, 5000);
+            assert_eq!(retrieved.locked_epoch, 10);
+            assert!(retrieved.is_active());
+        }
+    }
+
+    #[test]
+    fn test_state_manager_get_or_create_account() {
+        let mut sm = StateManager::new();
+        let pubkey = [3u8; 33];
+        
+        // Account doesn't exist yet
+        assert!(sm.get_account(&pubkey).is_none());
+        assert!(sm.get_account_owned(&pubkey).is_none());
+        
+        // Create account
+        let account = Account {
+            balance: 500,
+            nonce: 0,
+        };
+        sm.update_account(pubkey, account);
+        
+        // Now it exists
+        assert!(sm.get_account(&pubkey).is_some());
+        assert_eq!(sm.get_account_owned(&pubkey).unwrap().balance, 500);
     }
 }

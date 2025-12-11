@@ -6,6 +6,7 @@
 //! - State Merkle tree
 //! - Nullifier set
 //! - Persistent storage with RocksDB
+//! - Evidence and slashing integration
 
 pub mod account;
 pub mod bonds;
@@ -16,6 +17,7 @@ pub use bonds::{BondState, BondStatus};
 pub use storage::{StorageManager, PruningStats};
 
 use bitcell_crypto::Hash256;
+use bitcell_ebsl::{Evidence, EvidenceType, EvidenceCounters, SlashingAction};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -47,6 +49,9 @@ pub struct StateManager {
     /// Bond states (in-memory cache)
     pub bonds: HashMap<[u8; 33], BondState>,
     
+    /// Evidence counters per miner (for EBSL trust calculation)
+    pub evidence_counters: HashMap<[u8; 33], EvidenceCounters>,
+    
     /// State root
     pub state_root: Hash256,
     
@@ -59,6 +64,7 @@ impl StateManager {
         Self {
             accounts: HashMap::new(),
             bonds: HashMap::new(),
+            evidence_counters: HashMap::new(),
             state_root: Hash256::zero(),
             storage: None,
         }
@@ -69,6 +75,7 @@ impl StateManager {
         let mut manager = Self {
             accounts: HashMap::new(),
             bonds: HashMap::new(),
+            evidence_counters: HashMap::new(),
             state_root: Hash256::zero(),
             storage: Some(storage),
         };
@@ -280,6 +287,98 @@ impl StateManager {
         
         self.recompute_root();
         Ok(self.state_root)
+    }
+    
+    /// Submit evidence for a validator (used by finality gadget for equivocation)
+    pub fn submit_evidence(&mut self, validator: [u8; 33], evidence: Evidence) -> Result<()> {
+        let counters = self.evidence_counters.entry(validator)
+            .or_insert_with(EvidenceCounters::new);
+        
+        counters.add_evidence(evidence);
+        
+        tracing::info!(
+            validator = %hex::encode(&validator),
+            evidence_type = ?evidence.evidence_type,
+            "Evidence submitted"
+        );
+        
+        Ok(())
+    }
+    
+    /// Apply slashing to a validator based on slashing action
+    pub fn apply_slashing(&mut self, validator: [u8; 33], action: SlashingAction) -> Result<()> {
+        match action {
+            SlashingAction::None => {
+                // No action needed
+                Ok(())
+            }
+            
+            SlashingAction::Partial(percentage) => {
+                // Slash a percentage of the bond
+                if let Some(bond) = self.bonds.get_mut(&validator) {
+                    // Use checked arithmetic to prevent overflow
+                    let slash_amount = bond.amount
+                        .saturating_mul(percentage as u64)
+                        .saturating_div(100);
+                    bond.amount = bond.amount.saturating_sub(slash_amount);
+                    
+                    tracing::warn!(
+                        validator = %hex::encode(&validator),
+                        percentage = percentage,
+                        slashed_amount = slash_amount,
+                        remaining_bond = bond.amount,
+                        "Partial slashing applied"
+                    );
+                }
+                Ok(())
+            }
+            
+            SlashingAction::FullAndBan => {
+                // Full slash and mark as permanently banned
+                if let Some(bond) = self.bonds.get_mut(&validator) {
+                    let slashed_amount = bond.amount;
+                    bond.amount = 0;
+                    bond.status = BondStatus::Slashed;
+                    
+                    tracing::error!(
+                        validator = %hex::encode(&validator),
+                        slashed_amount = slashed_amount,
+                        "Full slashing applied with permanent ban"
+                    );
+                }
+                Ok(())
+            }
+            
+            SlashingAction::TemporaryBan(epochs) => {
+                // Mark as temporarily banned
+                if let Some(bond) = self.bonds.get_mut(&validator) {
+                    bond.status = BondStatus::Unbonding { unlock_epoch: epochs };
+                    
+                    tracing::warn!(
+                        validator = %hex::encode(&validator),
+                        ban_epochs = epochs,
+                        "Temporary ban applied"
+                    );
+                }
+                Ok(())
+            }
+        }
+    }
+    
+    /// Get evidence counters for a validator
+    pub fn get_evidence_counters(&self, validator: &[u8; 33]) -> Option<&EvidenceCounters> {
+        self.evidence_counters.get(validator)
+    }
+    
+    /// Calculate trust score for a validator using EBSL
+    pub fn calculate_trust_score(&self, validator: &[u8; 33]) -> f64 {
+        let counters = self.evidence_counters.get(validator)
+            .unwrap_or(&EvidenceCounters::new());
+        
+        let params = bitcell_ebsl::EbslParams::default();
+        let trust = bitcell_ebsl::trust::TrustScore::from_evidence(counters, &params);
+        
+        trust.value()
     }
 }
 

@@ -19,6 +19,8 @@ pub struct MetricsRegistry {
     peer_count: Arc<AtomicUsize>,
     bytes_sent: Arc<AtomicU64>,
     bytes_received: Arc<AtomicU64>,
+    messages_sent: Arc<AtomicU64>,
+    messages_received: Arc<AtomicU64>,
     
     // Transaction pool metrics
     pending_txs: Arc<AtomicUsize>,
@@ -33,8 +35,8 @@ pub struct MetricsRegistry {
     // EBSL metrics
     active_miners: Arc<AtomicUsize>,
     banned_miners: Arc<AtomicUsize>,
-    #[allow(dead_code)]
     avg_trust_score: Arc<AtomicU64>, // Stored as fixed-point * 1000
+    slashing_events: Arc<AtomicU64>,
     
     // DHT metrics
     dht_peer_count: Arc<AtomicUsize>,
@@ -48,6 +50,8 @@ impl MetricsRegistry {
             peer_count: Arc::new(AtomicUsize::new(0)),
             bytes_sent: Arc::new(AtomicU64::new(0)),
             bytes_received: Arc::new(AtomicU64::new(0)),
+            messages_sent: Arc::new(AtomicU64::new(0)),
+            messages_received: Arc::new(AtomicU64::new(0)),
             pending_txs: Arc::new(AtomicUsize::new(0)),
             total_txs_processed: Arc::new(AtomicU64::new(0)),
             proofs_generated: Arc::new(AtomicU64::new(0)),
@@ -57,6 +61,7 @@ impl MetricsRegistry {
             active_miners: Arc::new(AtomicUsize::new(0)),
             banned_miners: Arc::new(AtomicUsize::new(0)),
             avg_trust_score: Arc::new(AtomicU64::new(0)),
+            slashing_events: Arc::new(AtomicU64::new(0)),
             dht_peer_count: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -101,6 +106,22 @@ impl MetricsRegistry {
     
     pub fn get_bytes_received(&self) -> u64 {
         self.bytes_received.load(Ordering::Relaxed)
+    }
+    
+    pub fn add_message_sent(&self) {
+        self.messages_sent.fetch_add(1, Ordering::Relaxed);
+    }
+    
+    pub fn add_message_received(&self) {
+        self.messages_received.fetch_add(1, Ordering::Relaxed);
+    }
+    
+    pub fn get_messages_sent(&self) -> u64 {
+        self.messages_sent.load(Ordering::Relaxed)
+    }
+    
+    pub fn get_messages_received(&self) -> u64 {
+        self.messages_received.load(Ordering::Relaxed)
     }
     
     // Transaction pool metrics
@@ -162,6 +183,28 @@ impl MetricsRegistry {
         self.banned_miners.load(Ordering::Relaxed)
     }
     
+    pub fn set_average_trust_score(&self, score: f64) {
+        // Store as fixed-point * 1000 for atomic operations
+        // Trust scores are typically in range [0.0, 1.0], so this provides
+        // 3 decimal places of precision without overflow risk
+        let clamped_score = score.clamp(0.0, 1.0);
+        let fixed_point = (clamped_score * 1000.0) as u64;
+        self.avg_trust_score.store(fixed_point, Ordering::Relaxed);
+    }
+    
+    pub fn get_average_trust_score(&self) -> f64 {
+        let fixed_point = self.avg_trust_score.load(Ordering::Relaxed);
+        fixed_point as f64 / 1000.0
+    }
+    
+    pub fn inc_slashing_events(&self) {
+        self.slashing_events.fetch_add(1, Ordering::Relaxed);
+    }
+    
+    pub fn get_slashing_events(&self) -> u64 {
+        self.slashing_events.load(Ordering::Relaxed)
+    }
+    
     // DHT metrics
     pub fn set_dht_peer_count(&self, count: usize) {
         self.dht_peer_count.store(count, Ordering::Relaxed);
@@ -198,6 +241,14 @@ impl MetricsRegistry {
              # TYPE bitcell_bytes_received_total counter\n\
              bitcell_bytes_received_total {}\n\
              \n\
+             # HELP bitcell_messages_sent_total Total messages sent\n\
+             # TYPE bitcell_messages_sent_total counter\n\
+             bitcell_messages_sent_total {}\n\
+             \n\
+             # HELP bitcell_messages_received_total Total messages received\n\
+             # TYPE bitcell_messages_received_total counter\n\
+             bitcell_messages_received_total {}\n\
+             \n\
              # HELP bitcell_pending_txs Number of pending transactions\n\
              # TYPE bitcell_pending_txs gauge\n\
              bitcell_pending_txs {}\n\
@@ -220,19 +271,31 @@ impl MetricsRegistry {
              \n\
              # HELP bitcell_banned_miners Number of banned miners\n\
              # TYPE bitcell_banned_miners gauge\n\
-             bitcell_banned_miners {}\n",
+             bitcell_banned_miners {}\n\
+             \n\
+             # HELP bitcell_average_trust_score Average trust score of miners\n\
+             # TYPE bitcell_average_trust_score gauge\n\
+             bitcell_average_trust_score {}\n\
+             \n\
+             # HELP bitcell_slashing_events_total Total slashing events\n\
+             # TYPE bitcell_slashing_events_total counter\n\
+             bitcell_slashing_events_total {}\n",
             self.get_chain_height(),
             self.get_sync_progress(),
             self.get_peer_count(),
             self.get_dht_peer_count(),
             self.get_bytes_sent(),
             self.get_bytes_received(),
+            self.get_messages_sent(),
+            self.get_messages_received(),
             self.get_pending_txs(),
             self.get_total_txs_processed(),
             self.get_proofs_generated(),
             self.get_proofs_verified(),
             self.get_active_miners(),
             self.get_banned_miners(),
+            self.get_average_trust_score(),
+            self.get_slashing_events(),
         )
     }
 }
@@ -269,5 +332,51 @@ mod tests {
         let export = metrics.export_prometheus();
         assert!(export.contains("bitcell_chain_height 42"));
         assert!(export.contains("bitcell_peer_count 3"));
+    }
+
+    #[test]
+    fn test_new_metrics() {
+        let metrics = MetricsRegistry::new();
+        
+        // Test message counters
+        metrics.add_message_sent();
+        metrics.add_message_sent();
+        metrics.add_message_sent();
+        assert_eq!(metrics.get_messages_sent(), 3);
+        
+        metrics.add_message_received();
+        assert_eq!(metrics.get_messages_received(), 1);
+        
+        // Test trust score
+        metrics.set_average_trust_score(0.85);
+        assert!((metrics.get_average_trust_score() - 0.85).abs() < 0.001);
+        
+        metrics.set_average_trust_score(0.923);
+        assert!((metrics.get_average_trust_score() - 0.923).abs() < 0.001);
+        
+        // Test slashing events
+        metrics.inc_slashing_events();
+        metrics.inc_slashing_events();
+        assert_eq!(metrics.get_slashing_events(), 2);
+    }
+
+    #[test]
+    fn test_new_metrics_in_prometheus_export() {
+        let metrics = MetricsRegistry::new();
+        
+        // Set new metrics
+        metrics.add_message_sent();
+        metrics.add_message_sent();
+        metrics.add_message_received();
+        metrics.set_average_trust_score(0.875);
+        metrics.inc_slashing_events();
+        
+        let export = metrics.export_prometheus();
+        
+        // Verify new metrics are in export
+        assert!(export.contains("bitcell_messages_sent_total 2"));
+        assert!(export.contains("bitcell_messages_received_total 1"));
+        assert!(export.contains("bitcell_average_trust_score 0.875"));
+        assert!(export.contains("bitcell_slashing_events_total 1"));
     }
 }

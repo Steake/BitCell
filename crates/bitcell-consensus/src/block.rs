@@ -148,6 +148,13 @@ pub struct StateProof {
     pub new_root: [u8; 32],
     
     /// Nullifier
+    ///
+    /// The nullifier is a unique identifier for this state transition, typically computed as a hash
+    /// of secret data and/or the input state. Its primary purpose is to prevent double-spending or
+    /// replay of the same state transition by ensuring that each transition can only be used once.
+    /// Even if the `old_root` and `new_root` are known, without a nullifier, an adversary could
+    /// potentially reuse a valid proof. The nullifier allows the system to track which transitions
+    /// have already been applied, ensuring uniqueness and preventing double-use.
     pub nullifier: [u8; 32],
     
     /// Proof data (Groth16 proof)

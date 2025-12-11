@@ -246,7 +246,7 @@ impl Blockchain {
             vrf_output: *vrf_output.as_bytes(),
             vrf_proof: vrf_proof_bytes,
             work: battle_proofs.len() as u64 * 1000, // Simplified work calculation
-            aggregation_commitment: [0u8; 32], // Placeholder: will be computed from actual ZKP proofs once verification keys are integrated
+            aggregation_commitment: [0u8; 32], // TODO: Compute from actual proofs once VKs integrated
         };
         
         // Sign the block

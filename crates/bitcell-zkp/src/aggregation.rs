@@ -65,13 +65,13 @@ impl ProofAggregator {
     /// All proofs must be valid for the function to return Ok(true).
     ///
     /// # Arguments
-    /// * `proofs` - Vector of (proof, public_inputs) pairs
+    /// * `proofs` - Slice of (proof, public_inputs) pairs
     ///
     /// # Returns
     /// Ok(true) if all proofs are valid, Ok(false) or Err otherwise
     pub fn verify_battle_batch(
         &self,
-        proofs: Vec<(Groth16Proof, Vec<Fr>)>,
+        proofs: &[(Groth16Proof, Vec<Fr>)],
     ) -> Result<bool> {
         let vk = self.battle_vk.as_ref()
             .ok_or_else(|| Error::Setup("Battle verification key not set".to_string()))?;
@@ -100,10 +100,10 @@ impl ProofAggregator {
     /// This provides efficient batch verification of state proofs.
     ///
     /// # Arguments
-    /// * `proofs` - Vector of (proof, public_inputs) pairs
+    /// * `proofs` - Slice of (proof, public_inputs) pairs
     pub fn verify_state_batch(
         &self,
-        proofs: Vec<(Groth16Proof, Vec<Fr>)>,
+        proofs: &[(Groth16Proof, Vec<Fr>)],
     ) -> Result<bool> {
         let vk = self.state_vk.as_ref()
             .ok_or_else(|| Error::Setup("State verification key not set".to_string()))?;
@@ -131,7 +131,8 @@ impl ProofAggregator {
     /// all proofs in the block header.
     ///
     /// # Arguments
-    /// * `proofs` - Vector of proofs to aggregate
+    /// * `proofs` - Vector of proofs to aggregate. If empty, produces the SHA-256
+    ///              hash of empty input (a well-defined constant value).
     ///
     /// # Returns
     /// A 32-byte commitment to all proofs
@@ -206,19 +207,25 @@ impl BlockProofAggregator {
     ///
     /// # Returns
     /// Ok(commitment) if all proofs are valid, Err otherwise
+    ///
+    /// # Proof Ordering
+    /// The aggregation commitment is computed by hashing proofs in the following order:
+    /// 1. All battle proofs (in the order provided)
+    /// 2. All state proofs (in the order provided)
+    /// This ordering must be maintained when verifying the commitment elsewhere.
     pub fn verify_block(
         &self,
         battle_proofs: &[(Groth16Proof, Vec<Fr>)],
         state_proofs: &[(Groth16Proof, Vec<Fr>)],
     ) -> Result<[u8; 32]> {
         // Verify all battle proofs
-        let battle_valid = self.aggregator.verify_battle_batch(battle_proofs.to_vec())?;
+        let battle_valid = self.aggregator.verify_battle_batch(battle_proofs)?;
         if !battle_valid {
             return Err(Error::ProofVerification);
         }
 
         // Verify all state proofs
-        let state_valid = self.aggregator.verify_state_batch(state_proofs.to_vec())?;
+        let state_valid = self.aggregator.verify_state_batch(state_proofs)?;
         if !state_valid {
             return Err(Error::ProofVerification);
         }
@@ -244,14 +251,17 @@ impl BlockProofAggregator {
 
 /// Batch verifier for efficiently verifying multiple proofs
 ///
-/// This provides parallel verification of multiple proofs when available.
+/// This provides a framework for parallel verification of multiple proofs.
+/// The current implementation uses sequential verification, but the API is
+/// designed to support parallel verification in the future.
 pub struct BatchVerifier;
 
 impl BatchVerifier {
-    /// Verify multiple Groth16 proofs in parallel
+    /// Verify multiple Groth16 proofs
     ///
-    /// Uses rayon for parallel verification when the number of proofs
-    /// is large enough to benefit from parallelization.
+    /// For small batches (< 4 proofs), uses sequential verification.
+    /// For larger batches, the implementation could be extended to use
+    /// parallel verification with rayon for better performance.
     ///
     /// # Arguments
     /// * `vk` - Verification key
@@ -268,20 +278,7 @@ impl BatchVerifier {
         }
 
         // For small batches, sequential is faster due to parallelization overhead
-        if proofs.len() < 4 {
-            for (proof, public_inputs) in proofs.iter() {
-                let valid = Groth16::<Bn254>::verify(vk, public_inputs, &proof.proof)
-                    .map_err(|_| Error::ProofVerification)?;
-                if !valid {
-                    return Ok(false);
-                }
-            }
-            return Ok(true);
-        }
-
-        // For larger batches, use parallel verification
-        // This is a simplified version - a full implementation would use
-        // rayon for actual parallelization
+        // For larger batches, parallel verification could be implemented using rayon
         for (proof, public_inputs) in proofs.iter() {
             let valid = Groth16::<Bn254>::verify(vk, public_inputs, &proof.proof)
                 .map_err(|_| Error::ProofVerification)?;
@@ -297,7 +294,7 @@ impl BatchVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::BattleCircuit;
+    use crate::{BattleCircuit, StateCircuit};
     use ark_ff::One;
 
     #[test]
@@ -353,10 +350,107 @@ mod tests {
 
     #[test]
     fn test_empty_batch_verification() {
-        let aggregator = ProofAggregator::new();
-        // Empty batch should succeed (vacuous truth)
-        let result = aggregator.verify_battle_batch(vec![]);
-        // Will fail because no VK is set, but that's expected
-        assert!(result.is_err() || result.unwrap());
+        // Test with VK set - empty batch should succeed
+        let (_, vk) = BattleCircuit::setup().expect("Setup should succeed");
+        let aggregator = ProofAggregator::new().with_battle_vk(vk);
+        let result = aggregator.verify_battle_batch(&[]);
+        assert!(result.is_ok() && result.unwrap());
+        
+        // Test without VK - should fail
+        let aggregator_no_vk = ProofAggregator::new();
+        let result_no_vk = aggregator_no_vk.verify_battle_batch(&[]);
+        assert!(result_no_vk.is_err());
+    }
+
+    #[test]
+    fn test_batch_verifier() {
+        let (pk, vk) = BattleCircuit::setup().expect("Setup should succeed");
+        
+        // Test empty batch
+        let result = BatchVerifier::verify_parallel(&vk, vec![]);
+        assert!(result.is_ok() && result.unwrap());
+        
+        // Test small batch (< 4 proofs)
+        let mut small_batch = Vec::new();
+        for i in 0..3 {
+            let circuit = BattleCircuit::new(Fr::one(), Fr::one(), (i % 3) as u8, 100, 200);
+            let proof = circuit.prove(&pk).expect("Proof should succeed");
+            let public_inputs = vec![Fr::one(), Fr::one(), Fr::from((i % 3) as u8)];
+            small_batch.push((proof, public_inputs));
+        }
+        let result = BatchVerifier::verify_parallel(&vk, small_batch);
+        assert!(result.is_ok() && result.unwrap());
+        
+        // Test larger batch (>= 4 proofs)
+        let mut large_batch = Vec::new();
+        for i in 0..5 {
+            let circuit = BattleCircuit::new(Fr::one(), Fr::one(), (i % 3) as u8, 100, 200);
+            let proof = circuit.prove(&pk).expect("Proof should succeed");
+            let public_inputs = vec![Fr::one(), Fr::one(), Fr::from((i % 3) as u8)];
+            large_batch.push((proof, public_inputs));
+        }
+        let result = BatchVerifier::verify_parallel(&vk, large_batch);
+        assert!(result.is_ok() && result.unwrap());
+        
+        // Test invalid proof detection
+        let circuit_valid = BattleCircuit::new(Fr::one(), Fr::one(), 1, 100, 200);
+        let proof_valid = circuit_valid.prove(&pk).expect("Proof should succeed");
+        let wrong_inputs = vec![Fr::one(), Fr::one(), Fr::from(2u8)]; // Wrong winner ID
+        
+        let result = BatchVerifier::verify_parallel(&vk, vec![(proof_valid, wrong_inputs)]);
+        // Should detect invalid proof
+        assert!(result.is_ok() && !result.unwrap());
+    }
+
+    #[test]
+    fn test_block_proof_aggregator() {
+        let (battle_pk, battle_vk) = BattleCircuit::setup().expect("Setup should succeed");
+        let (state_pk, state_vk) = StateCircuit::setup().expect("Setup should succeed");
+        
+        // Generate battle proofs
+        let mut battle_proofs = Vec::new();
+        for i in 0..3 {
+            let circuit = BattleCircuit::new(Fr::one(), Fr::one(), (i % 3) as u8, 100, 200);
+            let proof = circuit.prove(&battle_pk).expect("Proof should succeed");
+            let public_inputs = vec![Fr::one(), Fr::one(), Fr::from((i % 3) as u8)];
+            battle_proofs.push((proof, public_inputs));
+        }
+        
+        // Generate state proofs
+        let mut state_proofs = Vec::new();
+        for i in 0..2 {
+            let circuit = StateCircuit::new(
+                Fr::from(100u64 + i),
+                Fr::from(200u64 + i),
+                Fr::one(),
+                0,
+            );
+            let proof = circuit.prove(&state_pk).expect("Proof should succeed");
+            let public_inputs = vec![
+                Fr::from(100u64 + i),
+                Fr::from(200u64 + i),
+                Fr::one(),
+            ];
+            state_proofs.push((proof, public_inputs));
+        }
+        
+        let block_aggregator = BlockProofAggregator::new(battle_vk, state_vk);
+        
+        // Verify block with both types of proofs
+        let commitment = block_aggregator.verify_block(&battle_proofs, &state_proofs)
+            .expect("Block verification should succeed");
+        
+        // Commitment should be 32 bytes
+        assert_eq!(commitment.len(), 32);
+        
+        // Verify the commitment matches
+        let mut all_proofs = Vec::new();
+        all_proofs.extend(battle_proofs.iter().map(|(p, _)| p.clone()));
+        all_proofs.extend(state_proofs.iter().map(|(p, _)| p.clone()));
+        
+        let expected_commitment = ProofAggregator::create_aggregation_commitment(&all_proofs)
+            .expect("Commitment creation should succeed");
+        
+        assert_eq!(commitment, expected_commitment);
     }
 }

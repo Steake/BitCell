@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the proof aggregation system for BitCell, which enables efficient verification of multiple zero-knowledge proofs in constant time.
+This document describes the proof aggregation system for BitCell, which enables efficient aggregation of multiple zero-knowledge proofs with constant-size commitments.
 
 ## Goals
 
@@ -195,9 +195,9 @@ trait ProofSystem {
 ### Aggregation Commitment Security
 
 The 32-byte commitment provides:
-- Pre-image resistance (cannot find proofs for commitment)
-- Collision resistance (cannot find different proof sets with same commitment)
-- Second pre-image resistance (cannot find alternate proofs for same commitment)
+- Commitment binding (cannot find different proof sets with same commitment)
+- Collision resistance (cannot find alternate proofs for same commitment)
+- Second pre-image resistance (given commitment, cannot find different proofs that produce it)
 
 ### Batch Verification Security
 
@@ -217,9 +217,7 @@ cargo bench --package bitcell-zkp
 Benchmarks include:
 - Individual proof generation
 - Individual proof verification
-- Batch verification (various sizes)
 - Aggregation commitment creation
-- Block verification
 
 ## Integration Guide
 
@@ -271,9 +269,9 @@ impl Block {
 
 - [x] Proof aggregation infrastructure implemented
 - [x] Aggregation commitment size = 32 bytes (<1KB requirement met)
-- [x] All tests passing (19/19 existing + 4/4 aggregation tests)
+- [x] All tests passing (19/19 existing + new aggregation tests)
 - [ ] Block verification time < 5ms (needs measurement)
-- [ ] Integration with consensus layer
+- [ ] Full integration with consensus layer (computing actual commitments)
 - [ ] Performance benchmarks completed
 - [ ] Production deployment
 

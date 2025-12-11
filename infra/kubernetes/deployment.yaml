@@ -1,0 +1,408 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bitcell-production
+  labels:
+    name: bitcell-production
+---
+# Note: This deployment file uses ${VARIABLE} syntax for configuration flexibility.
+# Before applying, preprocess with one of these methods:
+# 1. envsubst: export STORAGE_CLASS=gp3 && envsubst < deployment.yaml | kubectl apply -f -
+# 2. Helm: Use as template with values.yaml
+# 3. Kustomize: Use with configMapGenerator for variables
+# Default storage classes if not preprocessed:
+#   AWS: gp2/gp3
+#   GCP: pd-ssd
+#   Azure: managed-premium
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bitcell-config
+  namespace: bitcell-production
+data:
+  LOG_LEVEL: "info"
+  NETWORK: "mainnet"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bitcell-node-service
+  namespace: bitcell-production
+  labels:
+    app: bitcell-node
+spec:
+  type: LoadBalancer
+  selector:
+    app: bitcell-node
+  ports:
+    - name: rpc
+      port: 8545
+      targetPort: 8545
+      protocol: TCP
+    - name: p2p
+      port: 9000
+      targetPort: 9000
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: bitcell-production
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: bitcell-production
+spec:
+  type: LoadBalancer
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: bitcell-node-us-east
+  namespace: bitcell-production
+  labels:
+    region: us-east
+spec:
+  serviceName: bitcell-node-us-east
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bitcell-node
+      region: us-east
+  template:
+    metadata:
+      labels:
+        app: bitcell-node
+        region: us-east
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - bitcell-node
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: topology.kubernetes.io/region
+                    operator: In
+                    values:
+                      - us-east-1
+      containers:
+        - name: bitcell-node
+          image: bitcell-node:latest
+          imagePullPolicy: Always
+          env:
+            - name: REGION
+              value: "us-east"
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: P2P_PORT
+              value: "9000"
+            - name: RPC_PORT
+              value: "8545"
+            - name: METRICS_PORT
+              value: "9090"
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: bitcell-config
+                  key: LOG_LEVEL
+          ports:
+            - containerPort: 9000
+              name: p2p
+            - containerPort: 8545
+              name: rpc
+            - containerPort: 9090
+              name: metrics
+          volumeMounts:
+            - name: data
+              mountPath: /data/bitcell
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2"
+            limits:
+              memory: "8Gi"
+              cpu: "4"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            initialDelaySeconds: 30
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ${STORAGE_CLASS:-gp2}
+        resources:
+          requests:
+            storage: 100Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: bitcell-node-us-west
+  namespace: bitcell-production
+  labels:
+    region: us-west
+spec:
+  serviceName: bitcell-node-us-west
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bitcell-node
+      region: us-west
+  template:
+    metadata:
+      labels:
+        app: bitcell-node
+        region: us-west
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - bitcell-node
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: topology.kubernetes.io/region
+                    operator: In
+                    values:
+                      - us-west-1
+      containers:
+        - name: bitcell-node
+          image: bitcell-node:latest
+          imagePullPolicy: Always
+          env:
+            - name: REGION
+              value: "us-west"
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: P2P_PORT
+              value: "9000"
+            - name: RPC_PORT
+              value: "8545"
+            - name: METRICS_PORT
+              value: "9090"
+          ports:
+            - containerPort: 9000
+              name: p2p
+            - containerPort: 8545
+              name: rpc
+            - containerPort: 9090
+              name: metrics
+          volumeMounts:
+            - name: data
+              mountPath: /data/bitcell
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2"
+            limits:
+              memory: "8Gi"
+              cpu: "4"
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ${STORAGE_CLASS:-gp2}
+        resources:
+          requests:
+            storage: 100Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: bitcell-node-eu-central
+  namespace: bitcell-production
+  labels:
+    region: eu-central
+spec:
+  serviceName: bitcell-node-eu-central
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bitcell-node
+      region: eu-central
+  template:
+    metadata:
+      labels:
+        app: bitcell-node
+        region: eu-central
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: topology.kubernetes.io/region
+                    operator: In
+                    values:
+                      - eu-central-1
+      containers:
+        - name: bitcell-node
+          image: bitcell-node:latest
+          imagePullPolicy: Always
+          env:
+            - name: REGION
+              value: "eu-central"
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: P2P_PORT
+              value: "9000"
+            - name: RPC_PORT
+              value: "8545"
+            - name: METRICS_PORT
+              value: "9090"
+          ports:
+            - containerPort: 9000
+            - containerPort: 8545
+            - containerPort: 9090
+          volumeMounts:
+            - name: data
+              mountPath: /data/bitcell
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2"
+            limits:
+              memory: "8Gi"
+              cpu: "4"
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ${STORAGE_CLASS:-gp2}
+        resources:
+          requests:
+            storage: 100Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: bitcell-production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:latest
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: storage
+              mountPath: /prometheus
+          args:
+            - '--config.file=/etc/prometheus/prometheus.yml'
+            - '--storage.tsdb.path=/prometheus'
+            - '--storage.tsdb.retention.time=30d'
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: storage
+          persistentVolumeClaim:
+            claimName: prometheus-storage
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: bitcell-production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-secret
+                  key: admin-password
+          volumeMounts:
+            - name: storage
+              mountPath: /var/lib/grafana
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: grafana-storage

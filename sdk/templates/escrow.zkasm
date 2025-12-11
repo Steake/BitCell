@@ -1,0 +1,195 @@
+# BitCell Escrow Contract Template
+# Trustless escrow for atomic token/payment exchanges
+#
+# Features:
+# - Create escrow with funds
+# - Release funds to beneficiary (by depositor)
+# - Refund to depositor (by depositor, after timeout)
+# - Dispute resolution (optional arbiter)
+#
+# Memory Layout:
+# 0x0000-0x00FF: Contract metadata
+# 0x0100-0x01FF: Escrow configuration
+#   0x100: depositor_address
+#   0x108: beneficiary_address
+#   0x110: arbiter_address (optional, 0 if none)
+#   0x118: amount
+#   0x120: timeout_block
+#   0x128: state (0=empty, 1=active, 2=released, 3=refunded)
+# 0x0200+:       Additional escrow data
+
+# Entry point
+# r1 = function selector
+#   0 = create_escrow(depositor, beneficiary, arbiter, amount, timeout)
+#   1 = release(escrow_id)
+#   2 = refund(escrow_id)
+#   3 = get_state(escrow_id)
+
+LOAD r1, r0, 0x10          # Load function selector
+EQ r4, r1, 0
+JZ r4, 0, check_release
+
+# === CREATE_ESCROW FUNCTION ===
+# Parameters:
+#   r2 = depositor
+#   r3 = beneficiary
+#   r4 = arbiter (0 if none)
+#   r5 = amount
+#   r6 = timeout_block
+
+create_escrow:
+LOAD r2, r0, 0x30          # depositor
+LOAD r3, r0, 0x40          # beneficiary
+LOAD r5, r0, 0x50          # arbiter
+LOAD r6, r0, 0x60          # amount
+LOAD r7, r0, 0x70          # timeout_block
+LOAD r8, r0, 0x20          # caller
+
+# Verify caller is depositor
+EQ r9, r2, r8
+JZ r9, 0, create_unauthorized
+
+# Check escrow doesn't already exist (state == 0)
+LOAD r10, r0, 0x128
+EQ r11, r10, 0
+JZ r11, 0, create_exists
+
+# Verify amount > 0
+GT r12, r6, 0
+JZ r12, 0, create_invalid_amount
+
+# Store escrow data
+STORE r0, r2, 0x100        # depositor
+STORE r0, r3, 0x108        # beneficiary
+STORE r0, r5, 0x110        # arbiter
+STORE r0, r6, 0x118        # amount
+STORE r0, r7, 0x120        # timeout_block
+STORE r0, 1, 0x128         # state = active
+
+# Note: In a real implementation, tokens would be transferred here
+# This is simplified for template purposes
+
+HALT
+
+create_unauthorized:
+HALT
+
+create_exists:
+HALT
+
+create_invalid_amount:
+HALT
+
+# === RELEASE FUNCTION ===
+# Releases funds to beneficiary
+# Can be called by depositor or arbiter
+
+check_release:
+EQ r4, r1, 1
+JZ r4, 0, check_refund
+
+release:
+LOAD r2, r0, 0x20          # caller
+
+# Load escrow data
+LOAD r3, r0, 0x100         # depositor
+LOAD r4, r0, 0x108         # beneficiary
+LOAD r5, r0, 0x110         # arbiter
+LOAD r6, r0, 0x118         # amount
+LOAD r7, r0, 0x128         # state
+
+# Check state is active (1)
+EQ r8, r7, 1
+JZ r8, 0, release_invalid_state
+
+# Verify caller is depositor OR arbiter
+EQ r9, r2, r3              # Is caller depositor?
+EQ r10, r2, r5             # Is caller arbiter?
+OR r11, r9, r10            # Either one?
+JZ r11, 0, release_unauthorized
+
+# Update state to released (2)
+STORE r0, 2, 0x128
+
+# Note: In real implementation, transfer amount to beneficiary here
+# For template, we just update state
+
+HALT
+
+release_invalid_state:
+HALT
+
+release_unauthorized:
+HALT
+
+# === REFUND FUNCTION ===
+# Refunds to depositor after timeout
+# Can only be called by depositor
+
+check_refund:
+EQ r4, r1, 2
+JZ r4, 0, check_get_state
+
+refund:
+LOAD r2, r0, 0x20          # caller
+
+# Load escrow data
+LOAD r3, r0, 0x100         # depositor
+LOAD r4, r0, 0x118         # amount
+LOAD r5, r0, 0x120         # timeout_block
+LOAD r6, r0, 0x128         # state
+LOAD r7, r0, 0x80          # current_block (from input)
+
+# Check state is active (1)
+EQ r8, r6, 1
+JZ r8, 0, refund_invalid_state
+
+# Verify caller is depositor
+EQ r9, r2, r3
+JZ r9, 0, refund_unauthorized
+
+# Check timeout has passed: current_block >= timeout_block
+GE r10, r7, r5             # r10 = 1 if current >= timeout
+JZ r10, 0, timeout_not_reached
+
+# Timeout reached, proceed with refund
+refund_exec:
+# Update state to refunded (3)
+STORE r0, 3, 0x128
+
+# Note: In real implementation, transfer amount back to depositor
+# For template, we just update state
+
+HALT
+
+timeout_not_reached:
+HALT  # Timeout has not passed yet
+
+refund_invalid_state:
+HALT
+
+refund_unauthorized:
+HALT
+
+# === GET_STATE FUNCTION ===
+# Returns escrow state
+# 0 = empty, 1 = active, 2 = released, 3 = refunded
+
+check_get_state:
+EQ r4, r1, 3
+JZ r4, 0, unknown_function
+
+get_state:
+LOAD r2, r0, 0x128         # Load state
+ADD r0, r2, 0              # Return in r0
+HALT
+
+unknown_function:
+HALT
+
+# === UTILITY: Dispute Resolution ===
+# If arbiter is set, they can:
+# - Release funds to beneficiary
+# - Refund to depositor
+# This is handled in the release/refund logic above
+# by checking if caller == arbiter

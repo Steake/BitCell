@@ -422,6 +422,104 @@ fn compare_bits<F: PrimeField>(a: &[Boolean<F>], b: &[Boolean<F>]) -> Result<(Bo
     Ok((greater, equal))
 }
 
+// Groth16 proof generation and verification for Bn254
+use ark_bn254::{Bn254, Fr};
+use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
+use ark_snark::SNARK;
+use ark_std::rand::thread_rng;
+
+impl BattleCircuit<Fr> {
+    /// Setup the circuit and generate proving/verifying keys
+    ///
+    /// Returns an error if the circuit setup fails (e.g., due to constraint system issues).
+    ///
+    /// **Note on RNG**: Uses `thread_rng()` which is cryptographically secure (ChaCha20-based).
+    /// For deterministic testing, consider using a seeded RNG from `ark_std::test_rng()`.
+    pub fn setup() -> crate::Result<(ProvingKey<Bn254>, VerifyingKey<Bn254>)> {
+        let rng = &mut thread_rng();
+        
+        // Create empty circuit for setup
+        let circuit = Self {
+            initial_grid: Some(vec![vec![0u8; GRID_SIZE]; GRID_SIZE]),
+            final_grid: Some(vec![vec![0u8; GRID_SIZE]; GRID_SIZE]),
+            commitment_a: Some(Fr::from(0u64)),
+            commitment_b: Some(Fr::from(0u64)),
+            winner: Some(0),
+            pattern_a: Some(vec![vec![0u8; 3]; 3]),
+            pattern_b: Some(vec![vec![0u8; 3]; 3]),
+            nonce_a: Some(Fr::from(0u64)),
+            nonce_b: Some(Fr::from(0u64)),
+        };
+        
+        Groth16::<Bn254>::circuit_specific_setup(circuit, rng)
+            .map_err(|e| crate::Error::ProofGeneration(format!("Circuit setup failed: {}", e)))
+    }
+
+    /// Generate a proof for this circuit instance
+    pub fn prove(
+        &self,
+        pk: &ProvingKey<Bn254>,
+    ) -> crate::Result<crate::Groth16Proof> {
+        let rng = &mut thread_rng();
+        let proof = Groth16::<Bn254>::prove(pk, self.clone(), rng)
+            .map_err(|e| crate::Error::ProofGeneration(e.to_string()))?;
+        Ok(crate::Groth16Proof::new(proof))
+    }
+
+    /// Verify a proof against public inputs
+    ///
+    /// Public inputs should be in order:
+    /// 1. Initial grid cells (flattened)
+    /// 2. Final grid cells (flattened)
+    /// 3. Commitment A
+    /// 4. Commitment B
+    /// 5. Winner
+    pub fn verify(
+        vk: &VerifyingKey<Bn254>,
+        proof: &crate::Groth16Proof,
+        public_inputs: &[Fr],
+    ) -> crate::Result<bool> {
+        Groth16::<Bn254>::verify(vk, public_inputs, &proof.proof)
+            .map_err(|e| crate::Error::ProofVerification)
+    }
+    
+    /// Helper to construct public inputs vector from circuit components
+    pub fn public_inputs(&self) -> Vec<Fr> {
+        let mut inputs = Vec::new();
+        
+        // Add initial grid (flattened)
+        if let Some(ref grid) = self.initial_grid {
+            for row in grid {
+                for &cell in row {
+                    inputs.push(Fr::from(cell as u64));
+                }
+            }
+        }
+        
+        // Add final grid (flattened)
+        if let Some(ref grid) = self.final_grid {
+            for row in grid {
+                for &cell in row {
+                    inputs.push(Fr::from(cell as u64));
+                }
+            }
+        }
+        
+        // Add commitments and winner
+        if let Some(commitment_a) = self.commitment_a {
+            inputs.push(commitment_a);
+        }
+        if let Some(commitment_b) = self.commitment_b {
+            inputs.push(commitment_b);
+        }
+        if let Some(winner) = self.winner {
+            inputs.push(Fr::from(winner as u64));
+        }
+        
+        inputs
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -462,5 +560,45 @@ mod tests {
 
         circuit.generate_constraints(cs.clone()).unwrap();
         assert!(cs.is_satisfied().unwrap());
+    }
+    
+    #[test]
+    #[ignore] // Expensive test - enable for full validation
+    fn test_battle_circuit_prove_verify_full() {
+        // Setup circuit
+        let (pk, vk) = BattleCircuit::<Fr>::setup().expect("Circuit setup should succeed");
+
+        // Use an empty grid - stable state
+        let initial_grid = vec![vec![0u8; GRID_SIZE]; GRID_SIZE];
+        let final_grid = initial_grid.clone();
+
+        let pattern_a = vec![vec![0u8; 3]; 3];
+        let pattern_b = vec![vec![0u8; 3]; 3];
+        let nonce_a = Fr::from(0u64);
+        let nonce_b = Fr::from(0u64);
+        let commitment_a = Fr::from(0u64);
+        let commitment_b = Fr::from(0u64);
+
+        let circuit = BattleCircuit {
+            initial_grid: Some(initial_grid.clone()),
+            final_grid: Some(final_grid),
+            commitment_a: Some(commitment_a),
+            commitment_b: Some(commitment_b),
+            winner: Some(2), // Tie
+            pattern_a: Some(pattern_a),
+            pattern_b: Some(pattern_b),
+            nonce_a: Some(nonce_a),
+            nonce_b: Some(nonce_b),
+        };
+
+        // Generate proof
+        let proof = circuit.prove(&pk).expect("Proof generation should succeed");
+
+        // Verify proof
+        let public_inputs = circuit.public_inputs();
+        assert!(
+            BattleCircuit::verify(&vk, &proof, &public_inputs).expect("Verification should complete"),
+            "Proof verification should succeed"
+        );
     }
 }

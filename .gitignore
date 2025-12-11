@@ -16,8 +16,8 @@ Cargo.lock
 *.profraw
 *.profdata
 
-# Documentation
-docs/book/
+# Documentation (only ignore built output)
+docs/book/book/
 
 # Temporary files
 /tmp/
@@ -34,3 +34,12 @@ criterion/
 .bitcell/
 help_output.txt
 target/
+
+# Infrastructure data
+/infra/docker/prometheus-data/
+/infra/docker/grafana-data/
+/infra/docker/alertmanager-data/
+/backups/
+
+# SDK compiled bytecode
+sdk/**/*.bin

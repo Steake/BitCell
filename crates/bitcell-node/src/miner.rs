@@ -1,9 +1,7 @@
-///! Miner node implementation
-
+//! Miner node implementation
 use crate::{NodeConfig, Result, MetricsRegistry, Blockchain, TransactionPool, NetworkManager};
 use bitcell_crypto::SecretKey;
 use bitcell_ca::{Glider, GliderPattern};
-use bitcell_state::StateManager;
 use std::sync::Arc;
 use bitcell_consensus::Transaction;
 
@@ -11,7 +9,6 @@ use bitcell_consensus::Transaction;
 pub struct MinerNode {
     pub config: NodeConfig,
     pub secret_key: Arc<SecretKey>,
-    pub state: StateManager,
     pub glider_strategy: GliderPattern,
     pub metrics: MetricsRegistry,
     pub blockchain: Blockchain,
@@ -20,25 +17,38 @@ pub struct MinerNode {
 }
 
 impl MinerNode {
-    pub fn new(config: NodeConfig, secret_key: SecretKey) -> Self {
+    pub fn new(config: NodeConfig, secret_key: SecretKey) -> crate::Result<Self> {
         Self::with_key(config, Arc::new(secret_key))
     }
 
-    pub fn with_key(config: NodeConfig, secret_key: Arc<SecretKey>) -> Self {
+    pub fn with_key(config: NodeConfig, secret_key: Arc<SecretKey>) -> crate::Result<Self> {
         let metrics = MetricsRegistry::new();
-        let blockchain = Blockchain::new(secret_key.clone(), metrics.clone());
+        
+        // Create blockchain with or without persistent storage based on config
+        let blockchain = if let Some(ref data_path) = config.data_dir {
+            // Ensure data directory exists
+            std::fs::create_dir_all(data_path)
+                .map_err(|e| crate::Error::Config(format!("Failed to create data directory: {}", e)))?;
+            
+            println!("📦 Using persistent storage at: {}", data_path.display());
+            Blockchain::with_storage(secret_key.clone(), metrics.clone(), data_path)
+                .map_err(|e| crate::Error::Config(format!("Failed to initialize blockchain with storage: {}", e)))?
+        } else {
+            println!("⚠️  Using in-memory storage (data will not persist)");
+            Blockchain::new(secret_key.clone(), metrics.clone())
+        };
+        
         let network = Arc::new(NetworkManager::new(secret_key.public_key(), metrics.clone()));
         
-        Self {
+        Ok(Self {
             config,
             secret_key,
-            state: StateManager::new(),
             glider_strategy: GliderPattern::Standard,
             metrics,
             blockchain,
             tx_pool: TransactionPool::default(),
             network,
-        }
+        })
     }
 
     pub async fn start(&mut self) -> Result<()> {
@@ -162,7 +172,7 @@ mod tests {
     fn test_miner_creation() {
         let config = NodeConfig::default();
         let sk = SecretKey::generate();
-        let miner = MinerNode::new(config, sk);
+        let miner = MinerNode::new(config, sk).unwrap();
         assert_eq!(miner.glider_strategy, GliderPattern::Standard);
     }
 
@@ -170,7 +180,7 @@ mod tests {
     fn test_glider_generation() {
         let config = NodeConfig::default();
         let sk = SecretKey::generate();
-        let miner = MinerNode::new(config, sk);
+        let miner = MinerNode::new(config, sk).unwrap();
         let glider = miner.generate_glider();
         assert_eq!(glider.pattern, GliderPattern::Standard);
     }

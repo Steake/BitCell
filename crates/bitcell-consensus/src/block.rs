@@ -1,6 +1,7 @@
 //! Block structures
 
 use bitcell_crypto::{Hash256, PublicKey, Signature};
+use crate::finality::{FinalityVote, FinalityStatus};
 use serde::{Deserialize, Serialize};
 
 /// Block header
@@ -58,6 +59,13 @@ pub struct Block {
     
     /// Proposer signature
     pub signature: Signature,
+    
+    /// Finality votes collected for this block
+    pub finality_votes: Vec<FinalityVote>,
+    
+    /// Finality status of this block
+    #[serde(default)]
+    pub finality_status: FinalityStatus,
 }
 
 impl Block {
@@ -111,6 +119,22 @@ impl Transaction {
         // Note: bincode serialization to Vec cannot fail for this structure
         let serialized = bincode::serialize(self).expect("transaction serialization should never fail");
         Hash256::hash(&serialized)
+    }
+    
+    /// Compute signing hash (hash of transaction data WITHOUT signature)
+    /// 
+    /// This is the hash that should be signed/verified, as it excludes the signature field.
+    /// The regular hash() includes the signature and cannot be used for signing.
+    pub fn signing_hash(&self) -> Hash256 {
+        let mut data = Vec::new();
+        data.extend_from_slice(&self.nonce.to_le_bytes());
+        data.extend_from_slice(self.from.as_bytes());
+        data.extend_from_slice(self.to.as_bytes());
+        data.extend_from_slice(&self.amount.to_le_bytes());
+        data.extend_from_slice(&self.gas_limit.to_le_bytes());
+        data.extend_from_slice(&self.gas_price.to_le_bytes());
+        data.extend_from_slice(&self.data);
+        Hash256::hash(&data)
     }
 }
 

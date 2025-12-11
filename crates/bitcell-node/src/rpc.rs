@@ -514,9 +514,9 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
         data: None,
     })?;
     
-    // Validate transaction signature
-    let tx_hash = tx.hash();
-    if tx.signature.verify(&tx.from, tx_hash.as_bytes()).is_err() {
+    // Validate transaction signature (must sign the data EXCLUDING the signature field)
+    let signing_hash = tx.signing_hash();
+    if tx.signature.verify(&tx.from, signing_hash.as_bytes()).is_err() {
         return Err(JsonRpcError {
             code: -32602,
             message: "Invalid transaction signature".to_string(),
@@ -612,7 +612,8 @@ async fn eth_send_raw_transaction(state: &RpcState, params: Option<Value>) -> Re
         });
     }
     
-    // Return transaction hash
+    // Return transaction hash (use full hash for identification, not signing hash)
+    let tx_hash = tx.hash();
     Ok(json!(format!("0x{}", hex::encode(tx_hash.as_bytes()))))
 }
 

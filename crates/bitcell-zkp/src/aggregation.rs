@@ -294,7 +294,7 @@ impl BatchVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BattleCircuit, StateCircuit};
+    use crate::{SimpleBattleCircuit, SimpleStateCircuit};
     use ark_ff::One;
 
     #[test]
@@ -307,10 +307,10 @@ mod tests {
     #[test]
     fn test_aggregation_commitment() {
         // Setup battle circuit
-        let (pk, _vk) = BattleCircuit::setup().expect("Setup should succeed");
+        let (pk, _vk) = SimpleBattleCircuit::setup().expect("Setup should succeed");
         
         // Generate a proof
-        let circuit = BattleCircuit::new(
+        let circuit = SimpleBattleCircuit::new(
             Fr::one(),
             Fr::one(),
             1,
@@ -329,7 +329,7 @@ mod tests {
             .expect("Verification should succeed"));
         
         // Wrong proofs should fail
-        let circuit2 = BattleCircuit::new(
+        let circuit2 = SimpleBattleCircuit::new(
             Fr::one(),
             Fr::one(),
             2,
@@ -351,7 +351,7 @@ mod tests {
     #[test]
     fn test_empty_batch_verification() {
         // Test with VK set - empty batch should succeed
-        let (_, vk) = BattleCircuit::setup().expect("Setup should succeed");
+        let (_, vk) = SimpleBattleCircuit::setup().expect("Setup should succeed");
         let aggregator = ProofAggregator::new().with_battle_vk(vk);
         let result = aggregator.verify_battle_batch(&[]);
         assert!(result.is_ok() && result.unwrap());
@@ -364,7 +364,7 @@ mod tests {
 
     #[test]
     fn test_batch_verifier() {
-        let (pk, vk) = BattleCircuit::setup().expect("Setup should succeed");
+        let (pk, vk) = SimpleBattleCircuit::setup().expect("Setup should succeed");
         
         // Test empty batch
         let result = BatchVerifier::verify_parallel(&vk, vec![]);
@@ -373,7 +373,7 @@ mod tests {
         // Test small batch (< 4 proofs)
         let mut small_batch = Vec::new();
         for i in 0..3 {
-            let circuit = BattleCircuit::new(Fr::one(), Fr::one(), (i % 3) as u8, 100, 200);
+            let circuit = SimpleBattleCircuit::new(Fr::one(), Fr::one(), (i % 3) as u8, 100, 200);
             let proof = circuit.prove(&pk).expect("Proof should succeed");
             let public_inputs = vec![Fr::one(), Fr::one(), Fr::from((i % 3) as u8)];
             small_batch.push((proof, public_inputs));
@@ -384,7 +384,7 @@ mod tests {
         // Test larger batch (>= 4 proofs)
         let mut large_batch = Vec::new();
         for i in 0..5 {
-            let circuit = BattleCircuit::new(Fr::one(), Fr::one(), (i % 3) as u8, 100, 200);
+            let circuit = SimpleBattleCircuit::new(Fr::one(), Fr::one(), (i % 3) as u8, 100, 200);
             let proof = circuit.prove(&pk).expect("Proof should succeed");
             let public_inputs = vec![Fr::one(), Fr::one(), Fr::from((i % 3) as u8)];
             large_batch.push((proof, public_inputs));
@@ -393,7 +393,7 @@ mod tests {
         assert!(result.is_ok() && result.unwrap());
         
         // Test invalid proof detection
-        let circuit_valid = BattleCircuit::new(Fr::one(), Fr::one(), 1, 100, 200);
+        let circuit_valid = SimpleBattleCircuit::new(Fr::one(), Fr::one(), 1, 100, 200);
         let proof_valid = circuit_valid.prove(&pk).expect("Proof should succeed");
         let wrong_inputs = vec![Fr::one(), Fr::one(), Fr::from(2u8)]; // Wrong winner ID
         
@@ -404,13 +404,13 @@ mod tests {
 
     #[test]
     fn test_block_proof_aggregator() {
-        let (battle_pk, battle_vk) = BattleCircuit::setup().expect("Setup should succeed");
-        let (state_pk, state_vk) = StateCircuit::setup().expect("Setup should succeed");
+        let (battle_pk, battle_vk) = SimpleBattleCircuit::setup().expect("Setup should succeed");
+        let (state_pk, state_vk) = SimpleStateCircuit::setup().expect("Setup should succeed");
         
         // Generate battle proofs
         let mut battle_proofs = Vec::new();
         for i in 0..3 {
-            let circuit = BattleCircuit::new(Fr::one(), Fr::one(), (i % 3) as u8, 100, 200);
+            let circuit = SimpleBattleCircuit::new(Fr::one(), Fr::one(), (i % 3) as u8, 100, 200);
             let proof = circuit.prove(&battle_pk).expect("Proof should succeed");
             let public_inputs = vec![Fr::one(), Fr::one(), Fr::from((i % 3) as u8)];
             battle_proofs.push((proof, public_inputs));
@@ -419,7 +419,7 @@ mod tests {
         // Generate state proofs
         let mut state_proofs = Vec::new();
         for i in 0..2 {
-            let circuit = StateCircuit::new(
+            let circuit = SimpleStateCircuit::new(
                 Fr::from(100u64 + i),
                 Fr::from(200u64 + i),
                 Fr::one(),

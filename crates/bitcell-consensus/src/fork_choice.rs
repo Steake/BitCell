@@ -74,8 +74,9 @@ impl Default for ChainState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::block::{Block, BlockHeader, Transaction};
-    use bitcell_crypto::{PublicKey, SecretKey, Signature};
+    use crate::block::{Block, BlockHeader};
+    use bitcell_crypto::{SecretKey};
+    use crate::finality::FinalityStatus;
 
     fn create_test_block(height: u64, prev_hash: Hash256, work: u64) -> Block {
         let sk = SecretKey::generate();
@@ -96,6 +97,8 @@ mod tests {
             battle_proofs: vec![],
             state_proofs: vec![],
             signature: sk.sign(b"test"),
+            finality_votes: vec![],
+            finality_status: FinalityStatus::Pending,
         }
     }
 

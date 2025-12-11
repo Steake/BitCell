@@ -1,0 +1,180 @@
+{
+  "dashboard": {
+    "title": "BitCell Production Overview",
+    "uid": "bitcell-production",
+    "tags": ["bitcell", "production", "overview"],
+    "timezone": "utc",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Node Status by Region",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "count(up{job=~\"bitcell-.*\"} == 1) by (region)",
+            "legendFormat": "{{region}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "orientation": "auto"
+        }
+      },
+      {
+        "id": 2,
+        "title": "Chain Height",
+        "type": "graph",
+        "gridPos": {"x": 6, "y": 0, "w": 12, "h": 4},
+        "targets": [
+          {
+            "expr": "bitcell_chain_height",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Total Connected Peers",
+        "type": "stat",
+        "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(bitcell_peer_count)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "id": 4,
+        "title": "Transaction Throughput (TPS)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 4, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(bitcell_txs_processed_total[1m])",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "TPS", "show": true},
+          {"show": false}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Proof Generation Time",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 4, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "bitcell_proof_gen_time_ms / 1000",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "Seconds", "show": true},
+          {"show": false}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Network Traffic",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 10, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(bitcell_bytes_sent_total[5m])",
+            "legendFormat": "{{instance}} sent",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(bitcell_bytes_received_total[5m])",
+            "legendFormat": "{{instance}} received",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"label": "Bytes/sec", "show": true},
+          {"show": false}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Regional Health Status",
+        "type": "table",
+        "gridPos": {"x": 12, "y": 10, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "up{job=~\"bitcell-.*\"}",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "__name__": true,
+                "job": false
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Active vs Banned Miners",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "bitcell_active_miners",
+            "legendFormat": "Active",
+            "refId": "A"
+          },
+          {
+            "expr": "bitcell_banned_miners",
+            "legendFormat": "Banned",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"label": "Count", "show": true},
+          {"show": false}
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Pending Transactions",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "bitcell_pending_txs",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "Transactions", "show": true},
+          {"show": false}
+        ]
+      }
+    ]
+  }
+}

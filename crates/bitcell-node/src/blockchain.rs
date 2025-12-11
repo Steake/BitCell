@@ -5,11 +5,10 @@
 ///! - Block validation including signature, VRF, and transaction verification
 ///! - Transaction indexing for efficient lookups
 ///! - State management with Merkle tree root computation
-
 use crate::{Result, MetricsRegistry};
 use bitcell_consensus::{Block, BlockHeader, Transaction, BattleProof};
 use bitcell_crypto::{Hash256, PublicKey, SecretKey};
-use bitcell_economics::{COIN, INITIAL_BLOCK_REWARD, HALVING_INTERVAL, MAX_HALVINGS};
+use bitcell_economics::{INITIAL_BLOCK_REWARD, HALVING_INTERVAL, MAX_HALVINGS};
 use bitcell_state::StateManager;
 use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
@@ -76,6 +75,54 @@ impl Blockchain {
         blockchain.metrics.set_sync_progress(100);
         
         blockchain
+    }
+    
+    /// Create new blockchain with persistent storage
+    /// 
+    /// This method initializes the blockchain with RocksDB-backed state storage.
+    /// State will be persisted to disk and restored across node restarts.
+    /// 
+    /// # Arguments
+    /// * `secret_key` - Node's secret key for signing
+    /// * `metrics` - Metrics registry
+    /// * `data_path` - Path to the data directory for persistent storage
+    pub fn with_storage(
+        secret_key: Arc<SecretKey>, 
+        metrics: MetricsRegistry,
+        data_path: &std::path::Path,
+    ) -> std::result::Result<Self, String> {
+        // Create storage manager
+        let storage_path = data_path.join("state");
+        let storage = Arc::new(
+            bitcell_state::StorageManager::new(&storage_path)
+                .map_err(|e| format!("Failed to create storage: {}", e))?
+        );
+        
+        // Create state manager with storage
+        let state = StateManager::with_storage(storage)
+            .map_err(|e| format!("Failed to initialize state: {:?}", e))?;
+        
+        let genesis = Self::create_genesis_block(&secret_key);
+        let genesis_hash = genesis.hash();
+        
+        let mut blocks = HashMap::new();
+        blocks.insert(GENESIS_HEIGHT, genesis);
+        
+        let blockchain = Self {
+            height: Arc::new(RwLock::new(GENESIS_HEIGHT)),
+            latest_hash: Arc::new(RwLock::new(genesis_hash)),
+            blocks: Arc::new(RwLock::new(blocks)),
+            tx_index: Arc::new(RwLock::new(HashMap::new())),
+            state: Arc::new(RwLock::new(state)),
+            metrics: metrics.clone(),
+            secret_key,
+        };
+        
+        // Initialize metrics
+        blockchain.metrics.set_chain_height(GENESIS_HEIGHT);
+        blockchain.metrics.set_sync_progress(100);
+        
+        Ok(blockchain)
     }
     
     /// Create genesis block
@@ -521,6 +568,40 @@ mod tests {
         
         // Test reward becomes 0 after 64 halvings
         assert_eq!(Blockchain::calculate_block_reward(HALVING_INTERVAL * 64), 0);
+    }
+
+    #[test]
+    fn test_blockchain_with_persistent_storage() {
+        use tempfile::TempDir;
+        
+        let temp_dir = TempDir::new().unwrap();
+        let data_path = temp_dir.path();
+        let sk = Arc::new(SecretKey::generate());
+        let pubkey = [1u8; 33];
+        
+        // Create blockchain with storage and modify state
+        {
+            let metrics = MetricsRegistry::new();
+            let blockchain = Blockchain::with_storage(sk.clone(), metrics, data_path).unwrap();
+            
+            // Add an account to state
+            let mut state = blockchain.state.write().unwrap();
+            state.update_account(pubkey, bitcell_state::Account {
+                balance: 1000,
+                nonce: 5,
+            });
+        }
+        
+        // Recreate blockchain from same storage and verify persistence
+        {
+            let metrics = MetricsRegistry::new();
+            let blockchain = Blockchain::with_storage(sk, metrics, data_path).unwrap();
+            
+            let state = blockchain.state.read().unwrap();
+            let account = state.get_account_owned(&pubkey).expect("Account should persist");
+            assert_eq!(account.balance, 1000);
+            assert_eq!(account.nonce, 5);
+        }
     }
     
     #[test]

@@ -1,0 +1,24 @@
+# Temporary data directories
+/tmp/bitcell/
+
+# Docker volumes data
+*.tar.gz
+
+# Backup files
+/backups/
+
+# Log files
+*.log
+
+# Environment files with secrets
+.env.production
+.env.local
+
+# Grafana data
+grafana-data/
+
+# Prometheus data
+prometheus-data/
+
+# Alertmanager data
+alertmanager-data/

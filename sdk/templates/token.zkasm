@@ -1,0 +1,165 @@
+# BitCell Fungible Token Contract Template
+# ERC-20-like token implementation for ZKVM
+#
+# Features:
+# - Transfer tokens between addresses
+# - Check balance
+# - Total supply tracking
+# - Mint/burn capabilities (for contract owner)
+#
+# Memory Layout:
+# 0x0000-0x00FF: Contract metadata
+# 0x0100-0x01FF: Total supply and owner data
+# 0x0200+:       Balance storage (address -> balance mapping)
+
+# Entry point - determine which function to call
+# r1 = function selector (0=transfer, 1=balance_of, 2=mint, 3=burn)
+# r2 = parameter 1 (varies by function)
+# r3 = parameter 2 (varies by function)
+
+LOAD r1, r0, 0x10          # Load function selector from memory[0x10]
+EQ r4, r1, 0               # Check if function == 0 (transfer)
+JZ r4, 0, check_balance_of # Jump if not transfer
+
+# === TRANSFER FUNCTION ===
+# Parameters: r2=recipient_addr, r3=amount
+# Steps:
+# 1. Load sender balance
+# 2. Check sender has sufficient balance
+# 3. Subtract from sender
+# 4. Add to recipient
+# 5. Store updated balances
+
+transfer:
+LOAD r5, r0, 0x20          # Load sender address from memory[0x20]
+LOAD r2, r0, 0x30          # Load recipient address from memory[0x30]
+LOAD r3, r0, 0x40          # Load transfer amount from memory[0x40]
+
+# Calculate sender balance address = 0x200 + (sender_addr * 8)
+MUL r6, r5, 8
+ADD r6, r6, 512            # 512 = 0x200 base address
+LOAD r7, r0, r6            # r7 = sender balance
+
+# Check sufficient balance: sender_balance >= amount
+LT r8, r7, r3              # r8 = 1 if balance < amount
+JZ r8, 0, transfer_exec    # Jump to execute if sufficient
+
+# Insufficient balance - halt with error code
+HALT
+
+transfer_exec:
+# Subtract from sender
+SUB r7, r7, r3
+STORE r0, r7, r6           # Store updated sender balance
+
+# Calculate recipient balance address
+MUL r9, r2, 8
+ADD r9, r9, 512            # 512 = 0x200
+LOAD r10, r0, r9           # r10 = recipient balance
+
+# Add to recipient
+ADD r10, r10, r3
+STORE r0, r10, r9          # Store updated recipient balance
+
+# Success - return
+HALT
+
+# === BALANCE_OF FUNCTION ===
+# Parameters: r2=address
+# Returns: balance in r0
+
+check_balance_of:
+EQ r4, r1, 1               # Check if function == 1 (balance_of)
+JZ r4, 0, check_mint       # Jump if not balance_of
+
+balance_of:
+LOAD r2, r0, 0x30          # Load address to query from memory[0x30]
+
+# Calculate balance address
+MUL r5, r2, 8
+ADD r5, r5, 512            # 0x200 base
+LOAD r6, r0, r5            # Load balance
+
+# Store result in r0 for return
+ADD r0, r6, 0
+HALT
+
+# === MINT FUNCTION ===
+# Parameters: r2=recipient, r3=amount
+# Only callable by contract owner
+# Increases total supply
+
+check_mint:
+EQ r4, r1, 2               # Check if function == 2 (mint)
+JZ r4, 0, check_burn       # Jump if not mint
+
+mint:
+# Load contract owner address
+LOAD r5, r0, 0x100         # Owner address at 0x100
+LOAD r6, r0, 0x20          # Caller address at 0x20
+
+# Verify caller is owner
+EQ r7, r5, r6
+JZ r7, 0, mint_unauthorized # Jump if not owner
+
+LOAD r2, r0, 0x30          # Recipient address
+LOAD r3, r0, 0x40          # Mint amount
+
+# Calculate recipient balance address
+MUL r8, r2, 8
+ADD r8, r8, 512
+LOAD r9, r0, r8            # Load current balance
+
+# Add minted tokens
+ADD r9, r9, r3
+STORE r0, r9, r8           # Store updated balance
+
+# Update total supply
+LOAD r10, r0, 0x110        # Total supply at 0x110
+ADD r10, r10, r3
+STORE r0, r10, 0x110
+
+HALT
+
+mint_unauthorized:
+HALT                        # Halt with error
+
+# === BURN FUNCTION ===
+# Parameters: r2=amount
+# Burns tokens from caller's balance
+# Decreases total supply
+
+check_burn:
+EQ r4, r1, 3               # Check if function == 3 (burn)
+JZ r4, 0, unknown_function # Jump if not burn
+
+burn:
+LOAD r5, r0, 0x20          # Load caller address
+LOAD r3, r0, 0x40          # Load burn amount
+
+# Calculate caller balance address
+MUL r6, r5, 8
+ADD r6, r6, 512
+LOAD r7, r0, r6            # Load caller balance
+
+# Check sufficient balance
+LT r8, r7, r3              # r8 = 1 if balance < amount
+JZ r8, 0, burn_exec        # Jump to execute if sufficient
+
+# Insufficient balance
+HALT
+
+burn_exec:
+# Subtract burned tokens
+SUB r7, r7, r3
+STORE r0, r7, r6           # Store updated balance
+
+# Update total supply
+LOAD r9, r0, 0x110         # Total supply at 0x110
+SUB r9, r9, r3
+STORE r0, r9, 0x110
+
+HALT
+
+unknown_function:
+HALT                        # Unknown function selector

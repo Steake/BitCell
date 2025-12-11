@@ -235,6 +235,15 @@ pub struct KeyMetadata {
     pub arweave_proving_key: Option<String>,
     /// Arweave transaction ID for verification key (optional)
     pub arweave_verification_key: Option<String>,
+    /// Ceremony status
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    /// Additional notes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    /// Circuit-specific parameters (stored as generic JSON value)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub circuit_parameters: Option<serde_json::Value>,
 }
 
 impl KeyMetadata {
@@ -384,6 +393,11 @@ mod tests {
             ipfs_verification_key: Some("QmTest456".to_string()),
             arweave_proving_key: None,
             arweave_verification_key: None,
+            status: Some("complete".to_string()),
+            notes: Some("Test metadata".to_string()),
+            circuit_parameters: Some(serde_json::json!({
+                "test_param": "test_value"
+            })),
         };
         
         // Save metadata
@@ -396,6 +410,9 @@ mod tests {
         assert_eq!(loaded.circuit, "TestCircuit");
         assert_eq!(loaded.num_participants, 5);
         assert_eq!(loaded.ipfs_proving_key, Some("QmTest123".to_string()));
+        assert_eq!(loaded.status, Some("complete".to_string()));
+        assert_eq!(loaded.notes, Some("Test metadata".to_string()));
+        assert!(loaded.circuit_parameters.is_some());
     }
     
     #[test]

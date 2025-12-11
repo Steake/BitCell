@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document summarizes the implementation of the trusted setup ceremony infrastructure for BitCell's Groth16 zero-knowledge proof circuits, addressing issue #XX and requirement RC2-001.3 from RELEASE_REQUIREMENTS.md.
+This document summarizes the implementation of the trusted setup ceremony infrastructure for BitCell's Groth16 zero-knowledge proof circuits, addressing issue #46 and requirement RC2-001.3 from RELEASE_REQUIREMENTS.md.
 
 ## Implementation Status: ✅ COMPLETE
 

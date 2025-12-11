@@ -398,18 +398,29 @@ impl Wallet {
         self.sign_transaction(tx, from)
     }
 
-    /// Get the secret key for an address
+    /// Get the secret key for an address (for advanced use cases like consensus transaction signing)
     /// 
-    /// This allows signing transactions outside the wallet's transaction system.
-    /// The wallet must be unlocked to access secret keys.
-    pub fn get_secret_key(&mut self, address: &Address) -> Result<SecretKey> {
+    /// This method should be used with caution as it exposes the raw secret key.
+    /// Prefer using sign_transaction when possible.
+    pub fn get_secret_key_for_address(&self, address: &Address) -> Result<SecretKey> {
         if !self.is_unlocked() {
             return Err(Error::WalletLocked);
         }
         
         let path = DerivationPath::for_chain(address.chain(), address.index());
-        let key = self.derive_key(&path)?;
-        Ok(key.secret_key.clone())
+        
+        // We need to derive the key without caching (since self is immutable)
+        let seed = self.master_seed.as_ref().ok_or(Error::WalletLocked)?;
+        
+        let path_str = path.to_string();
+        let mut derivation_data = Vec::new();
+        derivation_data.extend_from_slice(seed.as_bytes());
+        derivation_data.extend_from_slice(path_str.as_bytes());
+        
+        let derived_hash = Hash256::hash(&derivation_data);
+        let secret_key = SecretKey::from_bytes(derived_hash.as_bytes())?;
+        
+        Ok(secret_key)
     }
 
     /// Get transaction history

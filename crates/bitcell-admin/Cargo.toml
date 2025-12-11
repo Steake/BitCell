@@ -10,6 +10,10 @@ default = []
 # Enable insecure transaction signing endpoint that accepts private keys via HTTP.
 # WARNING: This should NEVER be enabled in production environments.
 insecure-tx-signing = []
+# HSM provider features
+vault = ["vaultrs"]
+aws-hsm = ["aws-sdk-kms", "aws-config"]
+azure-hsm = ["azure_security_keyvault", "azure_identity", "azure_core"]
 
 [dependencies]
 # Web framework
@@ -44,6 +48,12 @@ sysinfo = "0.30"
 # Hex encoding
 hex = "0.4"
 
+# Base64 encoding (for Vault backend)
+base64 = "0.21"
+
+# Async streams (for Azure backend)
+futures = "0.3"
+
 # Error handling
 thiserror.workspace = true
 
@@ -63,6 +73,14 @@ bitcell-state = { path = "../bitcell-state" }
 bitcell-network = { path = "../bitcell-network" }
 bitcell-crypto = { path = "../bitcell-crypto" }
 bitcell-ca = { path = "../bitcell-ca" }
+
+# HSM providers (optional)
+vaultrs = { version = "0.7", optional = true }
+aws-sdk-kms = { version = "1.0", optional = true }
+aws-config = { version = "1.0", optional = true }
+azure_security_keyvault = { version = "0.20", optional = true }
+azure_identity = { version = "0.20", optional = true }
+azure_core = { version = "0.20", optional = true }
 
 # Unix process management
 [target.'cfg(unix)'.dependencies]

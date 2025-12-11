@@ -11,11 +11,13 @@ pub mod block;
 pub mod tournament;
 pub mod fork_choice;
 pub mod orchestrator;
+pub mod finality;
 
 pub use block::{Block, BlockHeader, Transaction, BattleProof};
 pub use tournament::{Tournament, TournamentPhase, GliderCommitment, GliderReveal, TournamentMatch};
 pub use fork_choice::ChainState;
 pub use orchestrator::TournamentOrchestrator;
+pub use finality::{FinalityGadget, FinalityVote, FinalityStatus, VoteType, EquivocationEvidence};
 
 pub type Result<T> = std::result::Result<T, Error>;
 

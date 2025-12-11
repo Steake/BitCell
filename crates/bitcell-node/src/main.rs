@@ -1,7 +1,6 @@
 //! BitCell node binary
 
 use bitcell_node::{NodeConfig, ValidatorNode, MinerNode};
-use bitcell_crypto::SecretKey;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -81,7 +80,7 @@ async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Validator { port, rpc_port, data_dir: _, enable_dht, bootstrap, key_seed, key_file, private_key } => {
+        Commands::Validator { port, rpc_port, data_dir, enable_dht, bootstrap, key_seed, key_file, private_key } => {
             println!("🌌 BitCell Validator Node");
             println!("=========================");
             
@@ -89,10 +88,10 @@ async fn main() {
             config.network_port = port;
             config.enable_dht = enable_dht;
             config.key_seed = key_seed.clone();
+            config.data_dir = data_dir;
             if let Some(bootstrap_node) = bootstrap {
                 config.bootstrap_nodes.push(bootstrap_node);
             }
-            // TODO: Use data_dir
             
             // Resolve secret key
             let secret_key = match bitcell_node::keys::resolve_secret_key(
@@ -122,7 +121,13 @@ async fn main() {
             // Or we can modify NodeConfig to hold the secret key? No, NodeConfig is serializable.
             
             // Let's update ValidatorNode::new to take the secret key as an argument.
-            let mut node = ValidatorNode::with_key(config, secret_key.clone());
+            let mut node = match ValidatorNode::with_key(config, secret_key.clone()) {
+                Ok(node) => node,
+                Err(e) => {
+                    eprintln!("Error initializing validator node: {}", e);
+                    std::process::exit(1);
+                }
+            };
             
             // Start metrics server on port + 2 to avoid conflict with P2P port (30333) and RPC port (30334)
             let metrics_port = port + 2;
@@ -162,7 +167,7 @@ async fn main() {
             tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
             println!("\nShutting down...");
         }
-        Commands::Miner { port, rpc_port, data_dir: _, enable_dht, bootstrap, key_seed, key_file, private_key } => {
+        Commands::Miner { port, rpc_port, data_dir, enable_dht, bootstrap, key_seed, key_file, private_key } => {
             println!("⛏️  BitCell Miner Node");
             println!("======================");
             
@@ -170,6 +175,7 @@ async fn main() {
             config.network_port = port;
             config.enable_dht = enable_dht;
             config.key_seed = key_seed.clone();
+            config.data_dir = data_dir;
             if let Some(bootstrap_node) = bootstrap {
                 config.bootstrap_nodes.push(bootstrap_node);
             }
@@ -190,7 +196,13 @@ async fn main() {
             
             println!("Miner Public Key: {:?}", secret_key.public_key());
             
-            let mut node = MinerNode::with_key(config, secret_key.clone());
+            let mut node = match MinerNode::with_key(config, secret_key.clone()) {
+                Ok(node) => node,
+                Err(e) => {
+                    eprintln!("Error initializing miner node: {}", e);
+                    std::process::exit(1);
+                }
+            };
             
             let metrics_port = port + 2;
 
@@ -228,7 +240,7 @@ async fn main() {
             tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
             println!("\nShutting down...");
         }
-        Commands::FullNode { port, rpc_port, data_dir: _, enable_dht, bootstrap, key_seed, key_file, private_key } => {
+        Commands::FullNode { port, rpc_port, data_dir, enable_dht, bootstrap, key_seed, key_file, private_key } => {
             println!("🌍 BitCell Full Node");
             println!("====================");
             
@@ -236,6 +248,7 @@ async fn main() {
             config.network_port = port;
             config.enable_dht = enable_dht;
             config.key_seed = key_seed.clone();
+            config.data_dir = data_dir;
             if let Some(bootstrap_node) = bootstrap {
                 config.bootstrap_nodes.push(bootstrap_node);
             }
@@ -257,7 +270,13 @@ async fn main() {
             println!("Full Node Public Key: {:?}", secret_key.public_key());
 
             // Reuse ValidatorNode for now as FullNode logic is similar (just no voting)
-            let mut node = ValidatorNode::with_key(config, secret_key.clone());
+            let mut node = match ValidatorNode::with_key(config, secret_key.clone()) {
+                Ok(node) => node,
+                Err(e) => {
+                    eprintln!("Error initializing full node: {}", e);
+                    std::process::exit(1);
+                }
+            };
             
             let metrics_port = port + 2;
 

@@ -33,8 +33,8 @@
 /// ## Public Inputs
 /// 1. `initial_grid` - The starting grid state (flattened GRID_SIZE x GRID_SIZE)
 /// 2. `final_grid` - The ending grid state after BATTLE_STEPS evolution (flattened)
-/// 3. `commitment_a` - Pedersen commitment to pattern A
-/// 4. `commitment_b` - Pedersen commitment to pattern B
+/// 3. `commitment_a` - Simplified commitment to pattern A (see Security Notes below)
+/// 4. `commitment_b` - Simplified commitment to pattern B (see Security Notes below)
 /// 5. `winner` - Winner ID (0 = A wins, 1 = B wins, 2 = tie)
 ///
 /// ## Private Inputs (Witness)
@@ -112,7 +112,7 @@ use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
 use ark_snark::SNARK;
 use ark_std::rand::thread_rng;
 
-/// Size of the CA grid (must be power of 2 for efficient constraints)
+/// Size of the CA grid (recommended to be power of 2 for efficient constraints)
 ///
 /// # Test vs Production Configuration
 /// - **Test values**: `GRID_SIZE = 64`, `BATTLE_STEPS = 10`
@@ -125,6 +125,9 @@ use ark_std::rand::thread_rng;
 /// To switch between configurations, adjust these constants before compilation.
 /// For production deployment, ensure sufficient hardware for proof generation
 /// (recommended: 64GB+ RAM, GPU acceleration for proving).
+/// 
+/// **Note**: While power-of-2 grid sizes are recommended for optimal constraint
+/// efficiency, the circuit will work with any positive grid size.
 pub const GRID_SIZE: usize = 64; // Reduced from 1024 for practical circuit size
 pub const BATTLE_STEPS: usize = 10; // Reduced from 1000 for practical proving time
 
@@ -633,6 +636,7 @@ fn compare_bits<F: PrimeField>(a: &[Boolean<F>], b: &[Boolean<F>]) -> Result<(Bo
     Ok((greater, equal))
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -845,4 +849,5 @@ mod tests {
         assert!(num_constraints > 100_000, 
                 "Should have substantial constraints for CA evolution");
     }
+    
 }

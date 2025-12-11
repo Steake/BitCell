@@ -128,6 +128,12 @@ impl TransactionPool {
         self.pending.read().unwrap().len()
     }
     
+    /// Get all pending transactions
+    pub fn get_pending_transactions(&self) -> Vec<Transaction> {
+        let pending = self.pending.read().unwrap();
+        pending.iter().map(|ptx| ptx.tx.clone()).collect()
+    }
+    
     /// Clear all transactions
     pub fn clear(&self) {
         let mut pending = self.pending.write().unwrap();

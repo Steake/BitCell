@@ -47,6 +47,11 @@ clap = { version = "4", features = ["derive"] }
 zeroize.workspace = true
 parking_lot.workspace = true
 
+# Hardware wallet support (optional)
+ledger-transport-hid = { version = "0.10", optional = true }
+ledger-apdu = { version = "0.10", optional = true }
+hidapi = { version = "1.4", optional = true }
+
 [dev-dependencies]
 proptest.workspace = true
 
@@ -54,3 +59,5 @@ proptest.workspace = true
 default = []
 bitcoin = []
 ethereum = []
+ledger = ["ledger-transport-hid", "ledger-apdu", "hidapi"]
+trezor = ["hidapi"]

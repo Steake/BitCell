@@ -6,13 +6,13 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Benchmark
 use bitcell_crypto::{
     Hash256,
     poseidon::{poseidon_hash_two, poseidon_hash_one, poseidon_hash_many, PoseidonParams, PoseidonHasher},
-    SecretKey, PublicKey, Signature,
+    SecretKey,
     MerkleTree,
     ClsagSecretKey, ClsagPublicKey, ClsagSignature,
     MIN_RING_SIZE, DEFAULT_RING_SIZE, MAX_RING_SIZE,
+    EcvrfSecretKey,
 };
 use ark_bn254::Fr;
-use ark_ff::One;
 
 /// Benchmark Poseidon hash operations
 fn bench_poseidon_hash(c: &mut Criterion) {
@@ -224,6 +224,118 @@ fn bench_clsag_signatures(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark ECVRF operations (for block proposer selection)
+fn bench_ecvrf(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ecvrf");
+    
+    // Key generation
+    group.bench_function("key_generation", |b| {
+        b.iter(|| EcvrfSecretKey::generate())
+    });
+    
+    // VRF prove operation (block proposer generates proof)
+    let sk = EcvrfSecretKey::generate();
+    let message = b"block_hash_for_vrf_input_test_message_32";
+    
+    group.bench_function("prove", |b| {
+        b.iter(|| sk.prove(black_box(message)))
+    });
+    
+    // VRF verify operation (validators verify proof)
+    let pk = sk.public_key();
+    let (_, proof) = sk.prove(message);
+    
+    group.bench_function("verify", |b| {
+        b.iter(|| proof.verify(black_box(&pk), black_box(message)))
+    });
+    
+    // Benchmark with different message sizes (block hash inputs)
+    for size in [32, 64, 128, 256].iter() {
+        let msg = vec![0u8; *size];
+        group.bench_with_input(
+            BenchmarkId::new("prove_variable_input", size), 
+            size, 
+            |b, _| {
+                b.iter(|| sk.prove(black_box(&msg)))
+            }
+        );
+    }
+    
+    group.finish();
+}
+
+/// Benchmark VRF chaining (simulating blockchain block production)
+fn bench_vrf_chaining(c: &mut Criterion) {
+    let mut group = c.benchmark_group("vrf_chaining");
+    
+    let sk = EcvrfSecretKey::generate();
+    
+    // Simulate producing 10 blocks with VRF chaining
+    group.bench_function("produce_10_blocks", |b| {
+        b.iter(|| {
+            let genesis_seed = b"genesis_block_seed_for_chain";
+            let (mut prev_output, _) = sk.prove(genesis_seed);
+            
+            // Generate 10 chained VRF outputs
+            for _ in 0..10 {
+                let (output, _) = sk.prove(prev_output.as_bytes());
+                prev_output = output;
+            }
+        })
+    });
+    
+    // Benchmark single block VRF (using previous VRF output)
+    let genesis_seed = b"genesis_seed";
+    let (prev_output, _) = sk.prove(genesis_seed);
+    
+    group.bench_function("single_chained_block", |b| {
+        b.iter(|| sk.prove(black_box(prev_output.as_bytes())))
+    });
+    
+    group.finish();
+}
+
+/// Benchmark VRF for multiple proposers (validator selection)
+fn bench_vrf_multiple_proposers(c: &mut Criterion) {
+    let mut group = c.benchmark_group("vrf_proposer_selection");
+    
+    // Create multiple validator keys
+    let validators: Vec<EcvrfSecretKey> = (0..10)
+        .map(|_| EcvrfSecretKey::generate())
+        .collect();
+    
+    let block_hash = b"shared_block_hash_for_proposer_selection_input";
+    
+    // Benchmark all validators generating VRF proofs for proposer selection
+    group.bench_function("10_validators_prove", |b| {
+        b.iter(|| {
+            for validator_sk in &validators {
+                let _ = validator_sk.prove(black_box(block_hash));
+            }
+        })
+    });
+    
+    // Benchmark verifying all proofs
+    let proofs: Vec<_> = validators
+        .iter()
+        .map(|sk| {
+            let pk = sk.public_key();
+            let (_, proof) = sk.prove(block_hash);
+            (pk, proof)
+        })
+        .collect();
+    
+    group.bench_function("10_validators_verify", |b| {
+        b.iter(|| {
+            for (pk, proof) in &proofs {
+                let _ = proof.verify(black_box(pk), black_box(block_hash));
+            }
+        })
+    });
+    
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_poseidon_hash,
@@ -233,6 +345,9 @@ criterion_group!(
     bench_poseidon_params,
     bench_hash_comparison,
     bench_clsag_signatures,
+    bench_ecvrf,
+    bench_vrf_chaining,
+    bench_vrf_multiple_proposers,
 );
 
 criterion_main!(benches);

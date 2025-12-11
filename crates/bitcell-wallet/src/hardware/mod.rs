@@ -17,7 +17,7 @@
 //! let hw = HardwareWallet::connect(HardwareWalletType::Ledger)?;
 //!
 //! // Get public key for derivation path
-//! let pubkey = hw.get_public_key("m/44'/0'/0'/0/0")?;
+//! let pubkey = hw.get_public_key("m/44'/9999'/0'/0/0")?;
 //!
 //! // Sign a transaction
 //! let signature = hw.sign_transaction(&transaction)?;
@@ -26,6 +26,19 @@
 use crate::{Chain, Error, Result, Transaction, SignedTransaction};
 use bitcell_crypto::{Hash256, PublicKey, Signature};
 use std::sync::Arc;
+
+#[cfg(feature = "ledger")]
+mod ledger;
+#[cfg(feature = "ledger")]
+pub use ledger::LedgerDevice;
+
+#[cfg(feature = "trezor")]
+mod trezor;
+#[cfg(feature = "trezor")]
+pub use trezor::TrezorDevice;
+
+mod mock;
+pub use mock::MockHardwareWallet;
 
 /// Type of hardware wallet
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +50,6 @@ pub enum HardwareWalletType {
     /// Generic hardware signer (HSM, etc.)
     Generic,
     /// Mock device for testing
-    #[cfg(test)]
     Mock,
 }
 
@@ -85,13 +97,13 @@ pub struct HardwareWallet {
 impl HardwareWallet {
     /// Connect to a hardware wallet
     pub fn connect(wallet_type: HardwareWalletType) -> Result<Self> {
-        let device: Arc<dyn HardwareWalletDevice> = match wallet_type {
+        match wallet_type {
             HardwareWalletType::Ledger => {
                 #[cfg(feature = "ledger")]
                 {
                     return Ok(Self {
                         device: Arc::new(LedgerDevice::connect()?),
-                        derivation_path: "m/44'/60'/0'/0/0".to_string(),
+                        derivation_path: "m/44'/9999'/0'/0/0".to_string(),
                     });
                 }
                 #[cfg(not(feature = "ledger"))]
@@ -104,7 +116,7 @@ impl HardwareWallet {
                 {
                     return Ok(Self {
                         device: Arc::new(TrezorDevice::connect()?),
-                        derivation_path: "m/44'/60'/0'/0/0".to_string(),
+                        derivation_path: "m/44'/9999'/0'/0/0".to_string(),
                     });
                 }
                 #[cfg(not(feature = "trezor"))]
@@ -115,16 +127,13 @@ impl HardwareWallet {
             HardwareWalletType::Generic => {
                 return Err(Error::HardwareWallet("Generic hardware wallet is not yet implemented".into()));
             }
-            #[cfg(test)]
             HardwareWalletType::Mock => {
-                Arc::new(MockHardwareWallet::new())
+                return Ok(Self {
+                    device: Arc::new(MockHardwareWallet::new()),
+                    derivation_path: "m/44'/9999'/0'/0/0".to_string(),
+                });
             }
-        };
-        
-        Ok(Self {
-            device,
-            derivation_path: "m/44'/60'/0'/0/0".to_string(), // Default ETH-like path
-        })
+        }
     }
     
     /// Set the derivation path
@@ -222,63 +231,6 @@ impl SigningMethod {
     /// Check if this is a hardware signing method
     pub fn is_hardware(&self) -> bool {
         matches!(self, SigningMethod::Hardware(_))
-    }
-}
-
-/// Mock hardware wallet for testing
-#[cfg(test)]
-pub struct MockHardwareWallet {
-    secret_key: bitcell_crypto::SecretKey,
-    connected: bool,
-}
-
-#[cfg(test)]
-impl MockHardwareWallet {
-    pub fn new() -> Self {
-        Self {
-            secret_key: bitcell_crypto::SecretKey::generate(),
-            connected: true,
-        }
-    }
-}
-
-#[cfg(test)]
-impl HardwareWalletDevice for MockHardwareWallet {
-    fn device_type(&self) -> HardwareWalletType {
-        HardwareWalletType::Mock
-    }
-    
-    fn status(&self) -> ConnectionStatus {
-        if self.connected {
-            ConnectionStatus::Connected
-        } else {
-            ConnectionStatus::Disconnected
-        }
-    }
-    
-    fn get_public_key(&self, _derivation_path: &str) -> Result<PublicKey> {
-        Ok(self.secret_key.public_key())
-    }
-    
-    fn get_address(&self, derivation_path: &str, chain: Chain) -> Result<String> {
-        let pk = self.get_public_key(derivation_path)?;
-        // Simple address derivation for testing
-        let hash = Hash256::hash(pk.as_bytes());
-        let prefix = match chain {
-            Chain::BitCell => "BC1",
-            Chain::Bitcoin | Chain::BitcoinTestnet => "bc1",
-            Chain::Ethereum | Chain::EthereumSepolia => "0x",
-            Chain::Custom(_) => "CUST",
-        };
-        Ok(format!("{}{}", prefix, hex::encode(&hash.as_bytes()[..20])))
-    }
-    
-    fn sign_hash(&self, _derivation_path: &str, hash: &Hash256) -> Result<Signature> {
-        Ok(self.secret_key.sign(hash.as_bytes()))
-    }
-    
-    fn sign_transaction(&self, derivation_path: &str, tx: &Transaction) -> Result<Signature> {
-        self.sign_hash(derivation_path, &tx.hash())
     }
 }
 

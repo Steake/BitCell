@@ -1,0 +1,7 @@
+# Ignore actual key files (too large for git)
+# Keys will be distributed via IPFS, BitTorrent, and website
+*.bin
+
+# Keep README files and directory structure
+!README.md
+!.gitignore

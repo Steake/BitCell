@@ -82,7 +82,7 @@ assert!(result.is_err()); // Double-spend detected!
 
 ```rust
 use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::Arc;
 
 // Create shared registry
 let registry = KeyImageRegistry::new_shared();
@@ -91,7 +91,9 @@ let registry = KeyImageRegistry::new_shared();
 let reg_clone = Arc::clone(&registry);
 std::thread::spawn(move || {
     let mut reg = reg_clone.lock().unwrap();
-    reg.check_and_mark(some_key_image)?;
+    if let Err(e) = reg.check_and_mark(some_key_image) {
+        // Handle error, e.g., log or ignore
+    }
 });
 ```
 

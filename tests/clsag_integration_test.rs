@@ -7,12 +7,11 @@
 //! - Concurrent access to the registry
 
 use bitcell_crypto::{
-    ClsagSecretKey, ClsagPublicKey, ClsagSignature, KeyImage,
+    ClsagSecretKey, ClsagPublicKey, ClsagSignature,
     MIN_RING_SIZE, DEFAULT_RING_SIZE, MAX_RING_SIZE,
 };
 use bitcell_state::KeyImageRegistry;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::thread;
 
 /// Test basic ring signature with minimum ring size

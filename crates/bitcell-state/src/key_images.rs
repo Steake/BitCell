@@ -40,10 +40,9 @@ impl KeyImageRegistry {
     /// Mark a key image as used
     /// Returns an error if the key image was already used (double-spend)
     pub fn mark(&mut self, key_image: KeyImage) -> Result<()> {
-        if self.used_images.contains(&key_image) {
+        if !self.used_images.insert(key_image) {
             return Err(Error::KeyImageExists);
         }
-        self.used_images.insert(key_image);
         Ok(())
     }
 
@@ -54,11 +53,13 @@ impl KeyImageRegistry {
     }
 
     /// Get the number of tracked key images
+    #[must_use]
     pub fn len(&self) -> usize {
         self.used_images.len()
     }
 
     /// Check if the registry is empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.used_images.is_empty()
     }

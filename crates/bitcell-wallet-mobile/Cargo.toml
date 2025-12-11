@@ -42,6 +42,7 @@ parking_lot.workspace = true
 
 [build-dependencies]
 uniffi = { version = "0.28", features = ["build"] }
+uniffi_build = "0.28"
 
 [dev-dependencies]
 uniffi = { version = "0.28", features = ["bindgen-tests"] }

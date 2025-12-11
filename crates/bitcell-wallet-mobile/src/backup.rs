@@ -53,7 +53,7 @@ impl WalletBackup {
     /// Restore wallet from backup
     ///
     /// Decrypts the backup data and restores the wallet state
-    pub fn restore(&self, wallet: &MobileWallet, _password: String) -> Result<()> {
+    pub fn restore(&self, wallet: &MobileWallet, password: String) -> Result<()> {
         // Verify backup version
         if self.backup_version != Self::BACKUP_VERSION {
             return Err(MobileWalletError::BackupError);

@@ -99,13 +99,10 @@ impl MockSecureStorage {
 }
 
 impl SecureKeyStorage for MockSecureStorage {
-    fn store_key(&self, key_id: String, mut key_data: Vec<u8>) -> Result<()> {
+    fn store_key(&self, key_id: String, key_data: Vec<u8>) -> Result<()> {
         // In production, this would use platform keychain
         let mut storage = self.storage.write();
-        storage.insert(key_id, key_data.clone());
-        
-        // Zeroize sensitive data
-        key_data.zeroize();
+        storage.insert(key_id, key_data);
         
         Ok(())
     }

@@ -87,7 +87,7 @@ pub fn validate_mnemonic(mnemonic_phrase: String) -> bool {
 }
 
 // UniFFI scaffolding generation
-uniffi::include_scaffolding!("bitcell_wallet_mobile");
+uniffi::setup_scaffolding!();
 
 #[cfg(test)]
 mod tests {

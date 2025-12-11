@@ -473,7 +473,13 @@ Restore a wallet from a mnemonic.
 
 ### Backup Encryption
 
-- Backups encrypted with AES-256-GCM
+> **⚠️ WARNING: Backup encryption is NOT yet implemented!**
+>
+> The current implementation does **NOT** encrypt backups. Backups are only hex-encoded and are **NOT SECURE**. 
+> Do **NOT** use this feature for production or store sensitive data until proper encryption is implemented.
+
+**Intended design (not yet implemented):**
+- Backups will be encrypted with AES-256-GCM
 - Password-based key derivation (PBKDF2, 100,000 iterations)
 - Random salt and nonce per backup
 - Backup format versioning for future compatibility

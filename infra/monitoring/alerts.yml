@@ -1,0 +1,167 @@
+groups:
+  - name: bitcell_node_alerts
+    interval: 30s
+    rules:
+      # Node availability alerts
+      - alert: NodeDown
+        expr: up{job=~"bitcell-.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: node
+        annotations:
+          summary: "BitCell node {{ $labels.instance }} is down"
+          description: "Node {{ $labels.instance }} in region {{ $labels.region }} has been down for more than 2 minutes."
+
+      - alert: HighNodeDownRate
+        expr: (count(up{job=~"bitcell-.*"} == 0) / count(up{job=~"bitcell-.*"})) > 0.3
+        for: 5m
+        labels:
+          severity: critical
+          component: cluster
+        annotations:
+          summary: "More than 30% of nodes are down"
+          description: "{{ $value | humanizePercentage }} of BitCell nodes are currently down."
+
+      # Sync and chain health
+      - alert: ChainNotProgressing
+        expr: rate(bitcell_chain_height[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: consensus
+        annotations:
+          summary: "Chain height not progressing on {{ $labels.instance }}"
+          description: "Node {{ $labels.instance }} has not increased block height in 10 minutes."
+
+      - alert: NodeOutOfSync
+        expr: bitcell_sync_progress < 95
+        for: 30m
+        labels:
+          severity: warning
+          component: sync
+        annotations:
+          summary: "Node {{ $labels.instance }} is out of sync"
+          description: "Node {{ $labels.instance }} sync progress is {{ $value }}%, which is below 95%."
+
+      # Network connectivity
+      - alert: LowPeerCount
+        expr: bitcell_peer_count < 2
+        for: 5m
+        labels:
+          severity: warning
+          component: network
+        annotations:
+          summary: "Low peer count on {{ $labels.instance }}"
+          description: "Node {{ $labels.instance }} has only {{ $value }} connected peers."
+
+      - alert: NoPeers
+        expr: bitcell_peer_count == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: network
+        annotations:
+          summary: "Node {{ $labels.instance }} has no peers"
+          description: "Node {{ $labels.instance }} is isolated with 0 connected peers."
+
+      # Performance and resource alerts
+      - alert: HighProofGenerationTime
+        expr: bitcell_proof_gen_time_ms > 30000
+        for: 5m
+        labels:
+          severity: warning
+          component: zkp
+        annotations:
+          summary: "High proof generation time on {{ $labels.instance }}"
+          description: "Proof generation is taking {{ $value }}ms, exceeding the 30s target."
+
+      - alert: HighPendingTransactions
+        expr: bitcell_pending_txs > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: mempool
+        annotations:
+          summary: "High pending transaction count on {{ $labels.instance }}"
+          description: "Node {{ $labels.instance }} has {{ $value }} pending transactions."
+
+      # EBSL trust system alerts
+      - alert: HighBannedMinerRate
+        expr: (bitcell_banned_miners / (bitcell_active_miners + bitcell_banned_miners)) > 0.2
+        for: 15m
+        labels:
+          severity: warning
+          component: ebsl
+        annotations:
+          summary: "High rate of banned miners"
+          description: "{{ $value | humanizePercentage }} of miners are banned, indicating potential network issues."
+
+      - alert: NoActiveMiners
+        expr: bitcell_active_miners == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: ebsl
+        annotations:
+          summary: "No active miners in the network"
+          description: "There are no active eligible miners, block production may stop."
+
+  - name: bitcell_regional_alerts
+    interval: 60s
+    rules:
+      # Regional availability
+      - alert: RegionDown
+        expr: count(up{job=~"bitcell-.*"} == 1) by (region) == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: region
+        annotations:
+          summary: "All nodes in region {{ $labels.region }} are down"
+          description: "Region {{ $labels.region }} has no available nodes."
+
+      - alert: RegionDegraded
+        expr: (count(up{job=~"bitcell-.*"} == 0) by (region) / count(up{job=~"bitcell-.*"}) by (region)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: region
+        annotations:
+          summary: "Region {{ $labels.region }} is degraded"
+          description: "More than 50% of nodes in region {{ $labels.region }} are down."
+
+      # Cross-region latency (simulated via scrape duration)
+      - alert: HighCrossRegionLatency
+        expr: scrape_duration_seconds{job=~"bitcell-.*"} > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          component: network
+        annotations:
+          summary: "High latency to {{ $labels.instance }}"
+          description: "Scrape latency to {{ $labels.instance }} is {{ $value }}s, exceeding 200ms target."
+
+  - name: bitcell_system_alerts
+    interval: 30s
+    rules:
+      # Monitoring infrastructure
+      - alert: PrometheusDown
+        expr: up{job="prometheus"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: monitoring
+        annotations:
+          summary: "Prometheus is down"
+          description: "Prometheus monitoring system is not responding."
+
+      - alert: AlertmanagerDown
+        expr: up{job="alertmanager"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring
+        annotations:
+          summary: "Alertmanager is down"
+          description: "Alertmanager is not responding, alerts may not be delivered."

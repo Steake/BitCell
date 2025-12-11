@@ -114,7 +114,7 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    /// Compute transaction hash
+    /// Compute transaction hash (includes signature for uniqueness)
     pub fn hash(&self) -> Hash256 {
         // Note: bincode serialization to Vec cannot fail for this structure
         let serialized = bincode::serialize(self).expect("transaction serialization should never fail");
@@ -160,6 +160,9 @@ mod tests {
     use super::*;
     use bitcell_crypto::SecretKey;
 
+    /// Placeholder signature for tests (before actual signing)
+    const PLACEHOLDER_SIGNATURE: [u8; 64] = [0u8; 64];
+
     #[test]
     fn test_block_header_hash() {
         let sk = SecretKey::generate();
@@ -196,5 +199,74 @@ mod tests {
 
         let hash = tx.hash();
         assert_ne!(hash, Hash256::zero());
+    }
+
+    #[test]
+    fn test_transaction_signing_hash() {
+        let sk = SecretKey::generate();
+        let pk = sk.public_key();
+        
+        // Create transaction with placeholder signature (will be replaced after signing)
+        let placeholder_sig = bitcell_crypto::Signature::from_bytes(PLACEHOLDER_SIGNATURE);
+        let mut tx = Transaction {
+            nonce: 1,
+            from: pk.clone(),
+            to: pk.clone(),
+            amount: 100,
+            gas_limit: 21000,
+            gas_price: 1000,
+            data: vec![],
+            signature: placeholder_sig,
+        };
+        
+        // Get signing hash and sign
+        let signing_hash = tx.signing_hash();
+        let signature = sk.sign(signing_hash.as_bytes());
+        tx.signature = signature;
+        
+        // Verify signature using signing_hash (not full hash)
+        assert!(tx.signature.verify(&pk, signing_hash.as_bytes()).is_ok());
+        
+        // The full hash should be different from signing hash (because it includes signature)
+        let full_hash = tx.hash();
+        assert_ne!(full_hash, signing_hash);
+    }
+
+    #[test]
+    fn test_signing_hash_excludes_signature() {
+        let sk = SecretKey::generate();
+        let pk = sk.public_key();
+        
+        // Create two identical transactions with different signatures
+        let sig1 = sk.sign(b"different1");
+        let sig2 = sk.sign(b"different2");
+        
+        let tx1 = Transaction {
+            nonce: 1,
+            from: pk.clone(),
+            to: pk.clone(),
+            amount: 100,
+            gas_limit: 21000,
+            gas_price: 1000,
+            data: vec![],
+            signature: sig1,
+        };
+        
+        let tx2 = Transaction {
+            nonce: 1,
+            from: pk.clone(),
+            to: pk.clone(),
+            amount: 100,
+            gas_limit: 21000,
+            gas_price: 1000,
+            data: vec![],
+            signature: sig2,
+        };
+        
+        // Signing hashes should be identical (signature not included)
+        assert_eq!(tx1.signing_hash(), tx2.signing_hash());
+        
+        // Full hashes should be different (signature included)
+        assert_ne!(tx1.hash(), tx2.hash());
     }
 }

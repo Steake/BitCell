@@ -12,8 +12,8 @@
 /// # Public Inputs
 ///
 /// As per RC2-001 specification, public inputs are minimized for efficient verification:
-/// - `commitment_a`: Pedersen commitment to glider A's pattern
-/// - `commitment_b`: Pedersen commitment to glider B's pattern
+/// - `commitment_a`: Hash-based commitment to glider A's pattern
+/// - `commitment_b`: Hash-based commitment to glider B's pattern
 /// - `winner`: Winner ID (0 = A wins, 1 = B wins, 2 = tie)
 ///
 /// # Private Witnesses
@@ -393,7 +393,9 @@ fn verify_winner_fp<F: PrimeField>(
     let mid = size / 2;
     
     // Calculate energy in region A (top-left quadrant)  
-    let mut energy_a_bits = vec![Boolean::FALSE; 16]; // 16-bit accumulator
+    // With 64x64 grid: 32x32 quadrant = 1024 cells, max energy = 1024 * 255 = 261,120
+    // Requires 18 bits (2^18 = 262,144), using 20 bits for safety margin
+    let mut energy_a_bits = vec![Boolean::FALSE; 20]; // 20-bit accumulator
     for i in 0..mid {
         for j in 0..mid {
             let cell_bits = final_grid[i][j].to_bits_le()?;
@@ -402,7 +404,7 @@ fn verify_winner_fp<F: PrimeField>(
     }
     
     // Calculate energy in region B (bottom-right quadrant)
-    let mut energy_b_bits = vec![Boolean::FALSE; 16];
+    let mut energy_b_bits = vec![Boolean::FALSE; 20];
     for i in mid..size {
         for j in mid..size {
             let cell_bits = final_grid[i][j].to_bits_le()?;
@@ -441,7 +443,9 @@ fn verify_winner<F: PrimeField>(
     let mid = size / 2;
     
     // Calculate energy in region A (top-left quadrant)  
-    let mut energy_a_bits = vec![Boolean::FALSE; 16]; // 16-bit accumulator
+    // With 64x64 grid: 32x32 quadrant = 1024 cells, max energy = 1024 * 255 = 261,120
+    // Requires 18 bits (2^18 = 262,144), using 20 bits for safety margin
+    let mut energy_a_bits = vec![Boolean::FALSE; 20]; // 20-bit accumulator
     for i in 0..mid {
         for j in 0..mid {
             let cell_bits = final_grid[i][j].to_bits_le()?;
@@ -450,7 +454,7 @@ fn verify_winner<F: PrimeField>(
     }
     
     // Calculate energy in region B (bottom-right quadrant)
-    let mut energy_b_bits = vec![Boolean::FALSE; 16];
+    let mut energy_b_bits = vec![Boolean::FALSE; 20];
     for i in mid..size {
         for j in mid..size {
             let cell_bits = final_grid[i][j].to_bits_le()?;
@@ -537,6 +541,9 @@ impl BattleCircuit<Fr> {
     /// Setup the circuit and generate proving/verifying keys
     ///
     /// Returns an error if the circuit setup fails (e.g., due to constraint system issues).
+    ///
+    /// **Note on RNG**: Uses `thread_rng()` which is cryptographically secure (ChaCha20-based).
+    /// For deterministic testing, consider using a seeded RNG from `ark_std::test_rng()`.
     pub fn setup() -> crate::Result<(ProvingKey<Bn254>, VerifyingKey<Bn254>)> {
         let rng = &mut thread_rng();
         
@@ -572,6 +579,11 @@ impl BattleCircuit<Fr> {
     }
 
     /// Verify a proof against public inputs
+    ///
+    /// Public inputs should be in order:
+    /// 1. Commitment A (field element)
+    /// 2. Commitment B (field element)
+    /// 3. Winner (field element: 0, 1, or 2)
     pub fn verify(
         vk: &VerifyingKey<Bn254>,
         proof: &crate::Groth16Proof,

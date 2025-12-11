@@ -1,0 +1,78 @@
+# Simple Counter Contract
+# Demonstrates basic state management and access control
+
+# Memory Layout:
+# 0x100: owner_address
+# 0x108: counter_value
+
+# Entry point
+# Function selector:
+#   0 = increment()
+#   1 = decrement()
+#   2 = get_count()
+#   3 = reset() (owner only)
+
+LOAD r1, r0, 0x10          # Load function selector
+EQ r4, r1, 0
+JZ r4, 0, check_decrement
+
+# === INCREMENT ===
+increment:
+  LOAD r5, r0, 0x108       # Load counter
+  ADD r5, r5, 1            # Increment
+  STORE r0, r5, 0x108      # Store back
+  ADD r0, r5, 0            # Return new value
+  HALT
+
+# === DECREMENT ===
+check_decrement:
+EQ r4, r1, 1
+JZ r4, 0, check_get_count
+
+decrement:
+  LOAD r5, r0, 0x108       # Load counter
+  
+  # Check counter > 0 (prevent underflow)
+  GT r6, r5, 0
+  JZ r6, 0, underflow_error
+  
+  # Can decrement
+  SUB r5, r5, 1            # Decrement
+  STORE r0, r5, 0x108      # Store back
+  ADD r0, r5, 0            # Return new value
+  HALT
+
+underflow_error:
+  HALT                      # Counter is 0, can't decrement
+
+# === GET_COUNT ===
+check_get_count:
+EQ r4, r1, 2
+JZ r4, 0, check_reset
+
+get_count:
+  LOAD r5, r0, 0x108       # Load counter
+  ADD r0, r5, 0            # Return value
+  HALT
+
+# === RESET (Owner Only) ===
+check_reset:
+EQ r4, r1, 3
+JZ r4, 0, unknown_function
+
+reset:
+  # Check caller is owner
+  LOAD r5, r0, 0x100       # Load owner
+  LOAD r6, r0, 0x20        # Load caller
+  EQ r7, r5, r6
+  JZ r7, 0, unauthorized
+  
+  # Authorized - reset counter
+  STORE r0, 0, 0x108       # Reset counter to 0
+  HALT
+
+unauthorized:
+  HALT                      # Unauthorized
+
+unknown_function:
+  HALT

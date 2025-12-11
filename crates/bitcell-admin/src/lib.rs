@@ -18,6 +18,8 @@ pub mod metrics_client;
 pub mod setup;
 pub mod system_metrics;
 pub mod hsm;
+pub mod auth;
+pub mod audit;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -45,6 +47,8 @@ pub struct AdminConsole {
     metrics_client: Arc<metrics_client::MetricsClient>,
     setup: Arc<setup::SetupManager>,
     system_metrics: Arc<system_metrics::SystemMetricsCollector>,
+    auth: Arc<auth::AuthManager>,
+    audit: Arc<audit::AuditLogger>,
 }
 
 impl AdminConsole {
@@ -54,6 +58,17 @@ impl AdminConsole {
         let setup = Arc::new(setup::SetupManager::new());
         let deployment = Arc::new(DeploymentManager::new(process.clone(), setup.clone()));
         let system_metrics = Arc::new(system_metrics::SystemMetricsCollector::new());
+        
+        // Initialize auth with a secret key
+        // TODO: SECURITY: Load JWT secret from environment variable or secure config
+        // Current hardcoded secret is for development only and MUST be changed for production
+        let jwt_secret = std::env::var("BITCELL_JWT_SECRET")
+            .unwrap_or_else(|_| {
+                tracing::warn!("BITCELL_JWT_SECRET not set, using default (INSECURE for production!)");
+                "bitcell-admin-jwt-secret-change-in-production".to_string()
+            });
+        let auth = Arc::new(auth::AuthManager::new(&jwt_secret));
+        let audit = Arc::new(audit::AuditLogger::new());
 
         // Try to load setup state from default location
         let setup_path = std::path::PathBuf::from(SETUP_FILE_PATH);
@@ -70,6 +85,8 @@ impl AdminConsole {
             metrics_client: Arc::new(metrics_client::MetricsClient::new()),
             setup,
             system_metrics,
+            auth,
+            audit,
         }
     }
 
@@ -85,47 +102,66 @@ impl AdminConsole {
 
     /// Build the application router
     fn build_router(&self) -> Router {
-        Router::new()
-            // Dashboard
+        use axum::middleware;
+
+        // Public routes (no authentication required)
+        let public_routes = Router::new()
+            .route("/api/auth/login", post(api::auth::login))
+            .route("/api/auth/refresh", post(api::auth::refresh));
+
+        // Protected routes requiring authentication
+        let protected_routes = Router::new()
+            // Dashboard (viewer role required)
             .route("/", get(web::dashboard::index))
             .route("/dashboard", get(web::dashboard::index))
 
-            // API endpoints
+            // Read-only API endpoints (viewer role)
             .route("/api/nodes", get(api::nodes::list_nodes))
             .route("/api/nodes/:id", get(api::nodes::get_node))
-            .route("/api/nodes/:id", delete(api::nodes::delete_node))
-            .route("/api/nodes/:id/start", post(api::nodes::start_node))
-            .route("/api/nodes/:id/stop", post(api::nodes::stop_node))
             .route("/api/nodes/:id/logs", get(api::nodes::get_node_logs))
-
             .route("/api/metrics", get(api::metrics::get_metrics))
             .route("/api/metrics/chain", get(api::metrics::chain_metrics))
             .route("/api/metrics/network", get(api::metrics::network_metrics))
             .route("/api/metrics/system", get(api::metrics::system_metrics))
-
-            .route("/api/deployment/deploy", post(api::deployment::deploy_node))
             .route("/api/deployment/status", get(api::deployment::deployment_status))
-
             .route("/api/config", get(api::config::get_config))
-            .route("/api/config", post(api::config::update_config))
-
+            .route("/api/setup/status", get(api::setup::get_setup_status))
+            .route("/api/blocks", get(api::blocks::list_blocks))
+            .route("/api/blocks/:height", get(api::blocks::get_block))
+            .route("/api/blocks/:height/battles", get(api::blocks::get_block_battles))
+            .route("/api/audit/logs", get(api::auth::get_audit_logs))
+            
+            // Operator routes (can start/stop nodes, deploy)
+            .route("/api/nodes/:id/start", post(api::nodes::start_node))
+            .route("/api/nodes/:id/stop", post(api::nodes::stop_node))
+            .route("/api/deployment/deploy", post(api::deployment::deploy_node))
             .route("/api/test/battle", post(api::test::run_battle_test))
             .route("/api/test/battle/visualize", post(api::test::run_battle_visualization))
             .route("/api/test/transaction", post(api::test::send_test_transaction))
-
-            .route("/api/setup/status", get(api::setup::get_setup_status))
             .route("/api/setup/node", post(api::setup::add_node))
             .route("/api/setup/config-path", post(api::setup::set_config_path))
             .route("/api/setup/data-dir", post(api::setup::set_data_dir))
             .route("/api/setup/complete", post(api::setup::complete_setup))
-
-            .route("/api/blocks", get(api::blocks::list_blocks))
-            .route("/api/blocks/:height", get(api::blocks::get_block))
-            .route("/api/blocks/:height/battles", get(api::blocks::get_block_battles))
-
+            
+            // Admin routes (can delete nodes, update config)
+            .route("/api/nodes/:id", delete(api::nodes::delete_node))
+            .route("/api/config", post(api::config::update_config))
+            .route("/api/auth/users", post(api::auth::create_user))
+            .route("/api/auth/logout", post(api::auth::logout))
+            
             // Wallet API
             .nest("/api/wallet", api::wallet::router().with_state(self.config.clone()))
+            
+            // Apply auth middleware to all protected routes
+            .layer(middleware::from_fn_with_state(
+                self.auth.clone(),
+                auth::auth_middleware,
+            ));
 
+        Router::new()
+            .merge(public_routes)
+            .merge(protected_routes)
+            
             // Static files
             .nest_service("/static", ServeDir::new("static"))
 
@@ -143,6 +179,8 @@ impl AdminConsole {
                 metrics_client: self.metrics_client.clone(),
                 setup: self.setup.clone(),
                 system_metrics: self.system_metrics.clone(),
+                auth: self.auth.clone(),
+                audit: self.audit.clone(),
             }))
     }
 
@@ -169,6 +207,8 @@ pub struct AppState {
     pub metrics_client: Arc<metrics_client::MetricsClient>,
     pub setup: Arc<setup::SetupManager>,
     pub system_metrics: Arc<system_metrics::SystemMetricsCollector>,
+    pub auth: Arc<auth::AuthManager>,
+    pub audit: Arc<audit::AuditLogger>,
 }
 
 #[cfg(test)]

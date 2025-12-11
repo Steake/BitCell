@@ -5,39 +5,52 @@
 //! - State transition verification (Merkle tree updates)
 //! - Merkle tree inclusion proofs
 //!
-//! # Production Status (RC2)
+//! ## Circuit Implementations
 //!
-//! This module provides production-ready implementations with full R1CS constraints:
-//! - [`BattleCircuit`]: Full Conway's Game of Life evolution verification (~6.7M constraints)
-//! - [`StateCircuit`]: State transition with Merkle proofs
+//! This crate provides two tiers of circuit implementations:
 //!
-//! # Simplified Circuits for Testing
+//! ### Simplified Circuits (battle_circuit, state_circuit)
+//! - **Purpose**: Fast testing, development, and basic validation
+//! - **Constraints**: Minimal (winner validation, root non-equality)
+//! - **Performance**: Very fast proof generation (~1-2 seconds)
+//! - **Security**: Cryptographically sound but doesn't verify full computation
 //!
-//! For fast testing and development, simplified mock circuits are available:
-//! - [`SimpleBattleCircuit`]: Mock battle circuit with minimal constraints
-//! - Original state circuit (via `state_circuit` module)
+//! ### Full Constraint Circuits (battle_constraints, state_constraints)
+//! - **Purpose**: Production deployment with complete verification
+//! - **Constraints**: Complete CA evolution simulation and Merkle tree verification
+//! - **Performance**: Slower proof generation (30-60 seconds for battles)
+//! - **Security**: Fully verifies all computation steps
 //!
-//! # Usage
+//! ## Usage
 //!
 //! ```rust,ignore
 //! use bitcell_zkp::{BattleCircuit, Groth16Proof};
+//! use ark_bn254::Fr;
 //!
-//! // Setup (generate proving/verifying keys)
-//! let (pk, vk) = BattleCircuit::setup()?;
+//! // Setup (one-time, reusable)
+//! let (pk, vk) = BattleCircuit::<Fr>::setup().unwrap();
 //!
-//! // Create circuit and generate proof
-//! let circuit = BattleCircuit::new(/* ... */);
-//! let proof = circuit.prove(&pk)?;
+//! // Create circuit instance
+//! let circuit = BattleCircuit::new(
+//!     initial_grid,
+//!     final_grid,
+//!     commitment_a,
+//!     commitment_b,
+//!     winner_id,
+//! ).with_witnesses(pattern_a, pattern_b, nonce_a, nonce_b);
+//!
+//! // Generate proof
+//! let proof = circuit.prove(&pk).unwrap();
 //!
 //! // Verify proof
 //! let public_inputs = circuit.public_inputs();
-//! let valid = BattleCircuit::verify(&vk, &proof, &public_inputs)?;
+//! assert!(BattleCircuit::verify(&vk, &proof, &public_inputs).unwrap());
 //! ```
 
 pub mod battle_circuit;
 pub mod state_circuit;
 
-// New: Full constraint implementations
+// Full constraint implementations for production
 pub mod battle_constraints;
 pub mod state_constraints;
 
@@ -45,14 +58,17 @@ pub mod state_constraints;
 pub mod merkle_gadget;
 // Production-ready Poseidon-based Merkle verification
 pub mod poseidon_merkle;
+// Key management for trusted setup ceremony
+pub mod key_management;
 
-// Default exports point to full constraint implementations (production-ready)
+// Export simplified circuits for backward compatibility
+pub use battle_circuit::BattleCircuit as SimpleBattleCircuit;
+pub use state_circuit::StateCircuit as SimpleStateCircuit;
+
+// Export full circuits as recommended defaults
 pub use battle_constraints::BattleCircuit;
 pub use battle_constraints::{GRID_SIZE, BATTLE_STEPS};
-
-// Simplified circuits available via explicit aliases for testing
-pub use battle_circuit::BattleCircuit as SimpleBattleCircuit;
-pub use state_circuit::StateCircuit;
+pub use state_constraints::{StateCircuit, NullifierCircuit};
 
 pub use merkle_gadget::{MerklePathGadget, MERKLE_DEPTH};
 pub use poseidon_merkle::{PoseidonMerkleGadget, POSEIDON_MERKLE_DEPTH};
@@ -77,6 +93,9 @@ pub enum Error {
     
     #[error("Setup error: {0}")]
     Setup(String),
+    
+    #[error("Key management error: {0}")]
+    KeyManagement(String),
 }
 
 use ark_bn254::Bn254;

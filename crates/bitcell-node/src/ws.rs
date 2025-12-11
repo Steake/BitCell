@@ -8,15 +8,544 @@ use axum::{
     Router,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::broadcast;
 use tokio::time;
 use crate::rpc::RpcState;
-use serde_json::json;
+
+/// Maximum subscriptions per client
+const MAX_SUBSCRIPTIONS_PER_CLIENT: usize = 100;
+
+/// Rate limit: max messages per second per client
+const RATE_LIMIT_PER_SEC: usize = 100;
+
+/// Global broadcast event types
+#[derive(Debug, Clone)]
+enum GlobalEvent {
+    NewBlock(Value),
+    PendingTransaction(Value),
+    Log(Value),
+}
 
 pub fn ws_router() -> Router<RpcState> {
     Router::new()
+        .route("/", get(json_rpc_handler))
         .route("/battles", get(battles_handler))
         .route("/blocks", get(blocks_handler))
+}
+
+/// JSON-RPC subscription request
+#[derive(Debug, Deserialize)]
+struct SubscriptionRequest {
+    jsonrpc: String,
+    id: Value,
+    method: String,
+    params: Option<Vec<Value>>,
+}
+
+/// JSON-RPC subscription response
+#[derive(Debug, Serialize)]
+struct SubscriptionResponse {
+    jsonrpc: String,
+    id: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<JsonRpcError>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonRpcError {
+    code: i32,
+    message: String,
+}
+
+/// Subscription type
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum SubscriptionType {
+    NewHeads,
+    Logs(LogFilter),
+    PendingTransactions,
+}
+
+/// Log filter for subscriptions
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Default)]
+struct LogFilter {
+    #[serde(default)]
+    address: Option<Vec<String>>,
+    #[serde(default)]
+    topics: Option<Vec<Option<Vec<String>>>>,
+}
+
+/// Subscription manager
+struct SubscriptionManager {
+    subscriptions: Arc<RwLock<HashMap<String, SubscriptionType>>>,
+    next_id: Arc<RwLock<u64>>,
+}
+
+impl SubscriptionManager {
+    fn new() -> Self {
+        Self {
+            subscriptions: Arc::new(RwLock::new(HashMap::new())),
+            next_id: Arc::new(RwLock::new(1)),
+        }
+    }
+
+    fn subscribe(&self, sub_type: SubscriptionType) -> String {
+        let mut next_id = self.next_id.write();
+        let id = *next_id;
+        *next_id += 1;
+        drop(next_id);
+
+        let sub_id = format!("0x{:x}", id);
+        self.subscriptions.write().insert(sub_id.clone(), sub_type);
+        sub_id
+    }
+
+    fn unsubscribe(&self, sub_id: &str) -> bool {
+        self.subscriptions.write().remove(sub_id).is_some()
+    }
+
+    fn get_matching_subscriptions(&self, event: &GlobalEvent) -> Vec<(String, Value)> {
+        let subs = self.subscriptions.read();
+        let mut results = Vec::new();
+        
+        for (sub_id, sub_type) in subs.iter() {
+            let data = match (event, sub_type) {
+                (GlobalEvent::NewBlock(data), SubscriptionType::NewHeads) => Some(data.clone()),
+                (GlobalEvent::PendingTransaction(data), SubscriptionType::PendingTransactions) => Some(data.clone()),
+                (GlobalEvent::Log(data), SubscriptionType::Logs(filter)) => {
+                    // Check if log matches filter
+                    if log_matches_filter(data, filter) {
+                        Some(data.clone())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+            
+            if let Some(result_data) = data {
+                let notification = json!({
+                    "jsonrpc": "2.0",
+                    "method": "eth_subscription",
+                    "params": {
+                        "subscription": sub_id,
+                        "result": result_data
+                    }
+                });
+                results.push((sub_id.clone(), notification));
+            }
+        }
+        
+        results
+    }
+
+    fn subscription_count(&self) -> usize {
+        self.subscriptions.read().len()
+    }
+}
+
+fn log_matches_filter(log_data: &Value, filter: &LogFilter) -> bool {
+    // Check address filter
+    if let Some(filter_addresses) = &filter.address {
+        if !filter_addresses.is_empty() {
+            if let Some(log_address) = log_data.get("address").and_then(|v| v.as_str()) {
+                if !filter_addresses.iter().any(|a| a == log_address) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+    }
+
+    // Check topic filters
+    if let Some(filter_topics) = &filter.topics {
+        if let Some(log_topics) = log_data.get("topics").and_then(|v| v.as_array()) {
+            for (i, filter_topic_opts) in filter_topics.iter().enumerate() {
+                if let Some(topic_options) = filter_topic_opts {
+                    if let Some(log_topic) = log_topics.get(i).and_then(|v| v.as_str()) {
+                        if !topic_options.iter().any(|t| t == log_topic) {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    true
+}
+
+/// Global event broadcaster - single instance per server
+pub struct GlobalEventBroadcaster {
+    tx: broadcast::Sender<GlobalEvent>,
+}
+
+impl GlobalEventBroadcaster {
+    pub fn new() -> Self {
+        let (tx, _) = broadcast::channel(1000);
+        Self { tx }
+    }
+
+    pub fn broadcast(&self, event: GlobalEvent) {
+        // Ignore errors if no receivers
+        let _ = self.tx.send(event);
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<GlobalEvent> {
+        self.tx.subscribe()
+    }
+}
+
+/// Start global monitors (should be called once at server startup)
+pub fn start_global_monitors(state: RpcState, broadcaster: Arc<GlobalEventBroadcaster>) {
+    // Block monitor
+    {
+        let state = state.clone();
+        let broadcaster = broadcaster.clone();
+        tokio::spawn(async move {
+            let mut interval = time::interval(Duration::from_secs(1));
+            let mut last_height = state.blockchain.height();
+
+            loop {
+                interval.tick().await;
+                let current_height = state.blockchain.height();
+                if current_height > last_height {
+                    if let Some(block) = state.blockchain.get_block(current_height) {
+                        let block_data = json!({
+                            "number": format!("0x{:x}", block.header.height),
+                            "hash": format!("0x{}", hex::encode(block.hash().as_bytes())),
+                            "parentHash": format!("0x{}", hex::encode(block.header.prev_hash.as_bytes())),
+                            "timestamp": format!("0x{:x}", block.header.timestamp),
+                            "miner": format!("0x{}", hex::encode(block.header.proposer.as_bytes())),
+                            "transactionsRoot": format!("0x{}", hex::encode(block.header.tx_root.as_bytes())),
+                            "stateRoot": format!("0x{}", hex::encode(block.header.state_root.as_bytes())),
+                        });
+                        broadcaster.broadcast(GlobalEvent::NewBlock(block_data));
+                        
+                        // Also extract and broadcast logs from the block
+                        for (tx_index, tx) in block.transactions.iter().enumerate() {
+                            // In a real implementation, we'd get logs from transaction receipts
+                            // For now, we create a placeholder log structure
+                            // TODO: Implement actual log extraction from receipts
+                            let log_data = json!({
+                                "address": format!("0x{}", hex::encode(tx.to.as_bytes())),
+                                "topics": [],
+                                "data": format!("0x{}", hex::encode(&tx.data)),
+                                "blockNumber": format!("0x{:x}", block.header.height),
+                                "transactionHash": format!("0x{}", hex::encode(tx.hash().as_bytes())),
+                                "transactionIndex": format!("0x{:x}", tx_index),
+                                "blockHash": format!("0x{}", hex::encode(block.hash().as_bytes())),
+                                "logIndex": "0x0",
+                                "removed": false
+                            });
+                            broadcaster.broadcast(GlobalEvent::Log(log_data));
+                        }
+                    }
+                    last_height = current_height;
+                }
+            }
+        });
+    }
+
+    // Pending transaction monitor
+    {
+        let state = state.clone();
+        let broadcaster = broadcaster.clone();
+        tokio::spawn(async move {
+            let mut interval = time::interval(Duration::from_millis(500));
+            let mut seen_txs = HashSet::new();
+
+            loop {
+                interval.tick().await;
+                let pending_txs = state.tx_pool.get_pending_transactions();
+                
+                // Broadcast only new transactions we haven't seen before
+                for tx in &pending_txs {
+                    let tx_hash = tx.hash();
+                    if !seen_txs.contains(&tx_hash) {
+                        let tx_hash_hex = format!("0x{}", hex::encode(tx_hash.as_bytes()));
+                        broadcaster.broadcast(GlobalEvent::PendingTransaction(json!(tx_hash_hex)));
+                        seen_txs.insert(tx_hash);
+                    }
+                }
+                
+                // Prevent unbounded memory growth
+                if seen_txs.len() > 10000 {
+                    let current_hashes: HashSet<_> = 
+                        pending_txs.iter().map(|tx| tx.hash()).collect();
+                    seen_txs.retain(|hash| current_hashes.contains(hash));
+                }
+            }
+        });
+    }
+}
+
+/// Handle JSON-RPC WebSocket for eth_subscribe
+async fn json_rpc_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<RpcState>,
+) -> impl IntoResponse {
+    ws.on_upgrade(|socket| handle_json_rpc_socket(socket, state))
+}
+
+async fn handle_json_rpc_socket(socket: WebSocket, state: RpcState) {
+    let (mut sender, mut receiver) = socket.split();
+    let subscription_manager = Arc::new(SubscriptionManager::new());
+    
+    // Get global broadcaster from state - for now we'll create a local one
+    // TODO: Store broadcaster in RpcState for proper global sharing
+    let broadcaster = Arc::new(GlobalEventBroadcaster::new());
+    start_global_monitors(state.clone(), broadcaster.clone());
+    
+    let mut global_rx = broadcaster.subscribe();
+    
+    let message_count = Arc::new(RwLock::new(0usize));
+    let last_reset = Arc::new(RwLock::new(time::Instant::now()));
+
+    // Create a channel to send messages to the sender task
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+    // Spawn task to send messages to client
+    let send_task = tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            if let Err(e) = sender.send(msg).await {
+                tracing::debug!("Failed to send message: {}", e);
+                break;
+            }
+        }
+    });
+
+    // Spawn task to handle global events and forward to client
+    let event_task = {
+        let subscription_manager = subscription_manager.clone();
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            loop {
+                match global_rx.recv().await {
+                    Ok(event) => {
+                        let notifications = subscription_manager.get_matching_subscriptions(&event);
+                        for (_sub_id, notification) in notifications {
+                            if tx.send(Message::Text(notification.to_string())).is_err() {
+                                tracing::debug!("Failed to queue notification");
+                                return;
+                            }
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        tracing::warn!("Client lagging behind events");
+                        continue;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        break;
+                    }
+                }
+            }
+        })
+    };
+
+    // Handle incoming messages
+    loop {
+        tokio::select! {
+            msg = receiver.next() => {
+                match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        // Rate limiting check
+                        {
+                            let now = time::Instant::now();
+                            let mut last_reset_guard = last_reset.write();
+                            if now.duration_since(*last_reset_guard) >= Duration::from_secs(1) {
+                                *message_count.write() = 0;
+                                *last_reset_guard = now;
+                            }
+                        }
+
+                        {
+                            let mut count = message_count.write();
+                            *count += 1;
+                            if *count > RATE_LIMIT_PER_SEC {
+                                let error_msg = json!({
+                                    "jsonrpc": "2.0",
+                                    "id": null,
+                                    "error": {
+                                        "code": -32005,
+                                        "message": "Rate limit exceeded"
+                                    }
+                                });
+                                if tx.send(Message::Text(error_msg.to_string())).is_err() {
+                                    tracing::debug!("Failed to send rate limit error");
+                                    break;
+                                }
+                                tracing::warn!("Client exceeded rate limit");
+                                continue;
+                            }
+                        }
+
+                        match serde_json::from_str::<SubscriptionRequest>(&text) {
+                            Ok(req) => {
+                                let response = handle_subscription_request(
+                                    req,
+                                    &subscription_manager,
+                                ).await;
+                                
+                                if tx.send(Message::Text(serde_json::to_string(&response).unwrap())).is_err() {
+                                    tracing::debug!("Failed to send response");
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                tracing::debug!("Invalid JSON-RPC request: {}", e);
+                                let error_response = SubscriptionResponse {
+                                    jsonrpc: "2.0".to_string(),
+                                    id: Value::Null,
+                                    result: None,
+                                    error: Some(JsonRpcError {
+                                        code: -32700,
+                                        message: "Parse error".to_string(),
+                                    }),
+                                };
+                                if tx.send(Message::Text(serde_json::to_string(&error_response).unwrap())).is_err() {
+                                    tracing::debug!("Failed to send error");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | None => {
+                        tracing::debug!("WebSocket closed");
+                        break;
+                    }
+                    Some(Ok(Message::Ping(_))) => {
+                        // Handled automatically by axum
+                    }
+                    Some(Err(e)) => {
+                        tracing::error!("WebSocket error: {}", e);
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    // Cleanup
+    send_task.abort();
+    event_task.abort();
+}
+
+async fn handle_subscription_request(
+    req: SubscriptionRequest,
+    subscription_manager: &SubscriptionManager,
+) -> SubscriptionResponse {
+    if req.jsonrpc != "2.0" {
+        return SubscriptionResponse {
+            jsonrpc: "2.0".to_string(),
+            id: req.id,
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32600,
+                message: "Invalid Request".to_string(),
+            }),
+        };
+    }
+
+    match req.method.as_str() {
+        "eth_subscribe" => {
+            let count = subscription_manager.subscription_count();
+            if count >= MAX_SUBSCRIPTIONS_PER_CLIENT {
+                return SubscriptionResponse {
+                    jsonrpc: "2.0".to_string(),
+                    id: req.id,
+                    result: None,
+                    error: Some(JsonRpcError {
+                        code: -32005,
+                        message: format!("Exceeded max subscriptions ({})", MAX_SUBSCRIPTIONS_PER_CLIENT),
+                    }),
+                };
+            }
+
+            if let Some(params) = req.params {
+                if let Some(sub_type_str) = params.get(0).and_then(|v| v.as_str()) {
+                    let sub_type = match sub_type_str {
+                        "newHeads" => Some(SubscriptionType::NewHeads),
+                        "logs" => {
+                            let filter = if params.len() > 1 {
+                                serde_json::from_value(params[1].clone()).unwrap_or_default()
+                            } else {
+                                LogFilter::default()
+                            };
+                            Some(SubscriptionType::Logs(filter))
+                        }
+                        "pendingTransactions" => Some(SubscriptionType::PendingTransactions),
+                        _ => None,
+                    };
+
+                    if let Some(sub_type) = sub_type {
+                        let sub_id = subscription_manager.subscribe(sub_type);
+                        
+                        return SubscriptionResponse {
+                            jsonrpc: "2.0".to_string(),
+                            id: req.id,
+                            result: Some(json!(sub_id)),
+                            error: None,
+                        };
+                    }
+                }
+            }
+
+            SubscriptionResponse {
+                jsonrpc: "2.0".to_string(),
+                id: req.id,
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32602,
+                    message: "Invalid params".to_string(),
+                }),
+            }
+        }
+        "eth_unsubscribe" => {
+            if let Some(params) = req.params {
+                if let Some(sub_id) = params.get(0).and_then(|v| v.as_str()) {
+                    let success = subscription_manager.unsubscribe(sub_id);
+                    
+                    return SubscriptionResponse {
+                        jsonrpc: "2.0".to_string(),
+                        id: req.id,
+                        result: Some(json!(success)),
+                        error: None,
+                    };
+                }
+            }
+
+            SubscriptionResponse {
+                jsonrpc: "2.0".to_string(),
+                id: req.id,
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32602,
+                    message: "Invalid params".to_string(),
+                }),
+            }
+        }
+        _ => SubscriptionResponse {
+            jsonrpc: "2.0".to_string(),
+            id: req.id,
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32601,
+                message: "Method not found".to_string(),
+            }),
+        },
+    }
 }
 
 async fn battles_handler(
@@ -104,5 +633,94 @@ async fn handle_blocks_socket(mut socket: WebSocket, state: RpcState) {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_log_filter_address_match() {
+        let log_data = json!({
+            "address": "0x1234",
+            "topics": []
+        });
+
+        let filter = LogFilter {
+            address: Some(vec!["0x1234".to_string(), "0x5678".to_string()]),
+            topics: None,
+        };
+
+        assert!(log_matches_filter(&log_data, &filter));
+
+        let filter_no_match = LogFilter {
+            address: Some(vec!["0xabcd".to_string()]),
+            topics: None,
+        };
+
+        assert!(!log_matches_filter(&log_data, &filter_no_match));
+    }
+
+    #[test]
+    fn test_log_filter_empty_address() {
+        let log_data = json!({
+            "address": "0x1234",
+            "topics": []
+        });
+
+        let filter = LogFilter {
+            address: Some(vec![]),
+            topics: None,
+        };
+
+        // Empty address filter matches any address
+        assert!(log_matches_filter(&log_data, &filter));
+    }
+
+    #[test]
+    fn test_log_filter_no_address() {
+        let log_data = json!({
+            "address": "0x1234",
+            "topics": []
+        });
+
+        let filter = LogFilter {
+            address: None,
+            topics: None,
+        };
+
+        // No address filter matches any address
+        assert!(log_matches_filter(&log_data, &filter));
+    }
+
+    #[test]
+    fn test_log_filter_topic_match() {
+        let log_data = json!({
+            "address": "0x1234",
+            "topics": ["0xabc", "0xany", "0x123"]
+        });
+
+        let filter = LogFilter {
+            address: None,
+            topics: Some(vec![
+                Some(vec!["0xabc".to_string(), "0xdef".to_string()]),
+                None,
+                Some(vec!["0x123".to_string()]),
+            ]),
+        };
+
+        assert!(log_matches_filter(&log_data, &filter));
+
+        let filter_no_match = LogFilter {
+            address: None,
+            topics: Some(vec![
+                Some(vec!["0xabc".to_string()]),
+                None,
+                Some(vec!["0x999".to_string()]),
+            ]),
+        };
+
+        assert!(!log_matches_filter(&log_data, &filter_no_match));
     }
 }

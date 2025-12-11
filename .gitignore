@@ -16,8 +16,8 @@ Cargo.lock
 *.profraw
 *.profdata
 
-# Documentation
-docs/book/
+# Documentation (only ignore built output)
+docs/book/book/
 
 # Temporary files
 /tmp/
@@ -40,3 +40,6 @@ target/
 /infra/docker/grafana-data/
 /infra/docker/alertmanager-data/
 /backups/
+
+# SDK compiled bytecode
+sdk/**/*.bin

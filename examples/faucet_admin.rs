@@ -62,10 +62,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Amount per request: {} CELL", faucet_config.amount_per_request as f64 / 1e9);
     println!("  Rate limit: {} seconds", faucet_config.rate_limit_seconds);
     println!("  Max requests/day: {}", faucet_config.max_requests_per_day);
-    println!("  CAPTCHA required: {}", faucet_config.require_captcha);
+    println!("  CAPTCHA required: {} (WARNING: not implemented - must be false)", faucet_config.require_captcha);
 
     let console = AdminConsole::new(addr)
-        .with_faucet(faucet_config);
+        .with_faucet(faucet_config)
+        .expect("Failed to initialize faucet");
 
     // Start the server
     console.serve().await

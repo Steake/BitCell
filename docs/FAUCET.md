@@ -190,22 +190,34 @@ Rate limits are tracked per address and reset automatically.
 
 ### CAPTCHA Integration
 
-For production testnet deployments, integrate with a CAPTCHA service:
+⚠️ **CRITICAL**: CAPTCHA validation is **NOT IMPLEMENTED**. When `require_captcha` is enabled, the faucet will **reject all requests** to prevent a false sense of security. 
 
-1. **reCAPTCHA**: Add Google reCAPTCHA widget to the web UI
+**Current Status**: The CAPTCHA feature is disabled by default and must remain `false` until actual verification is implemented.
+
+**Future Implementation**: To enable CAPTCHA protection, implement one of:
+
+1. **reCAPTCHA**: Integrate Google reCAPTCHA v2/v3
 2. **hCaptcha**: Alternative CAPTCHA provider
 3. **Custom**: Implement your own challenge system
 
-The faucet service checks `captcha_response` when `require_captcha` is enabled.
+Do not enable `require_captcha` in production without implementing actual verification.
 
 ### Anti-Abuse
 
 Additional anti-abuse measures:
 - Maximum recipient balance check prevents excessive accumulation
-- Request history tracking enables abuse detection
+- Request history tracking enables abuse detection (bounded to 10,000 entries)
+- Rate limit cleanup prevents unbounded memory growth
 - IP-based rate limiting can be added at the reverse proxy level
 
 ## Monitoring
+
+### Known Limitations
+
+⚠️ **Memory Management**: 
+- Request history is bounded to 10,000 entries with automatic rotation
+- Rate limit data is automatically cleaned up after 30 days of inactivity
+- Long-running deployments should still be monitored for memory usage
 
 ### Audit Logging
 

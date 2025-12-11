@@ -120,7 +120,10 @@ pub async fn get_info(
     
     let balance = match faucet.get_balance().await {
         Ok(b) => b,
-        Err(_) => 0,
+        Err(e) => return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            format!("Failed to fetch faucet balance: {}", e)
+        ).into_response(),
     };
 
     Json(FaucetInfoResponse {

@@ -334,20 +334,35 @@ pub async fn faucet_page() -> impl IntoResponse {
 
                 const historyList = document.getElementById('historyList');
                 if (history.length === 0) {
-                    historyList.innerHTML = '<p>No recent distributions</p>';
+                    historyList.textContent = 'No recent distributions';
                     return;
                 }
 
-                historyList.innerHTML = history.slice(0, 10).map(item => {
+                // Clear existing content
+                historyList.innerHTML = '';
+                
+                // Build history items safely using DOM manipulation
+                history.slice(0, 10).forEach(item => {
+                    const historyItem = document.createElement('div');
+                    historyItem.className = 'history-item';
+                    
+                    const addressDiv = document.createElement('div');
+                    addressDiv.className = 'history-address';
+                    addressDiv.textContent = item.address;
+                    
+                    const amountDiv = document.createElement('div');
+                    amountDiv.textContent = `${(item.amount / 1e9).toFixed(2)} CELL`;
+                    
+                    const timeDiv = document.createElement('div');
+                    timeDiv.className = 'history-time';
                     const date = new Date(item.timestamp * 1000);
-                    return `
-                        <div class="history-item">
-                            <div class="history-address">${item.address}</div>
-                            <div>${(item.amount / 1e9).toFixed(2)} CELL</div>
-                            <div class="history-time">${date.toLocaleString()}</div>
-                        </div>
-                    `;
-                }).join('');
+                    timeDiv.textContent = date.toLocaleString();
+                    
+                    historyItem.appendChild(addressDiv);
+                    historyItem.appendChild(amountDiv);
+                    historyItem.appendChild(timeDiv);
+                    historyList.appendChild(historyItem);
+                });
             } catch (error) {
                 console.error('Failed to load history:', error);
             }
@@ -393,8 +408,10 @@ pub async fn faucet_page() -> impl IntoResponse {
                 const data = await response.json();
 
                 if (data.success) {
+                    // Sanitize values before displaying (defense in depth)
+                    const amount = parseFloat(data.amount) / 1e9;
                     showMessage(
-                        `Success! ${(data.amount / 1e9).toFixed(2)} CELL sent to ${address}. Transaction: ${data.tx_hash}`,
+                        `Success! ${amount.toFixed(2)} CELL sent. Check transaction history for details.`,
                         'success'
                     );
                     document.getElementById('address').value = '';

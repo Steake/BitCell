@@ -96,9 +96,14 @@ impl AdminConsole {
     }
 
     /// Enable faucet with configuration
-    pub fn with_faucet(mut self, faucet_config: faucet::FaucetConfig) -> Self {
-        self.faucet = Some(Arc::new(FaucetService::new(faucet_config)));
-        self
+    pub fn with_faucet(mut self, faucet_config: faucet::FaucetConfig) -> Result<Self, String> {
+        match FaucetService::new(faucet_config) {
+            Ok(service) => {
+                self.faucet = Some(Arc::new(service));
+                Ok(self)
+            }
+            Err(e) => Err(format!("Failed to initialize faucet: {}", e)),
+        }
     }
 
     /// Get the process manager

@@ -13,6 +13,9 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Standard gas limit for simple token transfer
+const STANDARD_TRANSFER_GAS: u64 = 21000;
+
 /// Faucet errors
 #[derive(Debug, Error)]
 pub enum FaucetError {
@@ -60,9 +63,48 @@ impl Default for FaucetConfig {
             private_key: String::new(),
             node_rpc_host: "127.0.0.1".to_string(),
             node_rpc_port: 8545,
-            require_captcha: true,
+            require_captcha: false,             // Disabled by default (not implemented)
             max_recipient_balance: Some(10_000_000_000), // 10 CELL max balance
         }
+    }
+}
+
+impl FaucetConfig {
+    /// Validate the configuration fields
+    pub fn validate(&self) -> Result<(), FaucetError> {
+        if self.amount_per_request == 0 {
+            return Err(FaucetError::ConfigError(
+                "amount_per_request must be greater than 0".to_string()
+            ));
+        }
+        if self.rate_limit_seconds == 0 {
+            return Err(FaucetError::ConfigError(
+                "rate_limit_seconds must be greater than 0".to_string()
+            ));
+        }
+        if self.max_requests_per_day == 0 {
+            return Err(FaucetError::ConfigError(
+                "max_requests_per_day must be greater than 0".to_string()
+            ));
+        }
+        if self.private_key.is_empty() {
+            return Err(FaucetError::ConfigError(
+                "private_key must be set".to_string()
+            ));
+        }
+        // Validate private key format (hex string, with or without 0x prefix)
+        let key = self.private_key.trim_start_matches("0x");
+        if key.len() != 64 || !key.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(FaucetError::ConfigError(
+                "private_key must be a 64-character hex string (with or without 0x prefix)".to_string()
+            ));
+        }
+        if self.require_captcha {
+            return Err(FaucetError::ConfigError(
+                "CAPTCHA verification is not implemented. Set require_captcha to false.".to_string()
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -91,6 +133,12 @@ struct RateLimitInfo {
     requests_today: Vec<u64>,
 }
 
+/// Maximum number of requests to keep in history
+const MAX_HISTORY_SIZE: usize = 10_000;
+
+/// Threshold for cleaning up old rate limit entries (30 days)
+const CLEANUP_THRESHOLD_SECONDS: u64 = 30 * 86400;
+
 /// Faucet service
 pub struct FaucetService {
     config: Arc<RwLock<FaucetConfig>>,
@@ -100,12 +148,15 @@ pub struct FaucetService {
 
 impl FaucetService {
     /// Create a new faucet service
-    pub fn new(config: FaucetConfig) -> Self {
-        Self {
+    pub fn new(config: FaucetConfig) -> Result<Self, FaucetError> {
+        // Validate configuration
+        config.validate()?;
+        
+        Ok(Self {
             config: Arc::new(RwLock::new(config)),
             rate_limits: Arc::new(RwLock::new(HashMap::new())),
             request_history: Arc::new(RwLock::new(Vec::new())),
-        }
+        })
     }
 
     /// Get current configuration
@@ -114,11 +165,66 @@ impl FaucetService {
     }
 
     /// Update configuration
-    pub fn update_config(&self, config: FaucetConfig) {
+    pub fn update_config(&self, config: FaucetConfig) -> Result<(), FaucetError> {
+        // Validate before updating
+        config.validate()?;
         *self.config.write() = config;
+        Ok(())
     }
 
-    /// Check if address can request tokens
+    /// Check if address can request tokens (with atomic check-and-set)
+    fn check_and_record_rate_limit(&self, address: &str, timestamp: u64) -> Result<(), FaucetError> {
+        let config = self.config.read();
+        let mut rate_limits = self.rate_limits.write();
+        
+        // Get or create rate limit info
+        let info = rate_limits.entry(address.to_string()).or_insert_with(|| {
+            RateLimitInfo {
+                last_request: 0,
+                requests_today: Vec::new(),
+            }
+        });
+        
+        // Check time-based rate limit
+        let elapsed = timestamp.saturating_sub(info.last_request);
+        if elapsed < config.rate_limit_seconds && info.last_request > 0 {
+            let remaining = config.rate_limit_seconds - elapsed;
+            return Err(FaucetError::RateLimited(remaining));
+        }
+
+        // Check daily request limit
+        let today_start = timestamp.checked_div(86400)
+            .and_then(|d| d.checked_mul(86400))
+            .unwrap_or(timestamp);
+        
+        let requests_today: Vec<_> = info.requests_today
+            .iter()
+            .filter(|&&t| t >= today_start)
+            .copied()
+            .collect();
+        
+        if requests_today.len() >= config.max_requests_per_day {
+            let next_day = today_start + 86400;
+            let remaining = next_day - timestamp;
+            return Err(FaucetError::RateLimited(remaining));
+        }
+        
+        // Record the request atomically
+        info.last_request = timestamp;
+        info.requests_today.retain(|&t| t >= today_start);
+        info.requests_today.push(timestamp);
+        
+        // Cleanup old entries periodically (every 100 requests)
+        if rate_limits.len() % 100 == 0 {
+            rate_limits.retain(|_, info| {
+                timestamp.saturating_sub(info.last_request) < CLEANUP_THRESHOLD_SECONDS
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Check if address can request tokens (read-only check)
     pub fn check_rate_limit(&self, address: &str) -> Result<(), FaucetError> {
         let config = self.config.read();
         let now = SystemTime::now()
@@ -137,8 +243,9 @@ impl FaucetService {
             }
 
             // Check daily request limit
-            // Calculate start of day in UTC (midnight)
-            let today_start = (now / 86400) * 86400; // Start of current UTC day
+            let today_start = now.checked_div(86400)
+                .and_then(|d| d.checked_mul(86400))
+                .unwrap_or(now);
             let requests_today: Vec<_> = info.requests_today
                 .iter()
                 .filter(|&&t| t >= today_start)
@@ -152,25 +259,6 @@ impl FaucetService {
         }
 
         Ok(())
-    }
-
-    /// Record a request
-    fn record_request(&self, address: &str, timestamp: u64) {
-        let mut rate_limits = self.rate_limits.write();
-        
-        let info = rate_limits.entry(address.to_string()).or_insert_with(|| {
-            RateLimitInfo {
-                last_request: 0,
-                requests_today: Vec::new(),
-            }
-        });
-
-        info.last_request = timestamp;
-        
-        // Clean up old requests (keep only today's in UTC)
-        let today_start = (timestamp / 86400) * 86400; // Start of current UTC day
-        info.requests_today.retain(|&t| t >= today_start);
-        info.requests_today.push(timestamp);
     }
 
     /// Get faucet balance
@@ -264,25 +352,19 @@ impl FaucetService {
         // Check CAPTCHA if required
         let config = self.config.read().clone();
         if config.require_captcha {
-            // CAPTCHA validation
-            // In production, validate against reCAPTCHA or hCaptcha service
-            // For now, if CAPTCHA is required but not provided, return error
-            if captcha_response.is_none() || captcha_response.unwrap().is_empty() {
-                return Err(FaucetError::InvalidCaptcha);
-            }
-            
-            // TODO: Implement actual CAPTCHA verification
-            // Example for reCAPTCHA:
-            // self.verify_recaptcha(captcha_response.unwrap()).await?;
-            //
-            // Example for hCaptcha:
-            // self.verify_hcaptcha(captcha_response.unwrap()).await?;
-            
-            tracing::warn!("CAPTCHA validation not fully implemented - accepting all CAPTCHA responses");
+            // CAPTCHA validation is not implemented. Return error to prevent false security.
+            return Err(FaucetError::ConfigError(
+                "CAPTCHA verification is not implemented. Disable require_captcha or implement verification first.".to_string()
+            ));
         }
 
-        // Check rate limit
-        self.check_rate_limit(address)?;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Atomically check and record rate limit (prevents TOCTOU race condition)
+        self.check_and_record_rate_limit(address, timestamp)?;
 
         // Check recipient balance if configured
         if let Some(max_balance) = config.max_recipient_balance {
@@ -301,16 +383,8 @@ impl FaucetService {
             return Err(FaucetError::InsufficientBalance);
         }
 
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
         // Send tokens
         let tx_hash = self.send_tokens(address, config.amount_per_request).await?;
-
-        // Record the request
-        self.record_request(address, timestamp);
 
         // Create request record
         let request = FaucetRequest {
@@ -321,8 +395,12 @@ impl FaucetService {
             status: RequestStatus::Completed,
         };
 
-        // Add to history
-        self.request_history.write().push(request.clone());
+        // Add to history with bounded size
+        let mut history = self.request_history.write();
+        history.push(request.clone());
+        if history.len() > MAX_HISTORY_SIZE {
+            history.remove(0);
+        }
 
         Ok(request)
     }
@@ -458,7 +536,7 @@ impl FaucetService {
             from_address.clone(),
             to_address.to_string(),
             amount,
-            21000, // Standard gas fee
+            STANDARD_TRANSFER_GAS,
             nonce,
         );
 
@@ -513,10 +591,18 @@ pub struct FaucetStats {
 mod tests {
     use super::*;
 
+    fn create_test_config() -> FaucetConfig {
+        FaucetConfig {
+            private_key: "1234567890123456789012345678901234567890123456789012345678901234".to_string(),
+            require_captcha: false,
+            ..Default::default()
+        }
+    }
+
     #[test]
     fn test_validate_address() {
-        let config = FaucetConfig::default();
-        let service = FaucetService::new(config);
+        let config = create_test_config();
+        let service = FaucetService::new(config).expect("Failed to create service");
 
         // Valid address
         assert!(service.validate_address("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0").is_ok());
@@ -532,25 +618,46 @@ mod tests {
     }
 
     #[test]
+    fn test_config_validation() {
+        // Valid config
+        let valid_config = create_test_config();
+        assert!(FaucetService::new(valid_config).is_ok());
+
+        // Invalid: amount is 0
+        let mut invalid = create_test_config();
+        invalid.amount_per_request = 0;
+        assert!(FaucetService::new(invalid).is_err());
+
+        // Invalid: CAPTCHA enabled
+        let mut invalid = create_test_config();
+        invalid.require_captcha = true;
+        assert!(FaucetService::new(invalid).is_err());
+
+        // Invalid: bad private key
+        let mut invalid = create_test_config();
+        invalid.private_key = "short".to_string();
+        assert!(FaucetService::new(invalid).is_err());
+    }
+
+    #[test]
     fn test_rate_limiting() {
-        let config = FaucetConfig {
-            rate_limit_seconds: 60,
-            max_requests_per_day: 3,
-            ..Default::default()
-        };
-        let service = FaucetService::new(config);
+        let mut config = create_test_config();
+        config.rate_limit_seconds = 60;
+        config.max_requests_per_day = 3;
+        
+        let service = FaucetService::new(config).expect("Failed to create service");
 
         let address = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0";
 
         // First request should be allowed
         assert!(service.check_rate_limit(address).is_ok());
 
-        // Record request
+        // Atomically check and record
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        service.record_request(address, timestamp);
+        assert!(service.check_and_record_rate_limit(address, timestamp).is_ok());
 
         // Second immediate request should be rate limited
         assert!(matches!(
@@ -561,12 +668,11 @@ mod tests {
 
     #[test]
     fn test_daily_request_limit() {
-        let config = FaucetConfig {
-            rate_limit_seconds: 1, // Very short for testing
-            max_requests_per_day: 2,
-            ..Default::default()
-        };
-        let service = FaucetService::new(config);
+        let mut config = create_test_config();
+        config.rate_limit_seconds = 1; // Very short for testing
+        config.max_requests_per_day = 2;
+        
+        let service = FaucetService::new(config).expect("Failed to create service");
 
         let address = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0";
         let base_time = SystemTime::now()
@@ -575,8 +681,8 @@ mod tests {
             .as_secs();
 
         // Record 2 requests
-        service.record_request(address, base_time);
-        service.record_request(address, base_time + 2);
+        assert!(service.check_and_record_rate_limit(address, base_time).is_ok());
+        assert!(service.check_and_record_rate_limit(address, base_time + 2).is_ok());
 
         // Third request should exceed daily limit
         assert!(matches!(
@@ -587,8 +693,8 @@ mod tests {
 
     #[test]
     fn test_get_stats() {
-        let config = FaucetConfig::default();
-        let service = FaucetService::new(config);
+        let config = create_test_config();
+        let service = FaucetService::new(config).expect("Failed to create service");
 
         // Add some requests
         let now = SystemTime::now()

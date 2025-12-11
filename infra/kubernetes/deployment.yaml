@@ -5,6 +5,16 @@ metadata:
   labels:
     name: bitcell-production
 ---
+# Note: This deployment file uses ${VARIABLE} syntax for configuration flexibility.
+# Before applying, preprocess with one of these methods:
+# 1. envsubst: export STORAGE_CLASS=gp3 && envsubst < deployment.yaml | kubectl apply -f -
+# 2. Helm: Use as template with values.yaml
+# 3. Kustomize: Use with configMapGenerator for variables
+# Default storage classes if not preprocessed:
+#   AWS: gp2/gp3
+#   GCP: pd-ssd
+#   Azure: managed-premium
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:

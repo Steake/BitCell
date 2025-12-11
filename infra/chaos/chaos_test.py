@@ -8,9 +8,8 @@ import argparse
 import subprocess
 import time
 import requests
-import random
 import sys
-from typing import List, Dict, Optional
+from typing import List, Dict, Any
 from dataclasses import dataclass
 from enum import Enum
 
@@ -30,7 +29,7 @@ class TestResult:
     passed: bool
     duration: float
     details: str
-    metrics: Dict[str, any]
+    metrics: Dict[str, Any]
 
 class ChaosTestFramework:
     def __init__(self, compose_file: str = "infra/docker/docker-compose.yml"):
@@ -50,7 +49,7 @@ class ChaosTestFramework:
         except:
             return False
     
-    def get_prometheus_metrics(self) -> Dict[str, any]:
+    def get_prometheus_metrics(self) -> Dict[str, Any]:
         """Fetch current metrics from Prometheus"""
         try:
             response = requests.get("http://localhost:9999/api/v1/query", params={
@@ -62,7 +61,8 @@ class ChaosTestFramework:
                     "nodes_up": len([r for r in data.get("data", {}).get("result", []) if r["value"][1] == "1"]),
                     "total_nodes": len(data.get("data", {}).get("result", []))
                 }
-        except:
+        except requests.RequestException:
+            # Ignore exceptions if Prometheus is unavailable or request fails
             pass
         return {"nodes_up": 0, "total_nodes": 0}
     
@@ -201,7 +201,6 @@ class ChaosTestFramework:
             # This would use iptables or tc to create network partitions
             # For Docker, we can simulate by pausing containers
             # Note: Container names from docker-compose match the service name
-            nodes_group_a = ["node-us-east-1", "node-us-west-1"]
             nodes_group_b = ["node-eu-central-1", "node-ap-southeast-1"]
             
             print("Creating network partition...")
@@ -348,7 +347,7 @@ class ChaosTestFramework:
         print("\nVerifying infrastructure...")
         try:
             self.run_command(["docker-compose", "-f", self.compose_file, "ps"])
-        except:
+        except subprocess.CalledProcessError:
             print("ERROR: Infrastructure not running. Start with: docker-compose up -d")
             sys.exit(1)
         

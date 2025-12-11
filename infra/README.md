@@ -43,7 +43,7 @@ docker-compose ps
 
 ### Access Monitoring
 
-- **Grafana**: http://localhost:3000 (admin/bitcell123)
+- **Grafana**: http://localhost:3000 (admin/<your-password>)
 - **Prometheus**: http://localhost:9999
 - **Alertmanager**: http://localhost:9093
 - **HAProxy Stats**: http://localhost:8404

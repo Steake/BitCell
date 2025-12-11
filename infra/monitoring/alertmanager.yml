@@ -2,6 +2,9 @@ global:
   # Slack webhook for alerts
   # Configure via environment variable: SLACK_API_URL
   # Example: export SLACK_API_URL='https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+  # Note: Environment variable substitution requires preprocessing with envsubst before loading:
+  #   envsubst < alertmanager.yml | docker exec -i alertmanager /bin/alertmanager --config.file=/dev/stdin
+  # Or use Docker Compose variable substitution (double dollar $$ to escape)
   slack_api_url: '${SLACK_API_URL:-}'
   
   # Default route settings

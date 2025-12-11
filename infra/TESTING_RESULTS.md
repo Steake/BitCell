@@ -102,7 +102,7 @@
 - Regional health table
 
 **Access**: http://localhost:3000
-**Credentials**: admin / bitcell123
+**Credentials**: admin / <your-password>
 
 ### 4. Alerting ✅
 
@@ -333,7 +333,7 @@ curl http://localhost:9999/api/v1/targets | jq '.data.activeTargets[] | {job, he
 
 **Manual Access**:
 1. Navigate to http://localhost:3000
-2. Login: admin / bitcell123
+2. Login: admin / <your-password>
 3. View dashboards in default folder
 
 ## Security Considerations

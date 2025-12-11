@@ -60,6 +60,9 @@ cd BitCell
 # Build node image
 docker build -f infra/docker/Dockerfile -t bitcell-node:latest .
 
+# Set required environment variables
+export GRAFANA_ADMIN_PASSWORD='your-secure-password-here'
+
 # Start infrastructure
 cd infra/docker
 docker-compose up -d
@@ -70,7 +73,7 @@ docker-compose ps
 
 #### Access Services
 
-- **Grafana**: http://localhost:3000 (admin/bitcell123)
+- **Grafana**: http://localhost:3000 (admin/<your-password>)
 - **Prometheus**: http://localhost:9999
 - **Alertmanager**: http://localhost:9093
 - **HAProxy Stats**: http://localhost:8404

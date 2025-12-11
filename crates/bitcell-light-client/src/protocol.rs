@@ -130,6 +130,10 @@ impl LightClientProtocol {
         start: u64,
         end: u64,
     ) -> GetHeadersRequest {
+        if end < start {
+            return GetHeadersRequest::new(start, start, 1);
+        }
+        
         let count = std::cmp::min(
             (end - start + 1) as usize,
             self.max_headers_per_request

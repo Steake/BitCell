@@ -12,28 +12,22 @@ repository.workspace = true
 bitcell-consensus = { path = "../bitcell-consensus" }
 bitcell-crypto = { path = "../bitcell-crypto" }
 bitcell-network = { path = "../bitcell-network" }
-bitcell-state = { path = "../bitcell-state" }
 
 # Serialization
 serde = { workspace = true }
-serde_json = { workspace = true }
 bincode = { workspace = true }
 
 # Error handling
 thiserror = { workspace = true }
-anyhow = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true }
-async-trait = { workspace = true }
 
 # Logging
 tracing = { workspace = true }
 
 # Utilities
 parking_lot = { workspace = true }
-dashmap = { workspace = true }
-bytes = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

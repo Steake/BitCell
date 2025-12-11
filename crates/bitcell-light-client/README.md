@@ -62,6 +62,7 @@ Provides wallet functionality using only headers and proofs:
 ```rust
 use bitcell_light_client::*;
 use bitcell_crypto::SecretKey;
+use parking_lot::RwLock;
 use std::sync::Arc;
 
 // Create header chain with genesis
@@ -119,7 +120,7 @@ let proof_req = StateProofRequest::balance(block_height, account_address);
 let header = header_chain.get_header(block_height).unwrap();
 proof.verify(&header.state_root)?;
 
-// Extract balance from proof
+// Extract balance from proof (only if verification succeeded)
 let balance = proof.extract_balance()?;
 ```
 
@@ -169,11 +170,11 @@ The light client communicates with full nodes using the following message types:
 
 The light client maintains security through:
 
-1. **Header Validation**: All headers are validated for:
+1. **Header Validation**: All headers are currently validated for:
    - Correct parent hash linkage
-   - Valid VRF proofs
    - Increasing timestamps
-   - Correct work calculations
+
+   > **Warning:** Validation of VRF proofs and work calculations is **not yet implemented**. Until these checks are added, the light client is vulnerable to malicious peers providing invalid headers and state roots. Do **not** use in production or trust state proofs from untrusted sources.
 
 2. **Merkle Proof Verification**: All state queries are verified against the state root in validated headers
 

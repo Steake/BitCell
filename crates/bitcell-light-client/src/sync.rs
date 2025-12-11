@@ -81,7 +81,7 @@ impl HeaderSync {
             return 1.0;
         }
         
-        (current as f64) / (target as f64)
+        ((current as f64) / (target as f64)).min(1.0)
     }
     
     /// Start syncing to a target height
@@ -100,7 +100,10 @@ impl HeaderSync {
         *self.status.write() = SyncStatus::SyncingHeaders;
         self.sync_remaining_headers(target_height).await?;
         
-        *self.status.write() = SyncStatus::Synced;
+        // Only mark as synced if we actually reached the target
+        if self.header_chain.tip_height() >= target_height {
+            *self.status.write() = SyncStatus::Synced;
+        }
         Ok(())
     }
     

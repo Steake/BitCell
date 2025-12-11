@@ -92,7 +92,10 @@ pub struct StateProof {
 
 impl StateProof {
     /// Verify the proof against a state root
-    pub fn verify(&self, expected_state_root: &Hash256) -> Result<bool> {
+    /// 
+    /// Returns Ok(()) if the proof is valid and the key exists (or doesn't exist as claimed).
+    /// Returns Err if the state root mismatches or the Merkle proof is invalid.
+    pub fn verify(&self, expected_state_root: &Hash256) -> Result<()> {
         // Check state root matches
         if self.state_root != *expected_state_root {
             return Err(Error::InvalidProof(
@@ -107,11 +110,13 @@ impl StateProof {
         );
         
         if !valid {
-            return Ok(false);
+            return Err(Error::InvalidProof(
+                "merkle proof verification failed".to_string()
+            ));
         }
         
-        // If proof is valid, check if it proves existence or non-existence
-        Ok(self.exists)
+        // Proof is valid
+        Ok(())
     }
     
     /// Extract balance from a balance proof
@@ -182,7 +187,7 @@ pub struct BatchProofResponse {
 
 impl BatchProofResponse {
     /// Verify all proofs in the batch
-    pub fn verify_all(&self, state_root: &Hash256) -> Result<Vec<bool>> {
+    pub fn verify_all(&self, state_root: &Hash256) -> Result<Vec<()>> {
         self.proofs
             .iter()
             .map(|proof| proof.verify(state_root))

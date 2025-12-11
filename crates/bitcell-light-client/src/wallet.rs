@@ -53,7 +53,8 @@ pub struct LightWallet {
     /// Header chain for state root verification
     header_chain: Arc<HeaderChain>,
     
-    /// Protocol handler for network communication
+    /// Protocol handler for network communication (reserved for future use)
+    #[allow(dead_code)]
     protocol: Arc<LightClientProtocol>,
     
     /// Cached account info
@@ -121,14 +122,14 @@ impl LightWallet {
         if let Some(info) = self.account_cache.read().get(account) {
             // Cache is valid if it's from a recent block
             let tip = self.header_chain.tip_height();
-            if tip - info.last_updated < 10 {
+            if tip.saturating_sub(info.last_updated) < 10 {
                 return Ok(info.balance);
             }
         }
         
         // Need to request proof from full node
         let tip_height = self.header_chain.tip_height();
-        let request = StateProofRequest::balance(tip_height, account.as_bytes());
+        let _request = StateProofRequest::balance(tip_height, account.as_bytes());
         
         // In a real implementation, this would send the request over the network
         // For now, we return an error indicating network communication is needed
@@ -149,6 +150,9 @@ impl LightWallet {
         // Extract account info based on proof type
         if let Ok(balance) = proof.extract_balance() {
             let mut key_bytes = [0u8; 33];
+            if proof.request.key.len() != 33 {
+                return Err(Error::InvalidProof("invalid key length for public key".to_string()));
+            }
             key_bytes.copy_from_slice(&proof.request.key);
             let account_key = PublicKey::from_bytes(key_bytes)?;
             
@@ -160,6 +164,10 @@ impl LightWallet {
             });
             
             info.balance = balance;
+            // Try to extract and update nonce if available
+            if let Ok(nonce) = proof.extract_nonce() {
+                info.nonce = nonce;
+            }
             info.last_updated = proof.request.block_height;
         }
         
@@ -171,7 +179,7 @@ impl LightWallet {
         // Check cache
         if let Some(info) = self.account_cache.read().get(&self.public_key) {
             let tip = self.header_chain.tip_height();
-            if tip - info.last_updated < 10 {
+            if tip.saturating_sub(info.last_updated) < 10 {
                 return Ok(info.nonce);
             }
         }
@@ -272,9 +280,9 @@ impl LightWallet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{HeaderChainConfig, proofs::StateProofType};
+    use crate::{HeaderChainConfig};
     use bitcell_consensus::BlockHeader;
-    use bitcell_crypto::{Hash256, SecretKey, merkle::MerkleProof};
+    use bitcell_crypto::{Hash256, SecretKey};
 
     fn create_genesis() -> BlockHeader {
         BlockHeader {

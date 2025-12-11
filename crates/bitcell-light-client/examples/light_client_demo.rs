@@ -5,7 +5,7 @@
 
 use bitcell_light_client::{
     HeaderChain, HeaderChainConfig, CheckpointManager, HeaderSync,
-    LightWallet, WalletMode, LightClientProtocol, Checkpoint,
+    LightWallet, LightClientProtocol, Checkpoint,
 };
 use bitcell_consensus::BlockHeader;
 use bitcell_crypto::{SecretKey, Hash256};

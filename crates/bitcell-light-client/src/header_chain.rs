@@ -118,7 +118,9 @@ impl HeaderChain {
         }
         
         // Calculate total work up to this height
-        let parent_work = self.total_work.read().get(&(height - 1)).copied()
+        let parent_height = height.checked_sub(1)
+            .ok_or_else(|| Error::InvalidHeader("invalid height (underflow)".to_string()))?;
+        let parent_work = self.total_work.read().get(&parent_height).copied()
             .ok_or_else(|| Error::InvalidHeader("missing parent work".to_string()))?;
         let new_total_work = parent_work + header.work;
         
@@ -150,7 +152,9 @@ impl HeaderChain {
         }
         
         // Verify parent exists
-        let parent = self.get_header(header.height - 1)
+        let parent_height = header.height.checked_sub(1)
+            .ok_or_else(|| Error::InvalidHeader("cannot get parent of genesis header".to_string()))?;
+        let parent = self.get_header(parent_height)
             .ok_or_else(|| Error::InvalidHeader("missing parent header".to_string()))?;
         
         // Check parent hash

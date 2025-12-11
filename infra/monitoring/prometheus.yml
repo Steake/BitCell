@@ -1,0 +1,68 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'bitcell-production'
+    monitor: 'bitcell-monitor'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - 'alerts.yml'
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # BitCell nodes - US East region
+  - job_name: 'bitcell-us-east'
+    static_configs:
+      - targets:
+          - 'node-us-east-1:9090'
+          - 'node-us-east-2:9091'
+        labels:
+          region: 'us-east'
+          zone: 'us-east-1'
+
+  # BitCell nodes - US West region
+  - job_name: 'bitcell-us-west'
+    static_configs:
+      - targets:
+          - 'node-us-west-1:9092'
+          - 'node-us-west-2:9093'
+        labels:
+          region: 'us-west'
+          zone: 'us-west-1'
+
+  # BitCell nodes - EU Central region
+  - job_name: 'bitcell-eu-central'
+    static_configs:
+      - targets:
+          - 'node-eu-central-1:9094'
+          - 'node-eu-central-2:9095'
+        labels:
+          region: 'eu-central'
+          zone: 'eu-central-1'
+
+  # BitCell nodes - AP Southeast region
+  - job_name: 'bitcell-ap-southeast'
+    static_configs:
+      - targets:
+          - 'node-ap-southeast-1:9096'
+        labels:
+          region: 'ap-southeast'
+          zone: 'ap-southeast-1'
+
+  # HAProxy stats
+  - job_name: 'haproxy'
+    static_configs:
+      - targets: ['haproxy:8404']

@@ -35,7 +35,6 @@ pub struct MetricsRegistry {
     // EBSL metrics
     active_miners: Arc<AtomicUsize>,
     banned_miners: Arc<AtomicUsize>,
-    #[allow(dead_code)]
     avg_trust_score: Arc<AtomicU64>, // Stored as fixed-point * 1000
     slashing_events: Arc<AtomicU64>,
     
@@ -188,7 +187,7 @@ impl MetricsRegistry {
         // Store as fixed-point * 1000 for atomic operations
         // Trust scores are typically in range [0.0, 1.0], so this provides
         // 3 decimal places of precision without overflow risk
-        let clamped_score = score.clamp(0.0, 1000.0);
+        let clamped_score = score.clamp(0.0, 1.0);
         let fixed_point = (clamped_score * 1000.0) as u64;
         self.avg_trust_score.store(fixed_point, Ordering::Relaxed);
     }

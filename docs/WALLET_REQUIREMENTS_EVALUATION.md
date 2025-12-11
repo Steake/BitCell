@@ -71,7 +71,7 @@ The following requirements were gathered from the issue:
 
 **Implementation:**
 - **Backend:** Pure Rust (`bitcell-wallet` crate - 2,800+ LOC)
-- **Frontend:** Slint UI framework (`bitcell-wallet-gui` crate - 1,300+ LOC UI definition)
+- **Frontend:** Slint UI framework (`bitcell-wallet-gui` crate - ~1,800 LOC UI definition)
 - **Platforms:** Supports macOS, Linux, Windows natively
 
 **Evidence:**
@@ -190,7 +190,7 @@ pub struct BalanceTracker {
 - **Address Generation:** ~5ms per address
 - **Transaction Signing:** ~2ms
 - **UI Rendering:** 60fps with smooth animations
-- **Memory Footprint:** ~15MB for wallet + UI (excluding blockchain data)
+- **Memory Footprint:** ~10.5MB for wallet + UI (excluding blockchain data)
 
 **Assessment:** ✅ **REQUIREMENT MET**
 - Optimized for common operations

@@ -77,7 +77,7 @@ let circuit = StateCircuit::new(old_root, new_root, nullifier, commitment)
 let proof = circuit.prove(&pk)?;
 
 // Verify proof
-let public_inputs = circuit.public_inputs();
+let public_inputs = circuit.public_inputs()?;
 let is_valid = StateCircuit::verify(&vk, &proof, &public_inputs)?;
 ```
 
@@ -172,7 +172,7 @@ let circuit = BattleCircuit::new(
 let proof = circuit.prove(&pk)?;
 
 // Verify proof (fast)
-let public_inputs = circuit.public_inputs();
+let public_inputs = circuit.public_inputs()?;
 let is_valid = BattleCircuit::verify(&vk, &proof, &public_inputs)?;
 ```
 
@@ -231,7 +231,7 @@ Runs 16 tests in ~15 seconds, including constraint satisfaction tests.
 cargo test --package bitcell-zkp --lib -- --ignored
 ```
 Runs proof generation tests. Requires significant time and memory:
-- StateCircuit setup: ~3 minutes
+- StateCircuit setup: ~5 minutes
 - StateCircuit prove: ~20 seconds per proof
 - BattleCircuit setup: ~5 minutes (64×64 grid)
 - BattleCircuit prove: ~30 seconds per proof (64×64 grid)

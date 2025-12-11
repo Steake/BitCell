@@ -12,8 +12,8 @@
 ///    based on regional energy in the final grid state.
 ///
 /// ## Public Inputs
-/// - `initial_grid`: Flattened NxN grid at battle start (N² Fr elements)
-/// - `final_grid`: Flattened NxN grid after evolution (N² Fr elements)
+/// - `initial_grid`: Flattened NxN grid at battle start (N² u8 values, converted to Fr for circuit inputs)
+/// - `final_grid`: Flattened NxN grid after evolution (N² u8 values, converted to Fr for circuit inputs)
 /// - `commitment_a`: Commitment to player A's pattern (Fr element)
 /// - `commitment_b`: Commitment to player B's pattern (Fr element)
 /// - `winner`: Winner ID (0=A, 1=B, 2=tie)
@@ -590,7 +590,7 @@ mod tests {
     }
     
     #[test]
-    #[ignore] // Expensive test - requires 3+ minutes for setup with 64x64 grid
+    #[ignore] // Expensive test - requires ~5 minutes for setup with 64x64 grid
     fn test_battle_circuit_setup() {
         let result = BattleCircuit::<Fr>::setup();
         assert!(result.is_ok(), "BattleCircuit setup should succeed");
@@ -643,13 +643,14 @@ mod tests {
         // based on regional energy in the final grid
         let (pk, vk) = BattleCircuit::<Fr>::setup().expect("Setup should succeed");
         
-        // Create a grid where region A (left half) has more alive cells
+        // Create a grid where region A (top-left quadrant) has more alive cells
         let initial_grid = vec![vec![0u8; GRID_SIZE]; GRID_SIZE];
         let mut final_grid = vec![vec![0u8; GRID_SIZE]; GRID_SIZE];
         
-        // Set some cells alive in left half (player A's region)
+        // Set some cells alive in top-left quadrant (player A's region)
+        // Region A is rows 0..GRID_SIZE/2, cols 0..GRID_SIZE/2
         for i in 0..GRID_SIZE/2 {
-            for j in 0..GRID_SIZE {
+            for j in 0..GRID_SIZE/2 {
                 if (i + j) % 3 == 0 {
                     final_grid[i][j] = 255;
                 }
@@ -661,9 +662,16 @@ mod tests {
         let nonce_a = Fr::from(1u64);
         let nonce_b = Fr::from(2u64);
         
-        // Compute commitments (simplified scheme)
-        let commitment_a = Fr::from(1u64); // Would be computed from pattern + nonce
-        let commitment_b = Fr::from(2u64);
+        // Compute actual commitments using the circuit's hash function
+        // H(pattern || nonce) = sum of (bit_value * (bit_index + 1))
+        // Pattern has 3*3*8 = 72 bits (all zero)
+        // Nonce has 254 bits
+        // For nonce_a = 1: bit 0 is 1, rest are 0
+        // commitment_a = 1 * (72 + 1) = 73
+        let commitment_a = Fr::from(73u64);
+        // For nonce_b = 2: bit 1 is 1, rest are 0
+        // commitment_b = 1 * (72 + 2) = 74
+        let commitment_b = Fr::from(74u64);
         
         // Player A wins (winner = 0)
         let circuit = BattleCircuit::new(

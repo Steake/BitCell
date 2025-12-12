@@ -298,4 +298,225 @@ mod tests {
         let seed = combine_ecvrf_outputs(&[out1, out2]);
         assert_ne!(seed, Hash256::zero());
     }
+
+    /// Test vector 1: Fixed key produces deterministic output
+    /// This test vector can be used to verify implementation consistency
+    #[test]
+    fn test_vector_deterministic_fixed_key() {
+        // Create a deterministic key from fixed bytes
+        let scalar_bytes = [
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
+        ];
+        let scalar = Scalar::from_bytes_mod_order(scalar_bytes);
+        let sk = EcvrfSecretKey::from_scalar(scalar);
+        let pk = sk.public_key();
+
+        // Test with a specific message
+        let message = b"BitCell_ECVRF_TestVector_1";
+        let (output1, proof1) = sk.prove(message);
+        
+        // Verify the proof
+        let verified_output = proof1.verify(&pk, message)
+            .expect("Test vector proof should verify");
+        assert_eq!(output1, verified_output);
+
+        // Generate again with same key and message - should be identical
+        let (output2, _proof2) = sk.prove(message);
+        assert_eq!(output1, output2, "VRF output must be deterministic");
+
+        // Different message should produce different output
+        let (output3, _) = sk.prove(b"different_message");
+        assert_ne!(output1, output3, "Different messages must produce different outputs");
+    }
+
+    /// Test vector 2: VRF chaining for block proposer selection
+    /// Simulates the blockchain use case where each block's VRF uses the previous output
+    #[test]
+    fn test_vector_vrf_chaining() {
+        let sk = EcvrfSecretKey::generate();
+        let pk = sk.public_key();
+
+        // Genesis block: use fixed seed
+        let genesis_seed = b"BitCell_Genesis_Block_Seed";
+        let (output0, proof0) = sk.prove(genesis_seed);
+        
+        // Verify genesis proof
+        let verified0 = proof0.verify(&pk, genesis_seed)
+            .expect("Genesis VRF should verify");
+        assert_eq!(output0, verified0);
+
+        // Block 1: use genesis VRF output as input
+        let (output1, proof1) = sk.prove(output0.as_bytes());
+        let verified1 = proof1.verify(&pk, output0.as_bytes())
+            .expect("Block 1 VRF should verify");
+        assert_eq!(output1, verified1);
+
+        // Block 2: use block 1 VRF output as input
+        let (output2, proof2) = sk.prove(output1.as_bytes());
+        let verified2 = proof2.verify(&pk, output1.as_bytes())
+            .expect("Block 2 VRF should verify");
+        assert_eq!(output2, verified2);
+
+        // Verify outputs are all different (non-trivial chaining)
+        assert_ne!(output0, output1);
+        assert_ne!(output1, output2);
+        assert_ne!(output0, output2);
+
+        // Verify determinism: regenerating the chain produces same outputs
+        let (output0_again, _) = sk.prove(genesis_seed);
+        assert_eq!(output0, output0_again);
+        
+        let (output1_again, _) = sk.prove(output0_again.as_bytes());
+        assert_eq!(output1, output1_again);
+        
+        let (output2_again, _) = sk.prove(output1_again.as_bytes());
+        assert_eq!(output2, output2_again);
+    }
+
+    /// Test vector 3: Multiple proposers
+    /// Verifies that different validators produce different VRF outputs
+    #[test]
+    fn test_vector_multiple_proposers() {
+        // Create 3 different validator keys
+        let sk1 = EcvrfSecretKey::generate();
+        let sk2 = EcvrfSecretKey::generate();
+        let sk3 = EcvrfSecretKey::generate();
+
+        let pk1 = sk1.public_key();
+        let pk2 = sk2.public_key();
+        let pk3 = sk3.public_key();
+
+        // All validators use the same block hash as VRF input
+        let block_hash = b"shared_block_hash_for_proposer_selection";
+
+        // Each validator generates their VRF proof
+        let (output1, proof1) = sk1.prove(block_hash);
+        let (output2, proof2) = sk2.prove(block_hash);
+        let (output3, proof3) = sk3.prove(block_hash);
+
+        // Verify all proofs
+        let verified1 = proof1.verify(&pk1, block_hash)
+            .expect("Validator 1 proof should verify");
+        let verified2 = proof2.verify(&pk2, block_hash)
+            .expect("Validator 2 proof should verify");
+        let verified3 = proof3.verify(&pk3, block_hash)
+            .expect("Validator 3 proof should verify");
+
+        assert_eq!(output1, verified1);
+        assert_eq!(output2, verified2);
+        assert_eq!(output3, verified3);
+
+        // Different validators produce different outputs for same input
+        assert_ne!(output1, output2);
+        assert_ne!(output2, output3);
+        assert_ne!(output1, output3);
+
+        // Wrong key cannot verify another validator's proof
+        assert!(proof1.verify(&pk2, block_hash).is_err(),
+                "Validator 2 key should not verify Validator 1's proof");
+        assert!(proof2.verify(&pk3, block_hash).is_err(),
+                "Validator 3 key should not verify Validator 2's proof");
+    }
+
+    /// Test vector 4: Proof serialization roundtrip
+    /// Verifies that proofs can be serialized and deserialized correctly
+    #[test]
+    fn test_vector_proof_serialization() {
+        let sk = EcvrfSecretKey::generate();
+        let pk = sk.public_key();
+        let message = b"serialization_test_message";
+
+        let (output, proof) = sk.prove(message);
+
+        // Serialize the proof
+        let serialized = bincode::serialize(&proof)
+            .expect("Proof should serialize");
+
+        // Deserialize the proof
+        let deserialized_proof: EcvrfProof = bincode::deserialize(&serialized)
+            .expect("Proof should deserialize");
+
+        // Verify the deserialized proof produces same output
+        let verified_output = deserialized_proof.verify(&pk, message)
+            .expect("Deserialized proof should verify");
+        
+        assert_eq!(output, verified_output);
+
+        // Verify proof size is reasonable (gamma + c + s = 32 + 32 + 32 = 96 bytes minimum)
+        assert!(serialized.len() >= 96, "Proof size should be at least 96 bytes");
+        assert!(serialized.len() < 200, "Proof size should be compact (< 200 bytes)");
+    }
+
+    /// Test vector 5: Grinding resistance
+    /// Verifies that changing a single bit in the message produces a completely different output
+    #[test]
+    fn test_vector_grinding_resistance() {
+        let sk = EcvrfSecretKey::generate();
+        
+        // Original message
+        let mut message1 = vec![0u8; 32];
+        message1[0] = 0xAA;
+        
+        // Message with single bit flipped
+        let mut message2 = message1.clone();
+        message2[0] = 0xAB; // Changed from 0xAA to 0xAB (1 bit flip)
+
+        let (output1, _) = sk.prove(&message1);
+        let (output2, _) = sk.prove(&message2);
+
+        // Even a single bit change should produce completely different output
+        // (avalanche effect)
+        assert_ne!(output1, output2);
+
+        // Count differing bits to ensure good avalanche effect
+        let mut diff_bits = 0;
+        for i in 0..32 {
+            diff_bits += (output1.as_bytes()[i] ^ output2.as_bytes()[i]).count_ones();
+        }
+        
+        // With good cryptographic hashing, about 50% of bits should differ
+        // We check for at least 25% to be conservative
+        assert!(diff_bits >= 64, 
+                "Single bit change should affect many output bits (avalanche effect), got {} differing bits", 
+                diff_bits);
+    }
+
+    /// Test vector 6: Non-malleability
+    /// Verifies that proof components cannot be tampered with
+    #[test]
+    fn test_vector_non_malleability() {
+        let sk = EcvrfSecretKey::generate();
+        let pk = sk.public_key();
+        let message = b"non_malleability_test";
+
+        let (_output, mut proof) = sk.prove(message);
+
+        // Try to tamper with gamma
+        let original_gamma = proof.gamma;
+        proof.gamma[0] ^= 0x01; // Flip one bit
+        assert!(proof.verify(&pk, message).is_err(),
+                "Tampered gamma should fail verification");
+        proof.gamma = original_gamma; // Restore
+
+        // Try to tamper with c (challenge)
+        let original_c = proof.c;
+        proof.c[0] ^= 0x01;
+        assert!(proof.verify(&pk, message).is_err(),
+                "Tampered challenge should fail verification");
+        proof.c = original_c; // Restore
+
+        // Try to tamper with s (response)
+        let original_s = proof.s;
+        proof.s[0] ^= 0x01;
+        assert!(proof.verify(&pk, message).is_err(),
+                "Tampered response should fail verification");
+        proof.s = original_s; // Restore
+
+        // Original proof should still verify after restoration
+        assert!(proof.verify(&pk, message).is_ok(),
+                "Restored proof should verify");
+    }
 }

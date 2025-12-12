@@ -568,7 +568,7 @@ impl NetworkManager {
     
     /// Broadcast a block to all connected peers
     pub async fn broadcast_block(&self, block: &Block) -> Result<()> {
-        // Broadcast via TCP
+        // Broadcast via TCP (full blocks for direct peers)
         let peer_ids: Vec<PublicKey> = {
             let peers = self.peers.read();
             tracing::info!("Broadcasting block {} to {} peers", block.header.height, peers.len());
@@ -584,16 +584,25 @@ impl NetworkManager {
         }
         
         self.metrics.add_bytes_sent(block_size * peer_ids.len() as u64);
+        // Update message counter for each peer we sent to
+        for _ in &peer_ids {
+            self.metrics.add_message_sent();
+        }
         
-        // Broadcast via Gossipsub
+        // Broadcast via Gossipsub using compact blocks for bandwidth efficiency
         let dht_opt = {
             let guard = self.dht.read();
             guard.clone()
         };
 
         if let Some(dht) = dht_opt {
-            if let Err(e) = dht.broadcast_block(block).await {
-                tracing::error!("Failed to broadcast block via DHT: {}", e);
+            // Use compact blocks for gossipsub (80% bandwidth savings)
+            if let Err(e) = dht.broadcast_compact_block(block).await {
+                tracing::error!("Failed to broadcast compact block via DHT: {}", e);
+                // Fallback to full block if compact fails
+                if let Err(e) = dht.broadcast_block(block).await {
+                    tracing::error!("Failed to broadcast block via DHT: {}", e);
+                }
             }
         }
         
@@ -618,6 +627,10 @@ impl NetworkManager {
         }
         
         self.metrics.add_bytes_sent(tx_size * peer_ids.len() as u64);
+        // Update message counter for each peer we sent to
+        for _ in &peer_ids {
+            self.metrics.add_message_sent();
+        }
         
         // Broadcast via Gossipsub
         let dht_opt = {
@@ -648,6 +661,7 @@ impl NetworkManager {
     pub async fn handle_incoming_block(&self, block: Block) -> Result<()> {
         let block_size = bincode::serialize(&block).unwrap_or_default().len() as u64;
         self.metrics.add_bytes_received(block_size);
+        self.metrics.add_message_received();
         
         // Forward to block processing channel
         let tx_opt = {
@@ -665,6 +679,7 @@ impl NetworkManager {
     pub async fn handle_incoming_transaction(&self, tx: Transaction) -> Result<()> {
         let tx_size = bincode::serialize(&tx).unwrap_or_default().len() as u64;
         self.metrics.add_bytes_received(tx_size);
+        self.metrics.add_message_received();
         
         // Forward to transaction processing channel
         let sender_opt = {

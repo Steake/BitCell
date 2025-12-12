@@ -11,6 +11,7 @@
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use tokio::sync::mpsc;
+use libp2p::Multiaddr;
 
 use crate::messages::{Block, GliderCommit, GliderReveal, Transaction};
 use crate::peer::PeerReputation;

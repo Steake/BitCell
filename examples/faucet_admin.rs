@@ -14,37 +14,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     // Configure the faucet
-    // In production, load these from environment variables
+    // Load configuration from environment variables
     let faucet_config = FaucetConfig {
-        // Amount per request: 1 CELL (1_000_000_000 smallest units)
-        amount_per_request: 1_000_000_000,
+        // Amount per request (default: 1 CELL)
+        amount_per_request: std::env::var("FAUCET_AMOUNT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1_000_000_000),
         
-        // Rate limit: 1 hour between requests
-        rate_limit_seconds: 3600,
+        // Rate limit in seconds (default: 1 hour)
+        rate_limit_seconds: std::env::var("FAUCET_RATE_LIMIT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(3600),
         
-        // Max 5 requests per day per address
-        max_requests_per_day: 5,
+        // Max requests per day (default: 5)
+        max_requests_per_day: std::env::var("FAUCET_MAX_REQUESTS_PER_DAY")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5),
         
         // Load private key from environment (NEVER hardcode!)
         private_key: std::env::var("FAUCET_PRIVATE_KEY")
             .expect("FAUCET_PRIVATE_KEY environment variable must be set"),
         
         // Node RPC endpoint
-        node_rpc_host: std::env::var("NODE_RPC_HOST")
+        node_rpc_host: std::env::var("FAUCET_NODE_RPC_HOST")
             .unwrap_or_else(|_| "127.0.0.1".to_string()),
-        node_rpc_port: std::env::var("NODE_RPC_PORT")
+        node_rpc_port: std::env::var("FAUCET_NODE_RPC_PORT")
             .unwrap_or_else(|_| "8545".to_string())
             .parse()
-            .expect("Invalid NODE_RPC_PORT"),
+            .expect("Invalid FAUCET_NODE_RPC_PORT"),
         
-        // Enable CAPTCHA (recommended for public testnets)
+        // CAPTCHA verification (default: false - not implemented)
         require_captcha: std::env::var("FAUCET_REQUIRE_CAPTCHA")
-            .unwrap_or_else(|_| "true".to_string())
-            .parse()
-            .unwrap_or(true),
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(false),
         
-        // Maximum recipient balance: 10 CELL
-        max_recipient_balance: Some(10_000_000_000),
+        // Maximum recipient balance (default: 10 CELL)
+        max_recipient_balance: std::env::var("FAUCET_MAX_RECIPIENT_BALANCE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .map(|v: u64| if v > 0 { Some(v) } else { None })
+            .unwrap_or(Some(10_000_000_000)),
     };
 
     // Create admin console with faucet
@@ -77,14 +90,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 // ```bash
 // # Generate a new testnet wallet
 // # (In production, use bitcell-wallet or similar)
-// export FAUCET_PRIVATE_KEY="0x1234567890abcdef..."
+// export FAUCET_PRIVATE_KEY="1234567890123456789012345678901234567890123456789012345678901234"
 //
-// # Configure node RPC
-// export NODE_RPC_HOST="127.0.0.1"
-// export NODE_RPC_PORT="8545"
+// # Configure node RPC endpoint
+// export FAUCET_NODE_RPC_HOST="127.0.0.1"
+// export FAUCET_NODE_RPC_PORT="8545"
 //
-// # Optional: customize faucet settings
-// export FAUCET_REQUIRE_CAPTCHA="true"
+// # Optional: customize faucet amount and limits
+// export FAUCET_AMOUNT="1000000000"              # 1 CELL per request
+// export FAUCET_RATE_LIMIT="3600"                # 1 hour between requests
+// export FAUCET_MAX_REQUESTS_PER_DAY="5"         # 5 requests per day max
+// export FAUCET_MAX_RECIPIENT_BALANCE="10000000000"  # 10 CELL max balance
+//
+// # CAPTCHA (keep disabled - not implemented)
+// export FAUCET_REQUIRE_CAPTCHA="false"
 //
 // # Run the admin console
 // cargo run --example faucet_admin

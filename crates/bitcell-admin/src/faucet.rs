@@ -714,4 +714,22 @@ mod tests {
         assert_eq!(stats.total_requests, 1);
         assert_eq!(stats.total_distributed, 1000);
     }
+
+    #[test]
+    fn test_get_faucet_address() {
+        let config = create_test_config();
+        let service = FaucetService::new(config).expect("Failed to create service");
+        
+        // Test address derivation from private key
+        let result = service.get_faucet_address(&service.config.read().private_key);
+        assert!(result.is_ok());
+        
+        let address = result.unwrap();
+        // Address should start with 0x
+        assert!(address.starts_with("0x"));
+        // Address should be 42 characters (0x + 40 hex chars)
+        assert_eq!(address.len(), 42);
+        // Address should only contain hex characters after 0x
+        assert!(address[2..].chars().all(|c| c.is_ascii_hexdigit()));
+    }
 }

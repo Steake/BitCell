@@ -42,7 +42,7 @@ impl NetworkManager {
     /// - Noise encryption
     /// - NAT traversal support
     pub async fn new(
-        listen_addr: libp2p::Multiaddr,
+        listen_addr: Multiaddr,
         block_tx: mpsc::Sender<Block>,
         tx_tx: mpsc::Sender<Transaction>,
     ) -> Result<Self, Box<dyn Error>> {
@@ -121,7 +121,7 @@ mod tests {
         let (block_tx, _) = mpsc::channel(100);
         let (tx_tx, _) = mpsc::channel(100);
         
-        let listen_addr: libp2p::Multiaddr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
+        let listen_addr: Multiaddr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
         
         let network = NetworkManager::new(listen_addr, block_tx, tx_tx)
             .await
@@ -135,7 +135,7 @@ mod tests {
         let (block_tx, _) = mpsc::channel(100);
         let (tx_tx, _) = mpsc::channel(100);
         
-        let listen_addr: libp2p::Multiaddr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
+        let listen_addr: Multiaddr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
         let mut network = NetworkManager::new(listen_addr, block_tx, tx_tx)
             .await
             .expect("Failed to create network");
@@ -153,7 +153,7 @@ mod tests {
         let (block_tx, _) = mpsc::channel(100);
         let (tx_tx, _) = mpsc::channel(100);
         
-        let listen_addr: libp2p::Multiaddr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
+        let listen_addr: Multiaddr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
         let mut network = NetworkManager::new(listen_addr, block_tx, tx_tx)
             .await
             .expect("Failed to create network");

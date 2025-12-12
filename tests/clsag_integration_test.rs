@@ -285,7 +285,9 @@ mod tests {
                 
                 // Atomically mark as used
                 let mut ki_registry = key_images.lock().unwrap();
-                ki_registry.mark_used(*sig.key_image()).unwrap();
+                ki_registry
+                    .mark_used(*sig.key_image())
+                    .expect("Each miner should have unique key image in concurrent test");
             });
             
             handles.push(handle);

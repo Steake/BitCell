@@ -164,9 +164,9 @@ The CLSAG implementation is ready to be integrated into:
 - Key image lookup: O(1), <1μs
 
 ### Network
-- Signature size: ~1KB + (32 bytes × ring size)
-- Default ring (16): ~1.5KB per signature
-- Maximum ring (64): ~3KB per signature
+- Signature size: 64 bytes + (32 bytes × ring size)
+- Default ring (16): 576 bytes (~0.6 KB) per signature
+- Maximum ring (64): 2112 bytes (~2 KB) per signature
 
 ## Migration Notes
 

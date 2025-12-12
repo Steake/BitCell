@@ -304,10 +304,12 @@ assert_eq!(ki1, ki2); // Should always be equal
 ## Future Enhancements
 
 ### Planned for RC2
-- [ ] Persistence of key images to RocksDB
-- [ ] Chain reorganization handling for key images
 - [ ] Merkle commitment of key image set for light clients
 - [ ] Integration with tournament ZK proofs
+
+### Planned for RC2.1
+- [ ] Persistence of key images to RocksDB
+- [ ] Chain reorganization handling for key images
 
 ### Planned for RC3
 - [ ] Optimized batch verification

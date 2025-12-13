@@ -50,11 +50,15 @@ pub fn evolve_grid(grid: &Grid) -> Grid {
 
 /// Evolve grid from src into dst (avoiding allocation)
 pub fn evolve_grid_into(src: &Grid, dst: &mut Grid) {
-    let size = crate::grid::GRID_SIZE;
+    let size = src.grid_size();
     
-    // Ensure dst is correct size (should be if created with Grid::new())
-    if dst.cells.len() != src.cells.len() {
-        *dst = Grid::new();
+    // Ensure dst matches src size
+    if dst.cells.len() != src.cells.len() || dst.size != src.size {
+        *dst = Grid::with_size(if size == crate::grid::LARGE_GRID_SIZE {
+            crate::grid::GridSize::Large
+        } else {
+            crate::grid::GridSize::Standard
+        });
     }
 
     // Use parallel processing to update dst rows directly
@@ -67,7 +71,7 @@ pub fn evolve_grid_into(src: &Grid, dst: &mut Grid) {
                 
                 // Get neighbors directly to avoid 8 calls to get() overhead if possible
                 // But get() handles wrapping, so stick with it for correctness first
-                let neighbor_positions = pos.neighbors();
+                let neighbor_positions = pos.neighbors_with_size(size);
                 let neighbors = [
                     src.get(neighbor_positions[0]),
                     src.get(neighbor_positions[1]),
@@ -87,7 +91,12 @@ pub fn evolve_grid_into(src: &Grid, dst: &mut Grid) {
 /// Evolve grid for N steps
 pub fn evolve_n_steps(grid: &Grid, steps: usize) -> Grid {
     let mut current = grid.clone();
-    let mut next = Grid::new();
+    let size = grid.grid_size();
+    let mut next = if size == crate::grid::LARGE_GRID_SIZE {
+        Grid::with_size(crate::grid::GridSize::Large)
+    } else {
+        Grid::new()
+    };
     
     for _ in 0..steps {
         evolve_grid_into(&current, &mut next);

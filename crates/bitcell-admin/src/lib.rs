@@ -7,6 +7,7 @@
 //! - Testing utilities
 //! - Log aggregation and viewing
 //! - HSM integration for secure key management
+//! - Testnet faucet service
 
 pub mod api;
 pub mod web;
@@ -18,6 +19,7 @@ pub mod metrics_client;
 pub mod setup;
 pub mod system_metrics;
 pub mod hsm;
+pub mod faucet;
 pub mod auth;
 pub mod audit;
 
@@ -36,6 +38,7 @@ pub use deployment::DeploymentManager;
 pub use config::ConfigManager;
 pub use process::ProcessManager;
 pub use setup::SETUP_FILE_PATH;
+pub use faucet::FaucetService;
 
 /// Administrative console server
 pub struct AdminConsole {
@@ -47,6 +50,7 @@ pub struct AdminConsole {
     metrics_client: Arc<metrics_client::MetricsClient>,
     setup: Arc<setup::SetupManager>,
     system_metrics: Arc<system_metrics::SystemMetricsCollector>,
+    faucet: Option<Arc<FaucetService>>,
     auth: Arc<auth::AuthManager>,
     audit: Arc<audit::AuditLogger>,
 }
@@ -85,8 +89,20 @@ impl AdminConsole {
             metrics_client: Arc::new(metrics_client::MetricsClient::new()),
             setup,
             system_metrics,
+            faucet: None,
             auth,
             audit,
+        }
+    }
+
+    /// Enable faucet with configuration
+    pub fn with_faucet(mut self, faucet_config: faucet::FaucetConfig) -> Result<Self, String> {
+        match FaucetService::new(faucet_config) {
+            Ok(service) => {
+                self.faucet = Some(Arc::new(service));
+                Ok(self)
+            }
+            Err(e) => Err(format!("Failed to initialize faucet: {}", e)),
         }
     }
 
@@ -107,7 +123,12 @@ impl AdminConsole {
         // Public routes (no authentication required)
         let public_routes = Router::new()
             .route("/api/auth/login", post(api::auth::login))
-            .route("/api/auth/refresh", post(api::auth::refresh));
+            .route("/api/auth/refresh", post(api::auth::refresh))
+            // Faucet routes are intentionally public for testnet use
+            .route("/faucet", get(web::faucet::faucet_page))
+            .route("/api/faucet/request", post(api::faucet::request_tokens))
+            .route("/api/faucet/info", get(api::faucet::get_info))
+            .route("/api/faucet/check", post(api::faucet::check_eligibility));
 
         // Protected routes requiring authentication
         let protected_routes = Router::new()
@@ -130,6 +151,9 @@ impl AdminConsole {
             .route("/api/blocks/:height", get(api::blocks::get_block))
             .route("/api/blocks/:height/battles", get(api::blocks::get_block_battles))
             .route("/api/audit/logs", get(api::auth::get_audit_logs))
+            // Faucet history and stats require authentication (contain operational data)
+            .route("/api/faucet/history", get(api::faucet::get_history))
+            .route("/api/faucet/stats", get(api::faucet::get_stats))
             
             // Operator routes (can start/stop nodes, deploy)
             .route("/api/nodes/:id/start", post(api::nodes::start_node))
@@ -179,6 +203,7 @@ impl AdminConsole {
                 metrics_client: self.metrics_client.clone(),
                 setup: self.setup.clone(),
                 system_metrics: self.system_metrics.clone(),
+                faucet: self.faucet.clone(),
                 auth: self.auth.clone(),
                 audit: self.audit.clone(),
             }))
@@ -207,6 +232,7 @@ pub struct AppState {
     pub metrics_client: Arc<metrics_client::MetricsClient>,
     pub setup: Arc<setup::SetupManager>,
     pub system_metrics: Arc<system_metrics::SystemMetricsCollector>,
+    pub faucet: Option<Arc<FaucetService>>,
     pub auth: Arc<auth::AuthManager>,
     pub audit: Arc<audit::AuditLogger>,
 }

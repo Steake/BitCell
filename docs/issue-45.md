@@ -41,7 +41,7 @@ The BitCell system requires robust zero-knowledge proof circuits to ensure priva
 
 ### Technical Specifications
 
-- **Proving System**: Groth16 (via arkworks-rs)
+- **Proving System**: Groth16 (via arkworks)
 - **Curve**: BN254 (Bn254)
 - **Field**: Fr (scalar field of BN254)
 - **Merkle Tree Depth**: 32
@@ -60,7 +60,7 @@ The circuits enforce the following constraints:
 4. `computed_new_root == new_root` - Verifies the new Merkle tree state
 
 **NullifierCircuit Constraints:**
-1. `(computed_root == set_root) == is_member` - Membership verification
+1. `computed_root.is_eq(set_root) == is_member` - Verifies that the Merkle root equality check result matches the membership flag
 
 ### API Methods
 
@@ -88,6 +88,6 @@ The implementation includes comprehensive tests:
 ## References
 
 - [Groth16 Paper](https://eprint.iacr.org/2016/260.pdf)
-- [Arkworks Documentation](https://arkworks.rs/)
+- [Arkworks Groth16 Documentation](https://docs.rs/ark-groth16/)
 - Implementation: `crates/bitcell-zkp/src/state_constraints.rs`
 - [GitHub Issue #45](https://github.com/Steake/BitCell/issues/45)

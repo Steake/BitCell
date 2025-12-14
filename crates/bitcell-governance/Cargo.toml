@@ -1,0 +1,19 @@
+[package]
+name = "bitcell-governance"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+bitcell-crypto = { path = "../bitcell-crypto" }
+serde.workspace = true
+thiserror.workspace = true
+bincode.workspace = true
+tracing.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

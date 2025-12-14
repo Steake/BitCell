@@ -55,12 +55,12 @@ The circuits enforce the following constraints:
 
 **StateCircuit Constraints:**
 1. `computed_old_root == old_root` - Verifies the old Merkle tree state
-2. `H(leaf) == nullifier` - Ensures proper nullifier derivation
-3. `H(new_leaf) == commitment` - Validates new commitment
+2. `H(leaf) == nullifier` - Validates that the nullifier is correctly derived from the leaf value
+3. `H(new_leaf) == commitment` - Validates that the commitment is correctly derived from the new leaf value
 4. `computed_new_root == new_root` - Verifies the new Merkle tree state
 
 **NullifierCircuit Constraints:**
-1. `computed_root.is_eq(set_root) == is_member` - Verifies that the Merkle root equality check result matches the membership flag
+1. The circuit enforces that `roots_equal == is_member`, where `roots_equal` is the boolean result of checking if the computed Merkle root matches the set root. This ensures that membership verification is correct: if `is_member` is true, the roots must match, and if false, they must differ.
 
 ### API Methods
 

@@ -20,7 +20,7 @@ The full implementation of the Groth16 battle circuit constraints is already pre
 - Commitment verification for player inputs.
 - Winner determination logic.
 
-The implementation spans over 500 lines and is fully integrated with the rest of the project.
+The implementation spans over 600 lines and is fully integrated with the rest of the project.
 
 ## References
 

@@ -46,9 +46,13 @@ impl VotingPower {
 }
 
 /// Integer square root using Newton's method
+/// Uses checked arithmetic to prevent overflow
 fn integer_sqrt(n: u64) -> u64 {
     if n == 0 {
         return 0;
+    }
+    if n == 1 {
+        return 1;
     }
     
     let mut x = n;
@@ -56,7 +60,12 @@ fn integer_sqrt(n: u64) -> u64 {
     
     while y < x {
         x = y;
-        y = (x + n / x) / 2;
+        // Use checked division to prevent overflow
+        if let Some(div) = n.checked_div(x) {
+            y = (x + div) / 2;
+        } else {
+            break;
+        }
     }
     
     x

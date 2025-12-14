@@ -153,11 +153,11 @@ impl GovernanceManager {
             block_number: current_block,
         };
         
-        // Update proposal tallies
+        // Update proposal tallies (use saturating add to prevent overflow)
         match vote_type {
-            VoteType::For => proposal.votes_for += effective_power.value,
-            VoteType::Against => proposal.votes_against += effective_power.value,
-            VoteType::Abstain => proposal.votes_abstain += effective_power.value,
+            VoteType::For => proposal.votes_for = proposal.votes_for.saturating_add(effective_power.value),
+            VoteType::Against => proposal.votes_against = proposal.votes_against.saturating_add(effective_power.value),
+            VoteType::Abstain => proposal.votes_abstain = proposal.votes_abstain.saturating_add(effective_power.value),
         }
         
         votes.insert(voter, vote);
@@ -259,7 +259,13 @@ impl GovernanceManager {
         guardian_signatures: Vec<[u8; 33]>,
     ) -> Result<()> {
         // Verify sufficient guardian signatures (require 2/3 majority)
-        let required = (self.guardians.len() * 2 + 2) / 3;
+        // Use checked arithmetic to prevent overflow
+        let required = self.guardians.len()
+            .checked_mul(2)
+            .and_then(|v| v.checked_add(2))
+            .map(|v| v / 3)
+            .unwrap_or(0);
+        
         let valid_signatures = guardian_signatures.iter()
             .filter(|sig| self.guardians.contains(sig))
             .count();
@@ -311,13 +317,14 @@ impl GovernanceManager {
     }
     
     /// Get effective voting power (including delegations)
+    /// Uses saturating arithmetic to prevent overflow when accumulating power
     pub fn get_voting_power(&self, voter: &[u8; 33], token_balance: u64) -> u64 {
         let mut power = token_balance;
         
-        // Add delegated power
+        // Add delegated power (using saturating add to prevent overflow)
         for delegation in self.delegations.values() {
             if delegation.delegatee == *voter {
-                power += delegation.amount;
+                power = power.saturating_add(delegation.amount);
             }
         }
         

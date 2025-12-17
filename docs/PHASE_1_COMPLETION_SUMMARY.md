@@ -257,7 +257,7 @@ The state circuit implementation in `crates/bitcell-zkp/src/state_constraints.rs
 | #120 | Groth16 State Circuit Constraints | ✅ Verified - Implementation exists |
 | #121 | Groth16 Battle Circuit Constraints | ✅ Verified - Implementation exists |
 | #122 | Build Actions for Win/Mac/Linux | ✅ Verified - CI/Release workflows exist |
-| #123 | Wallet Testing and QA | ✅ Verified - 92 tests implemented |
+| #123 | Wallet Testing and QA | ✅ Verified - 200+ tests implemented |
 | #125 | Remove Placeholder Documentation | ✅ Verified - No action needed |
 | #126 | Document Groth16 Battle Circuit | ✅ Verified - Code well-documented |
 | #127 | Document Groth16 State Circuit | ✅ Verified - Code well-documented |
@@ -290,7 +290,7 @@ The state circuit implementation in `crates/bitcell-zkp/src/state_constraints.rs
   
 - **Epic #75** (RC2: Wallet & Security Infrastructure): ✅ **UNBLOCKED**
   - Wallet testing complete
-  - 87+ tests passing with high coverage
+  - 200+ tests passing (113 integration + 87+ unit tests)
   
 - **Epic #79** (RC3: Network Scalability & Production Infrastructure): ✅ **UNBLOCKED**
   - Build actions verified for Win/Mac/Linux
@@ -299,7 +299,7 @@ The state circuit implementation in `crates/bitcell-zkp/src/state_constraints.rs
 ### ✅ Tests Passing on Current Branch
 
 - CI workflow validates all tests across platforms
-- 92 wallet tests passing
+- 200+ wallet tests passing (113 integration + 87+ unit tests)
 - ZKP module tests passing (part of full test suite)
 - No blocking test failures identified
 

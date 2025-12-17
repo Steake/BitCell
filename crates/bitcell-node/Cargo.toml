@@ -19,6 +19,7 @@ bitcell-state = { path = "../bitcell-state" }
 bitcell-network = { path = "../bitcell-network" }
 bitcell-economics = { path = "../bitcell-economics" }
 bitcell-ebsl = { path = "../bitcell-ebsl" }
+bitcell-governance = { path = "../bitcell-governance" }
 serde.workspace = true
 thiserror.workspace = true
 tokio = { version = "1", features = ["full"] }

@@ -106,19 +106,42 @@ impl GuardianSet {
                 // Create PublicKey and Signature from bytes
                 let pubkey = match PublicKey::from_bytes(&guardian.pubkey) {
                     Ok(pk) => pk,
-                    Err(_) => continue,
+                    Err(e) => {
+                        tracing::warn!(
+                            guardian = %hex::encode(&guardian.pubkey),
+                            error = %e,
+                            "Invalid guardian public key"
+                        );
+                        continue;
+                    }
                 };
                 
                 let signature = match Signature::from_bytes(sig_bytes) {
                     Ok(sig) => sig,
-                    Err(_) => continue,
+                    Err(e) => {
+                        tracing::debug!(
+                            error = %e,
+                            "Invalid signature format"
+                        );
+                        continue;
+                    }
                 };
                 
                 // Verify signature
                 if pubkey.verify(message, &signature).is_ok() {
                     signed_guardians.insert(guardian.pubkey);
                     valid_count += 1;
+                    
+                    tracing::debug!(
+                        guardian = %guardian.name,
+                        "Valid guardian signature verified"
+                    );
                     break;
+                } else {
+                    tracing::debug!(
+                        guardian = %guardian.name,
+                        "Signature verification failed for guardian"
+                    );
                 }
             }
         }

@@ -17,7 +17,12 @@ impl ProposalId {
     ) -> Self {
         let mut hasher = Sha256::new();
         hasher.update(proposer);
-        hasher.update(&bincode::serialize(proposal_type).unwrap_or_default());
+        
+        // Serialize proposal type - use expect since this should never fail
+        let type_bytes = bincode::serialize(proposal_type)
+            .expect("Failed to serialize proposal type - this is a bug");
+        hasher.update(&type_bytes);
+        
         hasher.update(description.as_bytes());
         hasher.update(&created_at.to_le_bytes());
         

@@ -159,12 +159,16 @@ pub struct StateCircuit<F: PrimeField> {
 - **Coverage**: Unit, integration, security, performance, UAT
 
 #### Test Implementation
-- **Test Count**: 92 tests (via `#[test]` annotation count)
+- **Test Count**: 113 tests (via `#[test]` annotation count)
+  - BDD wallet tests: 55 tests
+  - Hardware wallet tests: 19 tests
+  - Performance tests: 19 tests
+  - Security tests: 20 tests
 - **Test Files**:
-  - ✅ `tests/hardware_wallet_tests.rs`
-  - ✅ `tests/bdd_wallet_tests.rs`
-  - ✅ `tests/performance_tests.rs`
-  - ✅ `tests/security_tests.rs`
+  - ✅ `tests/bdd_wallet_tests.rs` (55 tests)
+  - ✅ `tests/hardware_wallet_tests.rs` (19 tests)
+  - ✅ `tests/performance_tests.rs` (19 tests)
+  - ✅ `tests/security_tests.rs` (20 tests)
   
 #### Module Test Coverage (from WALLET_TESTING_STRATEGY.md)
 | Module | Tests | Status | Coverage |
@@ -177,7 +181,9 @@ pub struct StateCircuit<F: PrimeField> {
 | `history.rs` | 13 | ✅ Pass | High |
 | `hardware.rs` | 7 | ✅ Pass | Medium |
 
-**Total**: 87+ tests passing, 0 failing
+**Total**: 113 tests in test files, plus module tests inline (87+ additional module tests documented in strategy)
+
+**Combined Test Suite**: 200+ tests total
 
 #### Cross-Platform Compatibility
 - Tests run on ubuntu-latest-xl, macos-latest, windows-latest (via CI)
@@ -261,7 +267,7 @@ The state circuit implementation in `crates/bitcell-zkp/src/state_constraints.rs
 
 - **Issue #8**: Wallet Testing and QA - ✅ **READY TO CLOSE**
   - Test strategy implemented
-  - 92 tests passing
+  - 113 integration tests + 87+ unit tests = 200+ total tests
   - Cross-platform compatibility verified
   
 - **Issue #16**: Build Actions for Win/Mac/Linux - ✅ **READY TO CLOSE**
@@ -322,7 +328,7 @@ Phase 1: Close Out In-Progress Work is **COMPLETE**. All implementations referen
 
 1. ✅ **Groth16 Circuits**: Both battle and state constraint implementations present (1,150 total lines)
 2. ✅ **Build Infrastructure**: CI/release workflows operational across Win/Mac/Linux
-3. ✅ **Wallet Testing**: 92 tests implemented with comprehensive test strategy
+3. ✅ **Wallet Testing**: 113 integration tests + 87+ unit tests implemented with comprehensive test strategy
 4. ✅ **Documentation**: Code well-documented, repository conventions followed
 
 **Epics Unblocked**: #72, #75, #79  

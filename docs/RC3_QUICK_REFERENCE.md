@@ -35,7 +35,7 @@ Phase 4 is the final push to complete BitCell RC3 and achieve mainnet readiness.
 
 ## 📅 Timeline
 
-**Overall:** 32+ days (January 15 - February 15, 2026 and beyond)  
+**Overall:** 16-20 weeks (January 15, 2026 - May/June 2026)  
 **RC3 Target:** Q2 2026
 
 ### Key Milestones

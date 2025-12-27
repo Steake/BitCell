@@ -155,7 +155,7 @@ Decay per epoch:
 
 ## ZK-SNARK Circuits (Modular by Design)
 
-Four independent circuits in RC1:
+Four circuit structures defined in RC1:
 
 ### 1. Battle Circuit `C_battle`
 **Public**: commitments, winner, seed, positions  
@@ -470,7 +470,7 @@ A: Validator: probably not (ZK proving is heavy, requires 8GB+ RAM). Light clien
 A: Way less than Bitcoin. CA simulation is deterministic and parallelizable, not hash grinding.
 
 **Q: When mainnet?**  
-A: After RC2 and RC3 complete, plus security audit. Estimated Q3 2026, subject to audit findings and production readiness criteria.
+A: After completing RC2, RC3, and comprehensive security audits. Timeline depends on audit findings and meeting all production readiness criteria. Estimated 2026, subject to change.
 
 ## Security
 

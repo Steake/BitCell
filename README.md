@@ -411,7 +411,7 @@ We're in alpha. Things break. PRs welcome.
 - [x] Local testnet deployment
 
 ### v0.2 (RC2) 🚧 (In Progress)
-- [x] Production ECVRF implementation (✅ Completed in RC1 - Ristretto255-based)
+- [x] Production ECVRF implementation (Completed in RC1 - Ristretto255-based)
 - [ ] Real Groth16 circuits with full R1CS constraints
 - [ ] CLSAG ring signatures (replacing mock implementation)
 - [ ] Full libp2p integration (Gossipsub, Kademlia DHT, NAT traversal)
@@ -455,7 +455,7 @@ A: No. We're dead serious about CA tournaments. RC1 is deployed and working.
 A: Maybe initially, but strategy matters. Lightweight gliders can outmaneuver heavier ones.
 
 **Q: What's the TPS?**  
-A: RC1 achieves approximately 50 TPS in local testing (tested with 3-node configuration, transaction batches of 100). Target is 100+ TPS in RC2 with optimizations. We're not trying to be Solana—we're optimizing for security and interesting consensus.
+A: RC1 achieves approximately 50 TPS in local testing (tested with 3-node configuration, transaction batches of 100). Target is 100+ TPS in RC2 with optimizations. We're not trying to be Solana - we're optimizing for security and interesting consensus.
 
 **Q: Why not just use PoS?**  
 A: Because clicking "stake" buttons is boring. Designing glider strategies is art.

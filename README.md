@@ -50,50 +50,32 @@ Plus, we needed a blockchain where "gas wars" could literally mean glider battle
 
 ## Architecture Aesthetic
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  Application Layer: dApps, Wallets, Bridges            │
-└─────────────────────────────────────────────────────────┘
-                           │
-┌─────────────────────────────────────────────────────────┐
-│  ZKVM: Private Smart Contracts                          │
-│  • RISC-V-ish instruction set                           │
-│  • Pedersen commitments                                 │
-│  • Groth16 execution proofs                             │
-└─────────────────────────────────────────────────────────┘
-                           │
-┌─────────────────────────────────────────────────────────┐
-│  Consensus: Tournament Protocol                         │
-│  • Commit Phase: Ring-signed glider commitments         │
-│  • Reveal Phase: Pattern disclosure                     │
-│  • Battle Phase: 1000-step CA simulation                │
-│  • Winner: Highest regional energy → proposes block     │
-└─────────────────────────────────────────────────────────┘
-                           │
-┌─────────────────────────────────────────────────────────┐
-│  CA Engine: 1024×1024 Toroidal Grid                     │
-│  • Conway-like rules + energy                           │
-│  • Glider patterns (Standard, LWSS, MWSS, HWSS)        │
-│  • Parallel evolution (Rayon)                           │
-│  • Battle outcome via energy density                    │
-└─────────────────────────────────────────────────────────┘
-                           │
-┌─────────────────────────────────────────────────────────┐
-│  EBSL: Evidence-Based Subjective Logic                  │
-│  • r_m: positive evidence (good blocks, participation)  │
-│  • s_m: negative evidence (invalid blocks, cheating)    │
-│  • Trust = b + α·u (subjective logic opinion)           │
-│  • Fast punish, slow forgive                            │
-└─────────────────────────────────────────────────────────┘
-                           │
-┌─────────────────────────────────────────────────────────┐
-│  Crypto Primitives                                       │
-│  • ECDSA (secp256k1)                                     │
-│  • Ring Signatures (tournament anonymity)                │
-│  • VRF (randomness generation)                           │
-│  • Pedersen Commitments                                  │
-│  • Merkle Trees                                          │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    APP[Application Layer<br/>dApps, Wallets, Bridges]
+    
+    ZKVM[ZKVM: Private Smart Contracts<br/>• RISC-V-ish instruction set<br/>• Pedersen commitments<br/>• Groth16 execution proofs]
+    
+    CONSENSUS[Consensus: Tournament Protocol<br/>• Commit Phase: Ring-signed glider commitments<br/>• Reveal Phase: Pattern disclosure<br/>• Battle Phase: 1000-step CA simulation<br/>• Winner: Highest regional energy → proposes block]
+    
+    CA[CA Engine: 1024×1024 Toroidal Grid<br/>• Conway-like rules + energy<br/>• Glider patterns: Standard, LWSS, MWSS, HWSS<br/>• Parallel evolution with Rayon<br/>• Battle outcome via energy density]
+    
+    EBSL[EBSL: Evidence-Based Subjective Logic<br/>• r_m: positive evidence<br/>• s_m: negative evidence<br/>• Trust = b + α·u<br/>• Fast punish, slow forgive]
+    
+    CRYPTO[Crypto Primitives<br/>• ECDSA secp256k1<br/>• Ring Signatures<br/>• VRF randomness<br/>• Pedersen Commitments<br/>• Merkle Trees]
+    
+    APP --> ZKVM
+    ZKVM --> CONSENSUS
+    CONSENSUS --> CA
+    CA --> EBSL
+    EBSL --> CRYPTO
+    
+    style APP fill:#e1f5ff
+    style ZKVM fill:#fff4e1
+    style CONSENSUS fill:#ffe1f5
+    style CA fill:#e1ffe1
+    style EBSL fill:#f5e1ff
+    style CRYPTO fill:#ffe1e1
 ```
 
 ## Quick Start (For The Impatient)
@@ -311,31 +293,60 @@ cargo run --release --bin bitcell-admin
 
 ## Project Structure
 
-```
-BitCell/
-├── crates/
-│   ├── bitcell-crypto/      # Hash, sigs, VRF, ring sigs, commitments
-│   ├── bitcell-ca/          # CA engine, grid, rules, gliders, battles
-│   ├── bitcell-ebsl/        # Evidence tracking, trust scores, slashing
-│   ├── bitcell-zkp/         # Groth16 circuits (battle, exec, state, merkle)
-│   ├── bitcell-consensus/   # Blocks, tournament protocol, fork choice
-│   ├── bitcell-state/       # State management, bonds, accounts, RocksDB
-│   ├── bitcell-zkvm/        # Private smart contract execution
-│   ├── bitcell-compiler/    # BCL compiler (BitCell Language)
-│   ├── bitcell-economics/   # Rewards, fees, treasury, halving
-│   ├── bitcell-network/     # Network interface (stub)
-│   ├── bitcell-node/        # Miner/validator nodes, JSON-RPC, WebSocket, DHT
-│   ├── bitcell-wallet/      # CLI wallet with hardware wallet support
-│   ├── bitcell-wallet-gui/  # GUI wallet with tournament visualization
-│   ├── bitcell-admin/       # Admin console with metrics, HSM, faucet
-│   ├── bitcell-light-client/# Light client with header-only sync
-│   ├── bitcell-explorer/    # Block explorer (in development)
-│   └── bitcell-simulation/  # Network simulation and testing
-├── docs/                    # Architecture, specs, release notes
-├── sdk/                     # Contract templates and examples
-├── infra/                   # Production infrastructure, monitoring
-├── scripts/                 # Development and testing scripts
-└── tests/                   # Integration tests
+```mermaid
+graph LR
+    ROOT[BitCell/]
+    
+    CRATES[crates/]
+    DOCS[docs/]
+    SDK[sdk/]
+    INFRA[infra/]
+    SCRIPTS[scripts/]
+    TESTS[tests/]
+    
+    ROOT --> CRATES
+    ROOT --> DOCS
+    ROOT --> SDK
+    ROOT --> INFRA
+    ROOT --> SCRIPTS
+    ROOT --> TESTS
+    
+    CRATES --> C1[bitcell-crypto<br/>Hash, sigs, VRF, ring sigs]
+    CRATES --> C2[bitcell-ca<br/>CA engine, grid, battles]
+    CRATES --> C3[bitcell-ebsl<br/>Trust scores, slashing]
+    CRATES --> C4[bitcell-zkp<br/>Groth16 circuits]
+    CRATES --> C5[bitcell-consensus<br/>Tournament protocol]
+    CRATES --> C6[bitcell-state<br/>State management, RocksDB]
+    CRATES --> C7[bitcell-zkvm<br/>Smart contract execution]
+    CRATES --> C8[bitcell-compiler<br/>BCL compiler]
+    CRATES --> C9[bitcell-economics<br/>Rewards, fees, treasury]
+    CRATES --> C10[bitcell-network<br/>Network interface]
+    CRATES --> C11[bitcell-node<br/>Validator nodes, RPC]
+    CRATES --> C12[bitcell-wallet<br/>CLI wallet]
+    CRATES --> C13[bitcell-wallet-gui<br/>GUI wallet]
+    CRATES --> C14[bitcell-admin<br/>Admin console, HSM]
+    CRATES --> C15[bitcell-light-client<br/>Light client]
+    CRATES --> C16[bitcell-explorer<br/>Block explorer]
+    CRATES --> C17[bitcell-simulation<br/>Network simulation]
+    
+    DOCS --> D1[Architecture specs]
+    DOCS --> D2[Release notes]
+    
+    SDK --> S1[Contract templates]
+    SDK --> S2[Examples]
+    
+    INFRA --> I1[Production infra]
+    INFRA --> I2[Monitoring]
+    
+    SCRIPTS --> SC1[Dev scripts]
+    
+    TESTS --> T1[Integration tests]
+    
+    style ROOT fill:#e1f5ff
+    style CRATES fill:#fff4e1
+    style DOCS fill:#e1ffe1
+    style SDK fill:#ffe1f5
+    style INFRA fill:#f5e1ff
 ```
 
 ## Development

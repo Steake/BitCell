@@ -455,7 +455,7 @@ A: No. We're dead serious about CA tournaments. RC1 is deployed and working.
 A: Maybe initially, but strategy matters. Lightweight gliders can outmaneuver heavier ones.
 
 **Q: What's the TPS?**  
-A: Target ~50-100 TPS in RC2. We're not trying to be Solana. We're trying to be secure and interesting.
+A: RC1 achieves ~50 TPS in testing. Target is 100+ TPS in RC2 with optimizations. We're not trying to be Solana—we're optimizing for security and interesting consensus.
 
 **Q: Why not just use PoS?**  
 A: Because clicking "stake" buttons is boring. Designing glider strategies is art.
@@ -470,7 +470,7 @@ A: Validator: probably not (ZK proving is heavy, requires 8GB+ RAM). Light clien
 A: Way less than Bitcoin. CA simulation is deterministic and parallelizable, not hash grinding.
 
 **Q: When mainnet?**  
-A: After RC2 and RC3 complete, plus security audit. Target: Q3 2026.
+A: After RC2 and RC3 complete, plus security audit. Estimated Q3 2026, subject to audit findings and production readiness criteria.
 
 ## Security
 

@@ -7,6 +7,25 @@
 [![Version](https://img.shields.io/badge/version-0.1.0--rc1-green.svg)](https://github.com/Steake/BitCell)
 [![Status](https://img.shields.io/badge/status-Release%20Candidate%201-yellow.svg)](https://github.com/Steake/BitCell)
 
+## 📄 Research Paper
+
+This repository implements the consensus protocol described in:
+
+> **BitCell: Cellular Automaton Tournaments and the Mathematics of Anti-Cartel Consensus**  
+> Oliver C. Hirst · 2025  
+> [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19056326.svg)](https://doi.org/10.5281/zenodo.19056326)
+
+**Related work** — the EQBSL/EBSL trust layer powering BitCell's reputation system:
+
+| Paper | DOI |
+|-------|-----|
+| EQBSL: Against Trust Scores | [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19056322.svg)](https://doi.org/10.5281/zenodo.19056322) |
+| Shadowgraph: Hyperdimensional Social Graph | [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19056324.svg)](https://doi.org/10.5281/zenodo.19056324) |
+
+If you use this work in research, please cite via the DOI badge above.
+
+---
+
 > _"We don't mine blocks. We cultivate them in a Conway garden where only the fittest gliders survive."_
 
 ## What Even Is This?

@@ -1,0 +1,24 @@
+{
+  "title": "BitCell — Cellular Automaton Tournament Consensus Protocol",
+  "description": "Rust implementation of the BitCell blockchain consensus protocol: a proof-of-work replacement based on Conway's Game of Life tournaments. Miners compete via deterministic cellular automaton battles rather than hash grinding, eliminating GPU-based cartel formation. Incorporates EBSL evidence-based subjective logic for protocol-local trust/reputation, Groth16 ZK-SNARKs for private smart contracts, ring signatures for miner anonymity, and ECVRF for fair block proposer selection.\n\nFormal protocol specification: BitCell: Cellular Automaton Tournaments and the Mathematics of Anti-Cartel Consensus (DOI: 10.5281/zenodo.19056326).",
+  "upload_type": "software",
+  "creators": [{"name": "Hirst, Oliver C.", "affiliation": "Shadowgraph Labs"}],
+  "keywords": [
+    "cellular automata", "blockchain consensus", "Conway's Game of Life",
+    "proof-of-work alternative", "anti-cartel consensus", "tournament protocol",
+    "zero-knowledge proofs", "ZK-SNARKs", "Groth16",
+    "EBSL trust", "evidence-based subjective logic", "ring signatures",
+    "ECVRF", "verifiable random function", "quantum resistant",
+    "smart contracts", "ZKVM", "Rust", "blockchain",
+    "decentralized consensus", "post-quantum cryptography",
+    "RocksDB", "libp2p", "cryptocurrency"
+  ],
+  "license": "MIT",
+  "access_right": "open",
+  "related_identifiers": [
+    {"relation": "isSupplementTo", "identifier": "10.5281/zenodo.19056326", "scheme": "doi", "resource_type": "publication-preprint"},
+    {"relation": "isRelatedTo",    "identifier": "10.5281/zenodo.19056322", "scheme": "doi", "resource_type": "publication-preprint"},
+    {"relation": "isRelatedTo",    "identifier": "10.5281/zenodo.19056324", "scheme": "doi", "resource_type": "publication-preprint"},
+    {"relation": "isSupplementedBy","identifier": "https://github.com/Steake/BitCell", "scheme": "url"}
+  ]
+}

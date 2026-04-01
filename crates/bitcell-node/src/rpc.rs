@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use crate::{Blockchain, NetworkManager, TransactionPool, NodeConfig};
 use crate::tournament::TournamentManager;
+use crate::governance_rpc::GovernanceRpcState;
 
 /// Empty bloom filter (256 bytes of zeros) for blocks without logs
 static EMPTY_BLOOM_FILTER: [u8; 256] = [0u8; 256];
@@ -24,6 +25,7 @@ pub struct RpcState {
     pub config: NodeConfig,
     pub node_type: String, // "validator", "miner", "full"
     pub node_id: String,   // Unique node identifier (public key hex)
+    pub governance: Arc<GovernanceRpcState>,
 }
 
 /// Start the RPC server
@@ -108,6 +110,14 @@ async fn handle_json_rpc(
         "bitcell_getReputation" => bitcell_get_reputation(&state, req.params).await,
         "bitcell_getMinerStats" => bitcell_get_miner_stats(&state, req.params).await,
         "bitcell_getPendingBlockInfo" => eth_pending_block_number(&state).await,
+        
+        // Governance Namespace
+        "gov_submitProposal" => crate::governance_rpc::submit_proposal(&state, &state.governance, req.params).await,
+        "gov_vote" => crate::governance_rpc::vote_on_proposal(&state, &state.governance, req.params).await,
+        "gov_getProposal" => crate::governance_rpc::get_proposal(&state, &state.governance, req.params).await,
+        "gov_finalizeProposal" => crate::governance_rpc::finalize_proposal(&state, &state.governance, req.params).await,
+        "gov_delegate" => crate::governance_rpc::delegate_voting_power(&state, &state.governance, req.params).await,
+        "gov_getVotingPower" => crate::governance_rpc::get_voting_power(&state, &state.governance, req.params).await,
         
         // Default
         _ => Err(JsonRpcError {

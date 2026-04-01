@@ -14,6 +14,7 @@ pub mod tournament;
 pub mod network;
 pub mod dht;
 pub mod keys;
+pub mod governance_rpc;
 
 pub use config::NodeConfig;
 pub use validator::ValidatorNode;
